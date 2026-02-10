@@ -16,10 +16,8 @@ from enum import Enum, auto
 
 try:
     from qgis.PyQt.QtCore import pyqtSignal
-    from qgis.core import QgsRasterLayer
 except ImportError:
     from PyQt5.QtCore import pyqtSignal
-    QgsRasterLayer = None
 
 from .base_controller import BaseController
 
@@ -167,18 +165,10 @@ class PropertyController(BaseController):
         if current_layer is None:
             return False
         
-        # Guard: layer must be in PROJECT_LAYERS (raster layers are excluded - EPIC-3)
+        # Guard: layer must be in PROJECT_LAYERS
         layer_id = current_layer.id()
         project_layers = getattr(dw, 'PROJECT_LAYERS', {})
         if layer_id not in project_layers:
-            # EPIC-3: Raster layers are not stored in PROJECT_LAYERS by design
-            # Return True (silent success) to avoid error spam in logs
-            if QgsRasterLayer is not None and isinstance(current_layer, QgsRasterLayer):
-                logger.debug(
-                    f"change_property: raster layer '{current_layer.name()}' - skipping (not in PROJECT_LAYERS by design)"
-                )
-                return True  # Silent success for raster layers
-            
             logger.warning(
                 f"change_property: layer {current_layer.name()} not in PROJECT_LAYERS"
             )
@@ -776,12 +766,7 @@ class PropertyController(BaseController):
         
         # Default: allow negative buffers (for polygons)
         min_value = -1000000.0
-        tooltip = (
-            "Buffer Value (meters)\n\n"
-            "Positive: Expand geometry outward\n"
-            "Negative: Shrink polygon inward (polygons only)\n"
-            "Zero: Use original geometry"
-        )
+        tooltip = "Buffer value in meters (positive=expand, negative=shrink polygons)"
         
         current_layer = getattr(dw, 'current_layer', None)
         
@@ -803,10 +788,8 @@ class PropertyController(BaseController):
                     # Centroids enabled: source layer is effectively points
                     min_value = 0.0
                     tooltip = (
-                        "Buffer Value (meters) - Centroids Mode\n\n"
-                        "Only positive values allowed when using centroids.\n"
-                        "Centroids convert geometry to points.\n"
-                        "Negative buffers cannot be applied to points."
+                        "Buffer value in meters (positive only when centroids are enabled. "
+                        "Negative buffers cannot be applied to points)"
                     )
                     
                     # Reset negative value to 0
@@ -831,10 +814,8 @@ class PropertyController(BaseController):
                         geom_name = "non-polygon"
                     
                     tooltip = (
-                        f"Buffer Value (meters) - {geom_name.title()} Layer\n\n"
-                        f"Only positive values allowed for {geom_name} layers.\n"
-                        f"Negative buffers only work on polygon layers.\n"
-                        f"Use positive buffer to create search zone."
+                        f"Buffer value in meters (positive only for {geom_name} layers. "
+                        f"Negative buffers only work on polygon layers)"
                     )
                     
                     # Reset negative value to 0

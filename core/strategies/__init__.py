@@ -6,13 +6,6 @@ Provides progressive, multi-step, and adaptive filtering for large datasets.
 
 This is part of the Hexagonal Architecture - Core Layer (Domain Services).
 
-Unified Filter System (v5.0):
-    - AbstractFilterStrategy: Base class for polymorphic filtering
-    - VectorFilterStrategy: Strategy for vector layer filtering
-    - RasterFilterStrategy: Strategy for raster layer filtering (planned)
-    - UnifiedFilterResult: Uniform result object for all filter operations
-    - FilterContext: Shared context with callbacks and cancellation
-
 Progressive Filtering (progressive_filter):
     - Two-phase filtering (bbox pre-filter + full predicate)
     - Streaming cursor for memory-efficient iteration
@@ -32,18 +25,7 @@ Migration History:
     - v3.0: Created core/strategies/ package (EPIC-1)
     - v3.0: Migrated from modules/tasks/progressive_filter.py
     - v3.0: Migrated from modules/tasks/multi_step_filter.py
-    - v5.0: Added Unified Filter System (EPIC-UNIFIED-FILTER)
 """
-
-# Unified Filter System exports (v5.0)
-from .base_filter_strategy import (
-    AbstractFilterStrategy,
-    FilterContext,
-    UnifiedFilterResult,
-    FilterStatus
-)
-from .vector_filter_strategy import VectorFilterStrategy
-from .raster_filter_strategy import RasterFilterStrategy
 
 # Progressive filter exports
 from .progressive_filter import (
@@ -72,13 +54,6 @@ from .multi_step_filter import (
 )
 
 __all__ = [
-    # Unified Filter System (v5.0)
-    'AbstractFilterStrategy',
-    'FilterContext',
-    'UnifiedFilterResult',
-    'FilterStatus',
-    'VectorFilterStrategy',
-    'RasterFilterStrategy',
     # Progressive filter
     'ProgressiveFilterStrategy',
     'ProgressiveFilterResult',

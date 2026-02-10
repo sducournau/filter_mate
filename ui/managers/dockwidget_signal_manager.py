@@ -1,7 +1,7 @@
 """
 DockwidgetSignalManager - Extracted from filter_mate_dockwidget.py
 
-Refactoring Sprint 2.1: Extract signal management from God Class.
+v5.0 Phase 2 Sprint 2.1: Extract signal management from God Class.
 Manages PyQt signal connections/disconnections for FilterMate dockwidget.
 
 This module extracts ~570 lines of signal management code from the 
@@ -154,11 +154,6 @@ class DockwidgetSignalManager:
             # Change state and update cache
             state = self.change_signal_state(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
-            # FIX 2026-02-10: Sync cache with dockwidget to prevent desynchronization
-            # Without this, dockwidget.manageSignal() may skip operations because
-            # its cache shows a stale state from a previous direct call
-            if hasattr(self.dockwidget, '_signal_connection_states'):
-                self.dockwidget._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         
         return True if state is None and widget_object["SIGNALS"] else state
@@ -238,13 +233,9 @@ class DockwidgetSignalManager:
             for w in self.widgets[grp]:
                 try:
                     self.manage_signal([grp, w], 'connect')
-                except TypeError:
+                except Exception:
                     # Signal may already be connected - expected
                     pass
-                except Exception as e:
-                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
-                    # This makes it visible when critical signal connections fail
-                    logger.warning(f"Failed to connect signal for [{grp}][{w}]: {e}")
     
     def disconnect_widgets_signals(self) -> None:
         """
@@ -260,12 +251,9 @@ class DockwidgetSignalManager:
             for w in self.widgets[grp]:
                 try:
                     self.manage_signal([grp, w], 'disconnect')
-                except TypeError:
+                except Exception:
                     # Signal may already be disconnected - expected
                     pass
-                except Exception as e:
-                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
-                    logger.warning(f"Failed to disconnect signal for [{grp}][{w}]: {e}")
     
     def disconnect_layer_signals(self) -> List[List[str]]:
         """
@@ -341,10 +329,10 @@ class DockwidgetSignalManager:
             try:
                 # Disconnect ALL receivers to ensure clean state
                 try:
-                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
+                    widget.clicked.disconnect()
                 except TypeError:
                     pass  # No receivers connected, which is fine
-
+                
                 # Connect using a closure that captures task_name
                 def make_handler(task):
                     """Factory function to create handler with properly captured task name."""
@@ -404,10 +392,10 @@ class DockwidgetSignalManager:
             try:
                 # Disconnect all existing receivers
                 try:
-                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
+                    widget.clicked.disconnect()
                 except TypeError:
                     pass  # No receivers connected
-
+                
                 # Create handler with proper closure
                 def make_handler(handler_func, prop_name):
                     """Factory to create handler with proper closure."""
@@ -490,27 +478,27 @@ class DockwidgetSignalManager:
         
         # Connect IDENTIFY button
         try:
-            self.dockwidget.pushButton_exploring_identify.clicked.disconnect(self.dockwidget.exploring_identify_clicked)
+            self.dockwidget.pushButton_exploring_identify.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_identify.clicked.connect(
             self.dockwidget.exploring_identify_clicked
         )
         logger.debug("Connected pushButton_exploring_identify.clicked DIRECTLY")
-
+        
         # Connect ZOOM button
         try:
-            self.dockwidget.pushButton_exploring_zoom.clicked.disconnect(self.dockwidget.exploring_zoom_clicked)
+            self.dockwidget.pushButton_exploring_zoom.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_zoom.clicked.connect(
             self.dockwidget.exploring_zoom_clicked
         )
         logger.debug("Connected pushButton_exploring_zoom.clicked DIRECTLY")
-
+        
         # Connect RESET button
         try:
-            self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.disconnect()  # Blanket: lambda, pas de ref au slot précédent
+            self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.dockwidget.pushButton_exploring_reset_layer_properties.clicked.connect(
@@ -532,10 +520,10 @@ class DockwidgetSignalManager:
         btn = self.dockwidget.pushButton_checkable_exploring_selecting
         
         try:
-            btn.toggled.disconnect()  # Blanket: closure locale (_on_selecting_toggled), pas de ref au slot précédent
+            btn.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass
-
+        
         # Sync initial state from button to PROJECT_LAYERS
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -573,12 +561,12 @@ class DockwidgetSignalManager:
     def _connect_is_tracking_toggle(self) -> None:
         """Connect IS_TRACKING button for auto-zoom."""
         btn = self.dockwidget.pushButton_checkable_exploring_tracking
-
+        
         try:
-            btn.toggled.disconnect()  # Blanket: closure locale (_on_tracking_toggled), pas de ref au slot précédent
+            btn.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass
-
+        
         # Sync initial state
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -612,12 +600,12 @@ class DockwidgetSignalManager:
     def _connect_is_linking_toggle(self) -> None:
         """Connect IS_LINKING button for expression sync."""
         btn = self.dockwidget.pushButton_checkable_exploring_linking
-
+        
         try:
-            btn.toggled.disconnect()  # Blanket: closure locale (_on_linking_toggled), pas de ref au slot précédent
+            btn.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass
-
+        
         # Sync initial state
         current_layer = getattr(self.dockwidget, 'current_layer', None)
         project_layers = getattr(self.dockwidget, 'PROJECT_LAYERS', {})
@@ -676,8 +664,8 @@ class DockwidgetSignalManager:
                 try:
                     gb.blockSignals(True)
                     try:
-                        gb.toggled.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
-                        gb.collapsedStateChanged.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
+                        gb.toggled.disconnect()
+                        gb.collapsedStateChanged.disconnect()
                     except TypeError:
                         # Signals not connected yet - expected on first setup
                         pass

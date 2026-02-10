@@ -172,22 +172,22 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             
             # Show "More..." if there are more favorites
             if len(favorites) > 10:
-                more_action = menu.addAction(self.tr("  ... {} more favorites").format(len(favorites) - 10))
+                more_action = menu.addAction(f"  ... {len(favorites) - 10} more favorites")
                 more_action.setData('__SHOW_ALL__')
         else:
-            no_favs = menu.addAction(self.tr("(No favorites saved)"))
+            no_favs = menu.addAction("(No favorites saved)")
             no_favs.setEnabled(False)
         
         menu.addSeparator()
         
         # === MANAGEMENT OPTIONS ===
-        manage_action = menu.addAction(self.tr("⚙️ Manage Favorites..."))
+        manage_action = menu.addAction("⚙️ Manage Favorites...")
         manage_action.setData('__MANAGE__')
         
-        export_action = menu.addAction(self.tr("📤 Export Favorites..."))
+        export_action = menu.addAction("📤 Export Favorites...")
         export_action.setData('__EXPORT__')
         
-        import_action = menu.addAction(self.tr("📥 Import Favorites..."))
+        import_action = menu.addAction("📥 Import Favorites...")
         import_action.setData('__IMPORT__')
         
         # Show menu and handle selection

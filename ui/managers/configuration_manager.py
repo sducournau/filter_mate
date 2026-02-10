@@ -95,29 +95,6 @@ class ConfigurationManager(QObject):
             ),
             "use_centroids_source_layer": (
                 ("filtering", "use_centroids_source_layer"),
-            ),
-            # v5.4: Raster Value Filter properties
-            "raster_source": (
-                ("filtering", "has_raster_source"),
-                ("filtering", "raster_source_layer_id"),
-                ("filtering", "raster_band"),
-            ),
-            "raster_layers_to_filter": (
-                ("filtering", "has_raster_layers_to_filter"),
-                ("filtering", "raster_layers_to_filter"),
-            ),
-            "raster_combine_operator": (
-                ("filtering", "has_raster_combine_operator"),
-                ("filtering", "raster_source_combine_operator"),
-                ("filtering", "raster_other_combine_operator"),
-            ),
-            "raster_predicates": (
-                ("filtering", "has_raster_predicates"),
-                ("filtering", "raster_predicates"),
-            ),
-            "sampling_method": (
-                ("filtering", "has_sampling_method"),
-                ("filtering", "sampling_method"),
             )
         }
     
@@ -528,124 +505,9 @@ class ConfigurationManager(QObject):
                     "valueChanged",
                     lambda state, x='buffer_segments': d.layer_property_changed(x, state)
                 )]
-            },
+            }
         }
-
-        # v5.4: Raster Value Filter section widgets (conditionally registered)
-        # These widgets are created dynamically in _setup_raster_filtering_section().
-        # If that method fails, the widgets won't exist - skip registration to avoid
-        # crashing the entire configure_widgets() and losing all pushbutton icons.
-        if hasattr(d, 'pushButton_checkable_filtering_raster_source'):
-            widgets["FILTERING"].update({
-                "HAS_RASTER_SOURCE": {
-                    "TYPE": "PushButton",
-                    "WIDGET": d.pushButton_checkable_filtering_raster_source,
-                    "SIGNALS": [(
-                        "toggled",
-                        lambda state, x='has_raster_source': d.layer_property_changed(x, state)
-                    )],
-                    "ICON": None
-                },
-                "RASTER_SOURCE_LAYER": {
-                    "TYPE": "ComboBox",
-                    "WIDGET": d.comboBox_filtering_raster_source_layer,
-                    "SIGNALS": [(
-                        "layerChanged",
-                        lambda layer, x='raster_source_layer_id': d.layer_property_changed(
-                            x, layer.id() if layer else None)
-                    )]
-                },
-                "RASTER_BAND": {
-                    "TYPE": "ComboBox",
-                    "WIDGET": d.comboBox_filtering_raster_band,
-                    "SIGNALS": [(
-                        "currentIndexChanged",
-                        lambda index, x='raster_band': d.layer_property_changed(x, index)
-                    )]
-                },
-                "HAS_RASTER_LAYERS_TO_FILTER": {
-                    "TYPE": "PushButton",
-                    "WIDGET": d.pushButton_checkable_filtering_raster_layers_to_filter,
-                    "SIGNALS": [(
-                        "toggled",
-                        lambda state, x='has_raster_layers_to_filter': d.layer_property_changed(x, state)
-                    )],
-                    "ICON": None
-                },
-                "RASTER_LAYERS_TO_FILTER": {
-                    "TYPE": "CustomCheckableLayerComboBox",
-                    "WIDGET": d.checkableComboBoxLayer_filtering_raster_layers_to_filter,
-                    "SIGNALS": [(
-                        "checkedItemsChanged",
-                        lambda state, x='raster_layers_to_filter': d.layer_property_changed(x, state)
-                    )]
-                },
-                "HAS_RASTER_COMBINE_OPERATOR": {
-                    "TYPE": "PushButton",
-                    "WIDGET": d.pushButton_checkable_filtering_raster_combine_operator,
-                    "SIGNALS": [(
-                        "toggled",
-                        lambda state, x='has_raster_combine_operator': d.layer_property_changed(x, state)
-                    )],
-                    "ICON": None
-                },
-                "RASTER_SOURCE_COMBINE_OPERATOR": {
-                    "TYPE": "ComboBox",
-                    "WIDGET": d.comboBox_filtering_raster_source_combine_operator,
-                    "SIGNALS": [(
-                        "currentIndexChanged",
-                        lambda index, x='raster_source_combine_operator': d.layer_property_changed(
-                            x, d._index_to_combine_operator(index))
-                    )]
-                },
-                "RASTER_OTHER_COMBINE_OPERATOR": {
-                    "TYPE": "ComboBox",
-                    "WIDGET": d.comboBox_filtering_raster_other_combine_operator,
-                    "SIGNALS": [(
-                        "currentIndexChanged",
-                        lambda index, x='raster_other_combine_operator': d.layer_property_changed(
-                            x, d._index_to_combine_operator(index))
-                    )]
-                },
-                "HAS_RASTER_PREDICATES": {
-                    "TYPE": "PushButton",
-                    "WIDGET": d.pushButton_checkable_filtering_raster_predicates,
-                    "SIGNALS": [(
-                        "toggled",
-                        lambda state, x='has_raster_predicates': d.layer_property_changed(x, state)
-                    )],
-                    "ICON": None
-                },
-                "RASTER_PREDICATES": {
-                    "TYPE": "CheckableComboBox",
-                    "WIDGET": d.comboBox_filtering_raster_predicates,
-                    "SIGNALS": [(
-                        "checkedItemsChanged",
-                        lambda state, x='raster_predicates': d.layer_property_changed(x, state)
-                    )]
-                },
-                "HAS_SAMPLING_METHOD": {
-                    "TYPE": "PushButton",
-                    "WIDGET": d.pushButton_checkable_filtering_sampling_method,
-                    "SIGNALS": [(
-                        "toggled",
-                        lambda state, x='has_sampling_method': d.layer_property_changed(x, state)
-                    )],
-                    "ICON": None
-                },
-                "SAMPLING_METHOD": {
-                    "TYPE": "ComboBox",
-                    "WIDGET": d.comboBox_filtering_sampling_method,
-                    "SIGNALS": [(
-                        "currentTextChanged",
-                        lambda state, x='sampling_method': d.layer_property_changed(x, state)
-                    )]
-                }
-            })
-            logger.info("v5.4: Raster filtering widgets registered in FILTERING group")
-        else:
-            logger.warning("v5.4: Raster filtering widgets NOT found - skipping registration")
-
+        
         # EXPORTING widgets - Export configuration
         widgets["EXPORTING"] = {
             "HAS_LAYERS_TO_EXPORT": {
@@ -819,107 +681,13 @@ class ConfigurationManager(QObject):
         icon_manager = getattr(self.dockwidget, '_icon_manager', None)
         
         icons_config = pushButton_config.get("ICONS", {})
-        
-        # Enhanced tooltips with detailed descriptions
         exploring_tooltips = {
-            "IDENTIFY": self.dockwidget.tr(
-                "Identify Feature\n\n"
-                "Display attributes of the selected feature in the info panel.\n"
-                "Click on a feature in the list to see its details."
-            ),
-            "ZOOM": self.dockwidget.tr(
-                "Zoom to Feature\n\n"
-                "Center the map view on the selected feature.\n"
-                "The map will zoom to fit the feature's extent."
-            ),
-            "IS_SELECTING": self.dockwidget.tr(
-                "Toggle Selection Mode\n\n"
-                "When enabled, clicking on items in the list will also select\n"
-                "them on the map canvas. Useful for visual identification."
-            ),
-            "IS_TRACKING": self.dockwidget.tr(
-                "Auto-Track Feature\n\n"
-                "When enabled, the map automatically pans and zooms\n"
-                "to follow the currently selected feature as you navigate."
-            ),
-            "IS_LINKING": self.dockwidget.tr(
-                "Link Widgets Together\n\n"
-                "When enabled, selection in one widget is synchronized\n"
-                "with other exploring widgets (Single, Multiple, Custom)."
-            ),
-            "RESET_ALL_LAYER_PROPERTIES": self.dockwidget.tr(
-                "Reset Layer Properties\n\n"
-                "Restore all exploring properties to their default state.\n"
-                "This clears any custom display expressions or settings."
-            )
-        }
-        
-        filtering_tooltips = {
-            "AUTO_CURRENT_LAYER": self.dockwidget.tr(
-                "Auto-Sync with Current Layer\n\n"
-                "When enabled, the filter automatically updates\n"
-                "when you select a different layer in the layer panel."
-            ),
-            "IS_FILTERING_LAYERS_TO_FILTER": self.dockwidget.tr(
-                "Multi-Layer Filtering\n\n"
-                "When enabled, apply the filter to multiple layers simultaneously.\n"
-                "Select target layers in the dropdown menu."
-            ),
-            "IS_FILTERING_LAYERS_TO_FILTER_WITH_CURRENT_LAYER_COMBINE_OPERATOR": self.dockwidget.tr(
-                "Additive Filter Mode\n\n"
-                "When enabled, new filters are combined with existing ones\n"
-                "using the selected logical operator (AND/OR)."
-            ),
-            "IS_FILTERING_GEOMETRIC_PREDICATES": self.dockwidget.tr(
-                "Spatial Filter Mode\n\n"
-                "When enabled, filter features based on their spatial relationship\n"
-                "with selected geometries (intersects, contains, within, etc.)."
-            ),
-            "IS_FILTERING_BUFFER_VALUE": self.dockwidget.tr(
-                "Buffer Distance\n\n"
-                "Add a buffer zone around selected features before filtering.\n"
-                "Enter the distance in meters (positive=expand, negative=shrink)."
-            ),
-            "IS_FILTERING_BUFFER_TYPE": self.dockwidget.tr(
-                "Buffer Type\n\n"
-                "Define how the buffer is calculated:\n"
-                "• Round: circular ends\n"
-                "• Flat: square ends\n"
-                "• Miter: pointed corners"
-            )
-        }
-        
-        exporting_tooltips = {
-            "IS_EXPORTING_LAYERS": self.dockwidget.tr(
-                "Select Layers to Export\n\n"
-                "Choose which layers will be included in the export.\n"
-                "You can select multiple layers from the dropdown."
-            ),
-            "IS_EXPORTING_PROJECTION": self.dockwidget.tr(
-                "Export Projection (CRS)\n\n"
-                "Define the coordinate reference system for exported files.\n"
-                "Leave unchanged to keep original layer CRS."
-            ),
-            "IS_EXPORTING_STYLES": self.dockwidget.tr(
-                "Export Layer Styles\n\n"
-                "When enabled, layer symbology will be exported as QML or SLD files\n"
-                "alongside the data files."
-            ),
-            "IS_EXPORTING_DATATYPE": self.dockwidget.tr(
-                "Output Format\n\n"
-                "Select the file format for exported data:\n"
-                "GeoPackage, Shapefile, GeoJSON, CSV, etc."
-            ),
-            "IS_EXPORTING_OUTPUT_FOLDER": self.dockwidget.tr(
-                "Output Location\n\n"
-                "Configure the destination folder and filename\n"
-                "for exported files."
-            ),
-            "IS_EXPORTING_ZIP": self.dockwidget.tr(
-                "ZIP Compression\n\n"
-                "When enabled, all exported files will be compressed\n"
-                "into a single ZIP archive for easier sharing."
-            )
+            "IDENTIFY": self.dockwidget.tr("Identify selected feature"),
+            "ZOOM": self.dockwidget.tr("Zoom to selected feature"),
+            "IS_SELECTING": self.dockwidget.tr("Toggle feature selection on map"),
+            "IS_TRACKING": self.dockwidget.tr("Auto-zoom when feature changes"),
+            "IS_LINKING": self.dockwidget.tr("Link exploring widgets together"),
+            "RESET_ALL_LAYER_PROPERTIES": self.dockwidget.tr("Reset all layer exploring properties")
         }
         
         for widget_group in self.dockwidget.widgets:
@@ -943,14 +711,8 @@ class ConfigurationManager(QObject):
                             widget_data["ICON"] = icon_path
                 
                 widget_obj.setCursor(Qt.PointingHandCursor)
-                
-                # Apply tooltips based on widget group
                 if widget_group == "EXPLORING" and widget_name in exploring_tooltips:
                     widget_obj.setToolTip(exploring_tooltips[widget_name])
-                elif widget_group == "FILTERING" and widget_name in filtering_tooltips:
-                    widget_obj.setToolTip(filtering_tooltips[widget_name])
-                elif widget_group == "EXPORTING" and widget_name in exporting_tooltips:
-                    widget_obj.setToolTip(exporting_tooltips[widget_name])
                 
                 # Apply dimensions
                 icon_size = icons_sizes.get(widget_group, icons_sizes["OTHERS"])
@@ -1013,11 +775,7 @@ class ConfigurationManager(QObject):
             # Get widget_keys width directly from config
             widget_keys_width = UIConfig.get_config('widget_keys', 'max_width') or 56
             
-            widgets_to_configure = [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]
-            if hasattr(d, 'widget_raster_keys'):
-                widgets_to_configure.append(d.widget_raster_keys)
-            
-            for widget in widgets_to_configure:
+            for widget in [d.widget_exploring_keys, d.widget_filtering_keys, d.widget_exporting_keys]:
                 widget.setMinimumWidth(widget_keys_width)
                 widget.setMaximumWidth(widget_keys_width)
                 widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
@@ -1074,30 +832,23 @@ class ConfigurationManager(QObject):
         import os
         from qgis.PyQt import QtGui, QtCore, QtWidgets
         
-        # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
+        # FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
         try:
-            from qgis.core import Qgis
-            _LayerFilter = Qgis.LayerFilter
-            _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
-        except (ImportError, AttributeError):
-            try:
-                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
-            except ImportError:
-                from qgis.core import QgsMapLayerProxyModel as _LayerFilter
-            _LayerFilters = None
-
+            from qgis.gui import QgsMapLayerProxyModel
+        except ImportError:
+            from qgis.core import QgsMapLayerProxyModel
+        
         d = self.dockwidget
-        # Filter: vector layers WITH geometry + raster layers (excludes NoGeometry tables)
+        # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+        # HasGeometry = PointLayer | LineLayer | PolygonLayer = 4 | 8 | 16 = 28
+        # This excludes tables without geometry (NoGeometry = 2)
         try:
-            filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
-            d.comboBox_filtering_current_layer.setFilters(
-                _LayerFilters(filters) if _LayerFilters else filters)
-            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry | RasterLayer (vector + raster)")
+            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
+            logger.info("comboBox_filtering_current_layer: Filter set to HasGeometry (exclude non-spatial tables)")
         except Exception as e:
-            logger.warning(f"Could not set HasGeometry | RasterLayer filter: {e}")
-            fallback = _LayerFilter.VectorLayer
-            d.comboBox_filtering_current_layer.setFilters(
-                _LayerFilters(fallback) if _LayerFilters else fallback)
+            logger.warning(f"Could not set HasGeometry filter: {e}")
+            # Fallback to VectorLayer only
+            d.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         
         # Apply themed icon to centroids checkbox
         try:
@@ -1110,9 +861,10 @@ class ConfigurationManager(QObject):
             icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
             d.checkBox_filtering_use_centroids_source_layer.setIcon(icon)
             d.checkBox_filtering_use_centroids_source_layer.setText("")
-            d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.LeftToRight)
+            d.checkBox_filtering_use_centroids_source_layer.setLayoutDirection(QtCore.Qt.RightToLeft)
 
         # Configure centroids distant layers checkbox (created in setupUiCustom)
+        # Widget already created in setupUiCustom() - just configure appearance
         if hasattr(d, 'checkBox_filtering_use_centroids_distant_layers'):
             d.checkBox_filtering_use_centroids_distant_layers.setText("")
             d.checkBox_filtering_use_centroids_distant_layers.setToolTip(d.tr("Use centroids instead of full geometries for distant layers"))
@@ -1122,32 +874,21 @@ class ConfigurationManager(QObject):
                 d.checkBox_filtering_use_centroids_distant_layers.setIcon(icon)
             d.checkBox_filtering_use_centroids_distant_layers.setLayoutDirection(QtCore.Qt.RightToLeft)
             d.checkBox_filtering_use_centroids_distant_layers.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-            # v5.2 FIX 2026-01-31: Disable by default - enabled only when HAS_LAYERS_TO_FILTER is checked
-            d.checkBox_filtering_use_centroids_distant_layers.setEnabled(False)
 
-        # FIX 2026-02-09c: Insert widgets DIRECTLY into the vertical layout.
-        # Using insertWidget on a layout connected to the widget tree guarantees
-        # proper reparenting and visibility. Sub-layouts caused silent failures.
+        
+        # Create horizontal layout and insert widgets
+        d.horizontalLayout_filtering_distant_layers = QtWidgets.QHBoxLayout()
+        d.horizontalLayout_filtering_distant_layers.setSpacing(4)
+        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
+        d.horizontalLayout_filtering_distant_layers.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
+        
+        # Insert into main vertical layout at position 2 (after current layer, before predicates)
         if hasattr(d, 'verticalLayout_filtering_values'):
-            # Create a container widget to hold combobox + centroids checkbox side by side
-            d.widget_filtering_distant_layers = QtWidgets.QWidget(d.FILTERING)
-            d.widget_filtering_distant_layers.setObjectName("widget_filtering_distant_layers")
-            hlayout = QtWidgets.QHBoxLayout(d.widget_filtering_distant_layers)
-            hlayout.setContentsMargins(0, 0, 0, 0)
-            hlayout.setSpacing(4)
-            hlayout.addWidget(d.checkableComboBoxLayer_filtering_layers_to_filter)
-            hlayout.addWidget(d.checkBox_filtering_use_centroids_distant_layers)
-            # Insert the container widget directly (insertWidget guarantees reparenting)
-            d.verticalLayout_filtering_values.insertWidget(2, d.widget_filtering_distant_layers)
-            d.widget_filtering_distant_layers.show()
+            d.verticalLayout_filtering_values.insertLayout(2, d.horizontalLayout_filtering_distant_layers)
+            # Ensure visibility
             d.checkableComboBoxLayer_filtering_layers_to_filter.show()
             d.checkBox_filtering_use_centroids_distant_layers.show()
-            logger.info(f"Inserted filtering layers container at position 2, "
-                        f"parent={d.widget_filtering_distant_layers.parent().objectName()}")
-        else:
-            logger.warning("verticalLayout_filtering_values not found - filtering layers widget NOT inserted")
-        # Keep reference for _ensure_dynamic_widgets_layout compatibility
-        d.horizontalLayout_filtering_distant_layers = None
+            logger.debug(f"Inserted filtering layers layout, widget visible: {d.checkableComboBoxLayer_filtering_layers_to_filter.isVisible()}")
         
         try:
             from ..config import UIConfig
@@ -1163,8 +904,7 @@ class ConfigurationManager(QObject):
         from qgis.PyQt.QtGui import QColor
         
         d = self.dockwidget
-        # Widget already created in setupUiCustom() - just configure and insert it.
-        # FIX 2026-02-09: Do NOT call setParent() — let insertWidget() handle reparenting.
+        # Widget already created in setupUiCustom() - just configure it
         
         if hasattr(d, 'verticalLayout_exporting_values'):
             d.verticalLayout_exporting_values.insertWidget(0, d.checkableComboBoxLayer_exporting_layers)

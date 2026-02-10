@@ -2,40 +2,11 @@
 
 All notable changes to FilterMate will be documented in this file.
 
-## [5.4.0] - 2026-02-01 🎯 NEW: Raster Exploring Tool Buttons
+## [4.4.6] - 2026-01-27
 
-### New Feature - Keys-style Tool Buttons for Raster Exploring
+### Changes
 
-Added a column of tool buttons to the Raster Exploring panel, similar to the Vector Exploring "keys" pattern.
-
-#### New Buttons (left column)
-
-| Button | Function |
-|--------|----------|
-| 🔬 **Pixel Picker** | Click on raster to pick a single value (Ctrl+click extends range) |
-| ⬛ **Rectangle Range** | Drag rectangle to pick value range from area statistics |
-| 🔄 **Sync Histogram** | Synchronize spinbox values with histogram selection |
-| 📊 **All Bands Info** | Show pixel values for all bands at clicked point |
-| 🎯 **Reset Range** | Reset Min/Max to full data range from statistics |
-
-#### UI Changes
-
-- Raster exploring panel now has horizontal layout with buttons on the left
-- Consistent with Vector exploring panel design pattern
-- Buttons are disabled when no raster layer is selected
-- Checkable buttons (🔬, ⬛, 📊) are mutually exclusive
-
-#### Files Changed
-
-- `filter_mate_dockwidget_base.py`: Added `widget_raster_keys` with 5 tool buttons
-- `filter_mate_dockwidget.py`: 
-  - Added `_connect_raster_tool_buttons()` for signal connections
-  - Added handlers for each button action
-  - Added `_update_raster_tool_buttons_state()` for enabled state management
-
-#### Story Reference
-
-See `_bmad-output/STORY-RASTER-EXPLORING-TOOLS-BUTTONS.md` for full specification.
+- Version bump
 
 ---
 

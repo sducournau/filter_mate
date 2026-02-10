@@ -263,16 +263,10 @@ def get_primary_key_name(layer) -> Optional[str]:
     """
     Get the primary key field name for a layer.
     
-    Canonical implementation for PK detection across the entire codebase.
-    All other PK detection methods should delegate to this function.
-    
-    Detection priority:
-    1. Provider-declared primary key (primaryKeyAttributes() - most reliable)
-    2. Exact match with common PK field names (case-insensitive)
-    3. UUID fields (uuid, guid in name)
-    4. Numeric fields with ID patterns (_id, id_, identifier, etc.)
-    5. First integer field
-    6. First field as last resort
+    Uses multiple detection strategies:
+    1. Exact match with common ID field names
+    2. Pattern matching for fields ending with _ID, _id, etc.
+    3. First integer/string field as fallback
     
     Args:
         layer: QgsVectorLayer
@@ -294,60 +288,31 @@ def get_primary_key_name(layer) -> Optional[str]:
     if fields.count() == 0:
         return None
     
-    # 1. Try provider-declared primary key (most reliable)
-    try:
-        pk_attrs = layer.primaryKeyAttributes()
-        if pk_attrs:
-            pk_idx = pk_attrs[0]
-            if 0 <= pk_idx < fields.count():
-                return fields[pk_idx].name()
-    except Exception:
-        pass
+    # Common primary key field names
+    pk_names = ['id', 'fid', 'ogc_fid', 'gid', 'pk', 'objectid', 'object_id', 'oid', 'uid']
     
-    # Common primary key field names (exact match, case-insensitive)
-    pk_names = {'id', 'fid', 'ogc_fid', 'gid', 'pk', 'objectid', 'object_id', 'oid', 'uid', 'rowid'}
-    
-    # 2. Try exact match with common PK names
+    # Try exact match first (case-insensitive)
     for field in fields:
         if field.name().lower() in pk_names:
             return field.name()
     
-    # UUID field patterns
-    uuid_patterns = ['uuid', 'guid']
-    
-    # 3. Look for UUID fields
+    # Try pattern matching (_id suffix)
     for field in fields:
-        field_name_lower = field.name().lower()
-        for pattern in uuid_patterns:
-            if pattern in field_name_lower:
-                return field.name()
+        name_lower = field.name().lower()
+        if name_lower.endswith('_id') or name_lower.endswith('id'):
+            return field.name()
     
-    # ID field patterns
-    id_patterns = ['_id', 'id_', 'identifier', 'feature_id', 'object_id']
-    
-    # Numeric types for fallback detection
+    # Fallback: first integer field
     try:
         from qgis.PyQt.QtCore import QVariant
-        numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong)
-    except ImportError:
-        numeric_types = None
-    
-    # 4. Look for numeric fields with ID patterns
-    if numeric_types:
+        int_types = [QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong]
         for field in fields:
-            field_name_lower = field.name().lower()
-            if field.type() in numeric_types:
-                for pattern in id_patterns:
-                    if pattern in field_name_lower:
-                        return field.name()
-    
-    # 5. First integer field
-    if numeric_types:
-        for field in fields:
-            if field.type() in numeric_types:
+            if field.type() in int_types:
                 return field.name()
+    except ImportError:
+        pass
     
-    # 6. Last resort: first field
+    # Last resort: first field
     if fields.count() > 0:
         return fields[0].name()
     

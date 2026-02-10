@@ -258,18 +258,10 @@ class OptimizationDialog(QDialog):
         
         # Enable optimization
         self._widgets['enabled'] = QCheckBox(self.tr("Enable automatic optimizations"))
-        self._widgets['enabled'].setToolTip(self.tr(
-            "When enabled, FilterMate will analyze layers and suggest performance optimizations.\n"
-            "Optimizations can significantly speed up filtering operations on large datasets."
-        ))
         layout.addWidget(self._widgets['enabled'])
         
         # Ask before apply
         self._widgets['ask_before'] = QCheckBox(self.tr("Ask before applying optimizations"))
-        self._widgets['ask_before'].setToolTip(self.tr(
-            "When enabled, a confirmation dialog will appear before applying optimizations.\n"
-            "Disable to automatically apply recommended optimizations without prompting."
-        ))
         layout.addWidget(self._widgets['ask_before'])
         
         # Auto-centroid group
@@ -277,11 +269,6 @@ class OptimizationDialog(QDialog):
         centroid_layout = QVBoxLayout(centroid_group)
         
         self._widgets['auto_centroid'] = QCheckBox(self.tr("Enable auto-centroid for distant layers"))
-        self._widgets['auto_centroid'].setToolTip(self.tr(
-            "Use centroids instead of full geometries for layers located far from the current view.\n"
-            "This can reduce network transfer and processing time by up to 90%%.\n"
-            "Only affects filtering operations, not the actual layer data."
-        ))
         centroid_layout.addWidget(self._widgets['auto_centroid'])
         
         threshold_layout = QGridLayout()
@@ -291,20 +278,12 @@ class OptimizationDialog(QDialog):
         self._widgets['centroid_threshold'].setRange(100, 50000)
         self._widgets['centroid_threshold'].setSingleStep(500)
         self._widgets['centroid_threshold'].setSuffix(" km")
-        self._widgets['centroid_threshold'].setToolTip(self.tr(
-            "Minimum distance (in kilometers) from the current view to consider a layer as 'distant'.\n"
-            "Layers beyond this distance will automatically use centroids for filtering."
-        ))
         threshold_layout.addWidget(self._widgets['centroid_threshold'], 0, 1)
         
         threshold_layout.addWidget(QLabel(self.tr("Feature threshold:")), 1, 0)
         self._widgets['feature_threshold'] = QSpinBox()
         self._widgets['feature_threshold'].setRange(1000, 1000000)
         self._widgets['feature_threshold'].setSingleStep(1000)
-        self._widgets['feature_threshold'].setToolTip(self.tr(
-            "Minimum number of features required to trigger auto-centroid optimization.\n"
-            "Smaller layers will use full geometries regardless of distance."
-        ))
         threshold_layout.addWidget(self._widgets['feature_threshold'], 1, 1)
         
         centroid_layout.addLayout(threshold_layout)
@@ -315,28 +294,15 @@ class OptimizationDialog(QDialog):
         buffer_layout = QVBoxLayout(buffer_group)
         
         self._widgets['simplify_buffer'] = QCheckBox(self.tr("Simplify geometry before buffer"))
-        self._widgets['simplify_buffer'].setToolTip(self.tr(
-            "Simplify complex geometries before applying buffer operations.\n"
-            "This can significantly speed up processing but may slightly affect precision.\n"
-            "Recommended for large polygons with many vertices."
-        ))
         buffer_layout.addWidget(self._widgets['simplify_buffer'])
         
         segments_layout = QHBoxLayout()
         self._widgets['reduce_segments'] = QCheckBox(self.tr("Reduce buffer segments to:"))
-        self._widgets['reduce_segments'].setToolTip(self.tr(
-            "Reduce the number of segments used to approximate curves in buffer operations.\n"
-            "Lower values = faster but less precise, Higher values = slower but smoother."
-        ))
         segments_layout.addWidget(self._widgets['reduce_segments'])
         
         self._widgets['segments_value'] = QSpinBox()
         self._widgets['segments_value'].setRange(1, 16)
         self._widgets['segments_value'].setValue(3)
-        self._widgets['segments_value'].setToolTip(self.tr(
-            "Number of segments per quarter circle (1-16).\n"
-            "Default: 8. Recommended for optimization: 3-4."
-        ))
         segments_layout.addWidget(self._widgets['segments_value'])
         segments_layout.addStretch()
         
@@ -354,51 +320,31 @@ class OptimizationDialog(QDialog):
         layout.setSpacing(12)
         
         # PostgreSQL group
-        pg_group = QGroupBox("🐘 " + self.tr("PostgreSQL"))
+        pg_group = QGroupBox("🐘 PostgreSQL")
         pg_layout = QVBoxLayout(pg_group)
         
         self._widgets['pg_mv'] = QCheckBox(self.tr("Use materialized views for filtering"))
-        self._widgets['pg_mv'].setToolTip(self.tr(
-            "Create materialized views for complex filter operations.\n"
-            "Materialized views are pre-computed result sets stored on the database server,\n"
-            "providing faster access for repeated queries. Requires PostgreSQL server."
-        ))
         pg_layout.addWidget(self._widgets['pg_mv'])
         
         self._widgets['pg_indices'] = QCheckBox(self.tr("Create spatial indices automatically"))
-        self._widgets['pg_indices'].setToolTip(self.tr(
-            "Automatically create spatial indices (GiST) on PostgreSQL tables.\n"
-            "Spatial indices significantly speed up spatial queries.\n"
-            "Indices are created once and reused for subsequent operations."
-        ))
         pg_layout.addWidget(self._widgets['pg_indices'])
         
         layout.addWidget(pg_group)
         
         # Spatialite group
-        sl_group = QGroupBox("💾 " + self.tr("Spatialite"))
+        sl_group = QGroupBox("💾 Spatialite")
         sl_layout = QVBoxLayout(sl_group)
         
         self._widgets['sl_rtree'] = QCheckBox(self.tr("Use R-tree spatial index"))
-        self._widgets['sl_rtree'].setToolTip(self.tr(
-            "Use R-tree index for spatial queries in Spatialite databases.\n"
-            "R-tree indices organize spatial data hierarchically for fast bounding box queries.\n"
-            "Highly recommended for GeoPackage and Spatialite files with many features."
-        ))
         sl_layout.addWidget(self._widgets['sl_rtree'])
         
         layout.addWidget(sl_group)
         
         # OGR group
-        ogr_group = QGroupBox("📁 " + self.tr("OGR (Shapefiles, GeoPackage)"))
+        ogr_group = QGroupBox("📁 OGR (Shapefiles, GeoPackage)")
         ogr_layout = QVBoxLayout(ogr_group)
         
         self._widgets['ogr_bbox'] = QCheckBox(self.tr("Use bounding box pre-filter"))
-        self._widgets['ogr_bbox'].setToolTip(self.tr(
-            "Pre-filter features using bounding box before applying spatial predicates.\n"
-            "This reduces the number of expensive geometry comparisons.\n"
-            "Essential for good performance with Shapefiles and other file-based formats."
-        ))
         ogr_layout.addWidget(self._widgets['ogr_bbox'])
         
         layout.addWidget(ogr_group)
@@ -418,11 +364,6 @@ class OptimizationDialog(QDialog):
         cache_layout = QVBoxLayout(cache_group)
         
         self._widgets['cache_enabled'] = QCheckBox(self.tr("Enable geometry cache"))
-        self._widgets['cache_enabled'].setToolTip(self.tr(
-            "Cache geometries in memory for faster repeated operations.\n"
-            "Improves performance when filtering the same layers multiple times.\n"
-            "Uses additional memory proportional to the dataset size."
-        ))
         cache_layout.addWidget(self._widgets['cache_enabled'])
         
         layout.addWidget(cache_group)
@@ -435,11 +376,6 @@ class OptimizationDialog(QDialog):
         self._widgets['batch_size'] = QSpinBox()
         self._widgets['batch_size'].setRange(100, 100000)
         self._widgets['batch_size'].setSingleStep(500)
-        self._widgets['batch_size'].setToolTip(self.tr(
-            "Number of features to process in each batch (100-100,000).\n"
-            "Smaller values use less memory but may be slower.\n"
-            "Larger values are faster but require more memory."
-        ))
         batch_layout.addWidget(self._widgets['batch_size'])
         batch_layout.addStretch()
         
@@ -639,10 +575,6 @@ class RecommendationDialog(QDialog):
         button_layout = QHBoxLayout()
         
         skip_btn = QPushButton(self.tr("Skip"))
-        skip_btn.setToolTip(self.tr(
-            "Skip optimizations and continue with current settings.\n"
-            "You can configure optimizations later in the settings dialog."
-        ))
         skip_btn.clicked.connect(self.reject)
         button_layout.addWidget(skip_btn)
         
@@ -650,10 +582,6 @@ class RecommendationDialog(QDialog):
         
         apply_btn = QPushButton(self.tr("Apply Selected"))
         apply_btn.setDefault(True)
-        apply_btn.setToolTip(self.tr(
-            "Apply the selected optimizations to improve filtering performance.\n"
-            "Only checked optimizations will be applied."
-        ))
         apply_btn.setStyleSheet(
             "QPushButton { background: #3498db; color: white; padding: 8px 16px; }"
         )

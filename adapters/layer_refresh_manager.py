@@ -102,18 +102,8 @@ class LayerRefreshManager:
         )
         
         if needs_stabilization and QGIS_AVAILABLE and QTimer:
-            # Non-blocking stabilization delay - store layer ID to avoid holding strong ref
-            # to QgsVectorLayer which may be deleted before timer fires
-            layer_id = layer.id()
-            def _deferred_refresh():
-                try:
-                    from qgis.core import QgsProject
-                    fresh_layer = QgsProject.instance().mapLayer(layer_id)
-                    if fresh_layer:
-                        self._do_refresh(fresh_layer)
-                except Exception as e:
-                    logger.warning(f"Deferred refresh failed for layer {layer_id}: {e}")
-            QTimer.singleShot(self._stabilization_ms, _deferred_refresh)
+            # Non-blocking stabilization delay
+            QTimer.singleShot(self._stabilization_ms, lambda: self._do_refresh(layer))
         else:
             # Immediate refresh
             self._do_refresh(layer)

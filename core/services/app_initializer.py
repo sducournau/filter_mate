@@ -266,29 +266,8 @@ class AppInitializer:
         if not dockwidget.isVisible():
             dockwidget.show()
         
-        # FIX 2026-02-10 BUG10: Re-setup ControllerIntegration after teardown.
-        # closeEvent() calls teardown() which disconnects projectLayersReady from
-        # _on_project_layers_ready and clears all controller references. Without
-        # re-setup, comboboxes are never populated on re-open because the signal
-        # handler is disconnected.
-        ci_was_torn_down = False
-        if hasattr(dockwidget, 'ensure_controller_integration_setup'):
-            ci = getattr(dockwidget, '_controller_integration', None)
-            ci_was_torn_down = ci and not getattr(ci, '_is_setup', True)
-            dockwidget.ensure_controller_integration_setup()
-        
         # Check for new layers
         self._refresh_layers_if_needed(project)
-        
-        # FIX 2026-02-10 BUG10: If CI was torn down and re-setup, force a UI refresh
-        # to re-populate comboboxes. _refresh_layers_if_needed may not trigger
-        # add_layers if all layers are already in PROJECT_LAYERS, so we need to
-        # explicitly call get_project_layers_from_app to emit projectLayersReady.
-        if ci_was_torn_down:
-            project_layers = self._get_project_layers() if self._get_project_layers else {}
-            if project_layers and dockwidget.widgets_initialized:
-                logger.info(f"BUG10 fix: Forcing UI refresh after CI re-setup ({len(project_layers)} layers)")
-                QTimer.singleShot(200, lambda: dockwidget.get_project_layers_from_app(project_layers, project))
         
         # Reconnect signals if needed
         self._connect_layer_store_signals()
@@ -509,7 +488,6 @@ class AppInitializer:
         Safety check to ensure UI is enabled after startup.
         
         This prevents UI from being left in disabled/grey state on startup.
-        FIX 2026-02-10: Added diagnostic logging for combobox/signal state.
         """
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         project_layers = self._get_project_layers() if self._get_project_layers else {}
@@ -518,40 +496,6 @@ class AppInitializer:
         if not dockwidget:
             logger.warning("Safety timer: Dockwidget is None, cannot check UI state")
             return
-        
-        # FIX 2026-02-10: Diagnostic logging for debugging combobox/signal issues
-        logger.info("=" * 60)
-        logger.info("DIAGNOSTIC: Safety timer check (5s after init)")
-        logger.info(f"  widgets_initialized: {getattr(dockwidget, 'widgets_initialized', 'N/A')}")
-        logger.info(f"  _signals_connected: {getattr(dockwidget, '_signals_connected', 'N/A')}")
-        logger.info(f"  has_loaded_layers: {getattr(dockwidget, 'has_loaded_layers', 'N/A')}")
-        logger.info(f"  PROJECT_LAYERS count: {len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
-        logger.info(f"  App PROJECT_LAYERS count: {len(project_layers)}")
-        logger.info(f"  current_layer: {dockwidget.current_layer.name() if getattr(dockwidget, 'current_layer', None) else 'None'}")
-        logger.info(f"  _filtering_in_progress: {getattr(dockwidget, '_filtering_in_progress', 'N/A')}")
-        logger.info(f"  _updating_layers: {getattr(dockwidget, '_updating_layers', 'N/A')}")
-        logger.info(f"  _plugin_busy: {getattr(dockwidget, '_plugin_busy', 'N/A')}")
-        
-        # Check controller integration state
-        ci = getattr(dockwidget, '_controller_integration', None)
-        if ci:
-            logger.info(f"  ControllerIntegration._is_setup: {getattr(ci, '_is_setup', 'N/A')}")
-            logger.info(f"  ControllerIntegration._exporting_controller: {ci._exporting_controller is not None if hasattr(ci, '_exporting_controller') else 'N/A'}")
-            logger.info(f"  ControllerIntegration._filtering_controller: {ci._filtering_controller is not None if hasattr(ci, '_filtering_controller') else 'N/A'}")
-            logger.info(f"  ControllerIntegration connections: {len(getattr(ci, '_connections', []))}")
-        else:
-            logger.warning("  ControllerIntegration: None!")
-        
-        # Check combobox item counts
-        if hasattr(dockwidget, 'widgets') and dockwidget.widgets:
-            try:
-                export_widget = dockwidget.widgets.get("EXPORTING", {}).get("LAYERS_TO_EXPORT", {}).get("WIDGET")
-                filter_widget = dockwidget.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
-                logger.info(f"  Export combobox items: {export_widget.count() if export_widget else 'N/A'}")
-                logger.info(f"  Filter combobox items: {filter_widget.count() if filter_widget else 'N/A'}")
-            except Exception as e:
-                logger.info(f"  Combobox check failed: {e}")
-        logger.info("=" * 60)
         
         # Check if layers were successfully loaded
         if len(project_layers) > 0:
@@ -596,9 +540,8 @@ class AppInitializer:
             logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
             if self._manage_task:
                 QTimer.singleShot(100, lambda: self._manage_task('add_layers', current_layers))
-            # Set another safety timer - use weakref to avoid keeping self alive
-            self_ref = weakref.ref(self)
-            QTimer.singleShot(5000, lambda: self_ref() and self_ref()._ensure_ui_enabled_final(0))
+            # Set another safety timer
+            QTimer.singleShot(5000, lambda: self._ensure_ui_enabled_final(0))
         else:
             logger.warning(f"Recovery: No usable layers found from {len(all_layers)} total layers")
             # Update indicator to show waiting state
@@ -628,8 +571,7 @@ class AppInitializer:
                 dockwidget.get_project_layers_from_app(project_layers, project)
         elif retry_count < MAX_RETRIES:
             logger.info(f"Final safety timer: Deferring check (retry {retry_count + 1}/{MAX_RETRIES})")
-            self_ref = weakref.ref(self)
-            QTimer.singleShot(3000, lambda: self_ref() and self_ref()._ensure_ui_enabled_final(retry_count + 1))
+            QTimer.singleShot(3000, lambda: self._ensure_ui_enabled_final(retry_count + 1))
         else:
             logger.error("Final safety timer: Failed to load layers after recovery")
             iface.messageBar().pushWarning(
@@ -696,8 +638,8 @@ class AppInitializer:
         # Use layersAdded (batch) instead of layerWasAdded (per layer)
         if self._on_layers_added and self._manage_task:
             map_layer_store.layersAdded.connect(self._on_layers_added)
-            map_layer_store.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
-            map_layer_store.allLayersRemoved.connect(self._on_all_layers_removed)
+            map_layer_store.layersWillBeRemoved.connect(lambda layers: self._manage_task('remove_layers', layers))
+            map_layer_store.allLayersRemoved.connect(lambda: self._manage_task('remove_all_layers'))
         
         if self._set_signals_connected:
             self._set_signals_connected(True)
@@ -719,7 +661,7 @@ class AppInitializer:
         
         # Connect task launching signal
         if self._manage_task:
-            dockwidget.launchingTask.connect(self._on_launching_task)
+            dockwidget.launchingTask.connect(lambda x: self._manage_task(x))
         
         # Connect current layer changed signal
         if self._update_undo_redo_buttons:
@@ -727,56 +669,26 @@ class AppInitializer:
         
         # Connect variable management signals
         if self._save_variables_from_layer and self._remove_variables_from_layer:
-            dockwidget.resettingLayerVariableOnError.connect(self._on_resetting_layer_variable_on_error)
-            dockwidget.settingLayerVariable.connect(self._on_setting_layer_variable)
-            dockwidget.resettingLayerVariable.connect(self._on_resetting_layer_variable)
+            dockwidget.resettingLayerVariableOnError.connect(
+                lambda layer, properties: self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
+            )
+            dockwidget.settingLayerVariable.connect(
+                lambda layer, properties: self._safe_layer_operation(layer, properties, self._save_variables_from_layer)
+            )
+            dockwidget.resettingLayerVariable.connect(
+                lambda layer, properties: self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
+            )
         
         # Connect project variables signal
         if self._save_project_variables:
             dockwidget.settingProjectVariables.connect(self._save_project_variables)
-            project.fileNameChanged.connect(self._on_project_filename_changed)
+            project.fileNameChanged.connect(lambda: self._save_project_variables())
         
         if self._set_dockwidget_signals_connected:
             self._set_dockwidget_signals_connected(True)
         
         logger.debug("Dockwidget signals connected successfully")
     
-    # ================================================================
-    # NAMED SIGNAL HANDLERS (replace lambdas for GC-safe connections)
-    # ================================================================
-
-    def _on_layers_will_be_removed(self, layers):
-        """Handle layersWillBeRemoved signal."""
-        if self._manage_task:
-            self._manage_task('remove_layers', layers)
-
-    def _on_all_layers_removed(self):
-        """Handle allLayersRemoved signal."""
-        if self._manage_task:
-            self._manage_task('remove_all_layers')
-
-    def _on_launching_task(self, x):
-        """Handle dockwidget.launchingTask signal."""
-        if self._manage_task:
-            self._manage_task(x)
-
-    def _on_resetting_layer_variable_on_error(self, layer, properties):
-        """Handle dockwidget.resettingLayerVariableOnError signal."""
-        self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
-
-    def _on_setting_layer_variable(self, layer, properties):
-        """Handle dockwidget.settingLayerVariable signal."""
-        self._safe_layer_operation(layer, properties, self._save_variables_from_layer)
-
-    def _on_resetting_layer_variable(self, layer, properties):
-        """Handle dockwidget.resettingLayerVariable signal."""
-        self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
-
-    def _on_project_filename_changed(self):
-        """Handle project.fileNameChanged signal."""
-        if self._save_project_variables:
-            self._save_project_variables()
-
     def _safe_layer_operation(self, layer: QgsVectorLayer, properties: Any, operation: Callable):
         """
         Safely execute a layer operation by deferring to Qt event loop.

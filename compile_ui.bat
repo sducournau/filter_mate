@@ -80,34 +80,8 @@ exit /b 1
 :check_result
 if %ERRORLEVEL% EQU 0 (
     echo.
-    echo Compilation successful, applying post-processing...
-    echo.
-    
-    REM Clean Python cache to prevent stale bytecode issues
-    echo Cleaning Python cache...
-    for /d /r %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d" 2>nul
-    del /s /q *.pyc 2>nul
-    echo   - Cache cleared
-    echo.
-    
-    REM Fix resources_rc import - replace with correct module name
-    REM pyuic5 generates "import resources_rc" but our file is "resources.py"
-    REM Use regex pattern to match any variation (with/without comments, whitespace)
-    powershell -Command "$content = Get-Content '%PY_FILE%' -Raw; $newContent = $content -replace '(?m)^import resources_rc.*$', 'from . import resources  # Qt resources (was: import resources_rc)'; if ($content -ne $newContent) { $newContent | Set-Content '%PY_FILE%' -NoNewline; Write-Host 'Post-processing: Fixed import resources_rc to from . import resources'; exit 0 } else { Write-Host 'Note: No resources_rc import found (may already be correct)'; exit 0 }"
-    
-    REM Verify the fix was applied
-    findstr /C:"import resources_rc" "%PY_FILE%" >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        echo WARNING: 'import resources_rc' still present! Attempting alternative fix...
-        powershell -Command "(Get-Content '%PY_FILE%') | ForEach-Object { $_ -replace '^import resources_rc.*$', 'from . import resources  # Qt resources (was: import resources_rc)' } | Set-Content '%PY_FILE%'"
-        echo Alternative fix attempted.
-    ) else (
-        echo Post-processing completed successfully.
-    )
-    
-    echo.
     echo ============================================================
-    echo SUCCESS: File compiled and patched successfully!
+    echo SUCCESS: File compiled successfully!
     echo ============================================================
     echo.
     echo Generated file: %PY_FILE%

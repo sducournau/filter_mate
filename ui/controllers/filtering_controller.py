@@ -383,7 +383,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
             logger.info(f"populate_layers_checkable_combobox: has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
             
             # Imports
-            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             from ...infrastructure.utils.validation_utils import is_layer_source_available
             
@@ -391,9 +391,8 @@ class FilteringController(BaseController, LayerSelectionMixin):
             if layer is None:
                 layer = dockwidget.current_layer
             
-            # v5.1: Accept both vector and raster layers as source
-            if layer is None or not (isinstance(layer, QgsVectorLayer) or isinstance(layer, QgsRasterLayer)):
-                logger.debug("populate_layers_checkable_combobox: No valid source layer (must be vector or raster)")
+            if layer is None or not isinstance(layer, QgsVectorLayer):
+                logger.debug("populate_layers_checkable_combobox: No valid source layer")
                 return False
             
             # Check layer exists in PROJECT_LAYERS
@@ -432,11 +431,10 @@ class FilteringController(BaseController, LayerSelectionMixin):
             else:
                 logger.debug(f"✓ Source layer {layer.name()} (ID: {source_layer_id}) not in layers_to_filter (correct)")
             
-            # Diagnostic logging - v5.1: Include both vector and raster layers
-            qgis_layers = [l for l in project.mapLayers().values() 
-                           if (isinstance(l, QgsVectorLayer) or isinstance(l, QgsRasterLayer)) 
-                           and l.id() != layer.id()]
-            missing = [l for l in qgis_layers if l.id() not in dockwidget.PROJECT_LAYERS]
+            # Diagnostic logging
+            qgis_vector_layers = [l for l in project.mapLayers().values() 
+                                  if isinstance(l, QgsVectorLayer) and l.id() != layer.id()]
+            missing = [l for l in qgis_vector_layers if l.id() not in dockwidget.PROJECT_LAYERS]
             if missing:
                 logger.warning(f"populate_layers_checkable_combobox: {len(missing)} layer(s) NOT in PROJECT_LAYERS")
                 logger.warning(f"Layers in QGIS but NOT in PROJECT_LAYERS: {[l.name() for l in missing]}")
@@ -501,26 +499,16 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 if not layer_obj:
                     skipped_reasons.append(f"{layer_name}: layer_obj is None (not in project)")
                     continue
-                
-                # v5.1: Support both vector and raster layers as filtering targets
-                is_vector = isinstance(layer_obj, QgsVectorLayer)
-                is_raster = isinstance(layer_obj, QgsRasterLayer)
-                
-                if not is_vector and not is_raster:
-                    skipped_reasons.append(f"{layer_name}: not QgsVectorLayer or QgsRasterLayer")
+                if not isinstance(layer_obj, QgsVectorLayer):
+                    skipped_reasons.append(f"{layer_name}: not QgsVectorLayer")
                     continue
-                
-                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
-                if is_vector and not layer_obj.isSpatial():
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if not layer_obj.isSpatial():
                     skipped_reasons.append(f"{layer_name}: non-spatial table (no geometry)")
                     continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     skipped_reasons.append(f"{layer_name}: source not available")
                     continue
-                
-                # v5.1: Update geometry type for raster layers
-                if is_raster:
-                    geom_type = "GeometryType.Raster"
                 
                 # Layer is valid - add to combobox
                 display_name = f"{layer_name} [{layer_crs}]"
@@ -542,36 +530,22 @@ class FilteringController(BaseController, LayerSelectionMixin):
             
             # FIX v4.1.3 (2026-01-18): Add missing layers directly to combobox (same as populate_export_combobox)
             # This ensures PostgreSQL and remote layers missing from PROJECT_LAYERS are still filterable
-            # v5.1: Support both vector and raster missing layers
             from ...infrastructure.utils import geometry_type_to_string
             
             for missing_layer in missing:
-                is_vector = isinstance(missing_layer, QgsVectorLayer)
-                is_raster = isinstance(missing_layer, QgsRasterLayer)
-                
-                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
-                # v5.1: Rasters are always valid (no isSpatial check needed)
-                if not missing_layer.isValid():
-                    continue
-                if is_vector and not missing_layer.isSpatial():
-                    continue
-                if not is_layer_source_available(missing_layer, require_psycopg2=False):
-                    continue
-                
-                display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
-                if is_raster:
-                    geom_type_str = "GeometryType.Raster"
-                else:
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if missing_layer.isValid() and missing_layer.isSpatial() and is_layer_source_available(missing_layer, require_psycopg2=False):
+                    display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
                     geom_type_str = geometry_type_to_string(missing_layer)
-                layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
-                logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
-                item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
-                layers_widget.addItem(layer_icon, display_name, item_data)
-                item = layers_widget.model().item(item_index)
-                # Check if this layer was previously selected for filtering
-                item.setCheckState(Qt.Checked if missing_layer.id() in layers_to_filter else Qt.Unchecked)
-                item_index += 1
-                logger.info(f"✓ populate_layers_checkable_combobox: Added missing layer '{missing_layer.name()}'")
+                    layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
+                    logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                    item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
+                    layers_widget.addItem(layer_icon, display_name, item_data)
+                    item = layers_widget.model().item(item_index)
+                    # Check if this layer was previously selected for filtering
+                    item.setCheckState(Qt.Checked if missing_layer.id() in layers_to_filter else Qt.Unchecked)
+                    item_index += 1
+                    logger.info(f"✓ populate_layers_checkable_combobox: Added missing layer '{missing_layer.name()}'")
             
             logger.info(f"✓ populate_layers_checkable_combobox: Added {item_index} layers (source layer '{layer.name()}' excluded)")
             logger.info(f"=== populate_layers_checkable_combobox END ===")
@@ -823,7 +797,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
             # v4.0 Note: FilterService integration requires additional work:
             # 1. FilterService.apply_filter() expects FilterRequest with domain objects
             # 2. The async task execution model (QgsTask) is currently in FilterEngineTask
-            # 3. Full integration planned when FilterEngineTask is fully refactored
+            # 3. Full integration planned for v5.0 when FilterEngineTask is fully refactored
             # For now, delegate to legacy path which uses FilterEngineTask via TaskBuilder
             logger.debug("FilteringController: FilterService available but delegating to legacy (v4.0)")
             return False
@@ -1513,169 +1487,4 @@ class FilteringController(BaseController, LayerSelectionMixin):
         logger.info(f"FilteringController: Task completed: {task_type}, success={success}")
         # Could re-enable filter buttons
         # Could update undo/redo stacks
-
-    # =========================================================================
-    # RASTER VALUE FILTER (v5.4)
-    # =========================================================================
-
-    # Mapping: UI label → RasterPredicate enum value
-    RASTER_PREDICATE_MAP = {
-        "Within Range": "within_range",
-        "Outside Range": "outside_range",
-        "Above Value": "above_value",
-        "Below Value": "below_value",
-        "Equals Value": "equals_value",
-        "Is NoData": "is_nodata",
-        "Is Not NoData": "is_not_nodata",
-    }
-
-    SAMPLING_METHOD_MAP = {
-        "Centroid": "centroid",
-        "All Vertices": "all_vertices",
-        "Zonal Mean": "zonal_mean",
-        "Zonal Max": "zonal_max",
-        "Zonal Min": "zonal_min",
-        "Zonal Majority": "zonal_majority",
-    }
-
-    def execute_raster_filter(self) -> bool:
-        """Execute raster → vector filtering.
-
-        Reads raster source, band, predicates, and sampling from the Filtering
-        page widgets, reads min/max from the Exploring Raster spinboxes, then
-        calls ``RasterFilterService.filter_vector_by_raster()`` for each
-        selected vector target layer.
-
-        Returns:
-            True if filtering was performed, False on validation failure.
-        """
-        dw = self._dockwidget
-        if not dw:
-            logger.warning("execute_raster_filter: no dockwidget")
-            return False
-
-        # --- 1. Read raster source layer & band ---
-        raster_layer = dw.comboBox_filtering_raster_source_layer.currentLayer()
-        if not raster_layer:
-            logger.warning("execute_raster_filter: no raster layer selected")
-            return False
-
-        from qgis.core import QgsRasterLayer
-        if not isinstance(raster_layer, QgsRasterLayer) or not raster_layer.isValid():
-            logger.warning("execute_raster_filter: invalid raster layer")
-            return False
-
-        band = dw.comboBox_filtering_raster_band.currentIndex() + 1
-
-        # --- 2. Read vector target layers ---
-        target_widget = dw.checkableComboBoxLayer_filtering_raster_layers_to_filter
-        from qgis.core import QgsProject, QgsVectorLayer
-        project = QgsProject.instance()
-
-        target_layers = []
-        model = target_widget.model()
-        if model:
-            from qgis.PyQt.QtCore import Qt
-            for i in range(model.rowCount()):
-                item = model.item(i)
-                if item and item.checkState() == Qt.Checked:
-                    data = item.data(Qt.UserRole)
-                    if data and isinstance(data, dict):
-                        layer_id = data.get("layer_id")
-                        lyr = project.mapLayer(layer_id)
-                        if lyr and isinstance(lyr, QgsVectorLayer) and lyr.isValid():
-                            target_layers.append(lyr)
-
-        if not target_layers:
-            logger.warning("execute_raster_filter: no vector target layers checked")
-            return False
-
-        # --- 3. Read predicates ---
-        checked_predicate_labels = dw.comboBox_filtering_raster_predicates.checkedItems()
-        if not checked_predicate_labels:
-            checked_predicate_labels = ["Within Range"]
-
-        from ...core.services.raster_filter_service import (
-            RasterFilterRequest, RasterPredicate, SamplingMethod,
-            get_raster_filter_service,
-        )
-
-        predicates = []
-        for label in checked_predicate_labels:
-            enum_val = self.RASTER_PREDICATE_MAP.get(label)
-            if enum_val:
-                predicates.append(RasterPredicate(enum_val))
-        if not predicates:
-            predicates = [RasterPredicate.WITHIN_RANGE]
-
-        # --- 4. Read sampling method ---
-        sampling_label = dw.comboBox_filtering_sampling_method.currentText()
-        sampling_val = self.SAMPLING_METHOD_MAP.get(sampling_label, "centroid")
-        sampling = SamplingMethod(sampling_val)
-
-        # --- 5. Read min/max from Exploring Raster spinboxes ---
-        min_value = dw.doubleSpinBox_min.value() if hasattr(dw, 'doubleSpinBox_min') else 0.0
-        max_value = dw.doubleSpinBox_max.value() if hasattr(dw, 'doubleSpinBox_max') else 0.0
-
-        # --- 6. Read combine operator ---
-        source_combine_idx = dw.comboBox_filtering_raster_source_combine_operator.currentIndex()
-        source_combine = {0: "AND", 1: "AND NOT", 2: "OR"}.get(source_combine_idx, "AND")
-
-        # --- 7. Execute for each predicate × each target ---
-        service = get_raster_filter_service()
-        results_by_layer = {}
-
-        for predicate in predicates:
-            request = RasterFilterRequest(
-                raster_layer=raster_layer,
-                vector_layer=None,  # set per-target below
-                band_index=band,
-                min_value=min_value,
-                max_value=max_value,
-                predicate=predicate,
-                sampling_method=sampling,
-            )
-
-            for vector_layer in target_layers:
-                request.vector_layer = vector_layer
-                result = service.filter_vector_by_raster(request)
-                if result.success:
-                    lid = vector_layer.id()
-                    if lid not in results_by_layer:
-                        results_by_layer[lid] = set(result.matching_feature_ids)
-                    else:
-                        # Union across predicates
-                        results_by_layer[lid] |= set(result.matching_feature_ids)
-
-        # --- 8. Apply filter expressions ---
-        for vector_layer in target_layers:
-            lid = vector_layer.id()
-            matching_ids = results_by_layer.get(lid, set())
-
-            if not matching_ids:
-                expr = "1=0"
-            else:
-                ids_str = ", ".join(str(fid) for fid in sorted(matching_ids))
-                expr = f"$id IN ({ids_str})"
-
-            # Combine with existing subset if source_combine != AND or there is one
-            existing = vector_layer.subsetString()
-            if existing and source_combine != "AND":
-                combined = f"({existing}) {source_combine} ({expr})"
-            elif existing:
-                combined = f"({existing}) AND ({expr})"
-            else:
-                combined = expr
-
-            vector_layer.setSubsetString(combined)
-            logger.info(
-                f"Raster filter applied on '{vector_layer.name()}': "
-                f"{len(matching_ids)} features match"
-            )
-
-        logger.info(
-            f"execute_raster_filter: Completed for {len(target_layers)} layers, "
-            f"raster='{raster_layer.name()}', band={band}"
-        )
-        return True
 

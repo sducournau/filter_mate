@@ -15,36 +15,49 @@ FilterMate Application Orchestrator
 from qgis.PyQt.QtCore import Qt, QTimer
 import weakref
 import sip
+from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
     QgsApplication,
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransformContext,
+    QgsExpressionContextUtils,
     QgsProject,
-    QgsRasterLayer,  # v5.0: Added for unified vector/raster layer support
+    QgsTask,
+    QgsVectorFileWriter,
     QgsVectorLayer
 )
-# QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
+# FIX 2026-01-21: Import from correct location (gui in QGIS 3.30+, core in older versions)
 try:
-    from qgis.core import Qgis
-    _LayerFilter = Qgis.LayerFilter
-    _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
-except (ImportError, AttributeError):
-    try:
-        from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
-    except ImportError:
-        from qgis.core import QgsMapLayerProxyModel as _LayerFilter
-    _LayerFilters = None
+    from qgis.gui import QgsMapLayerProxyModel
+except ImportError:
+    from qgis.core import QgsMapLayerProxyModel
 from qgis.utils import iface
+from qgis import processing
+from osgeo import ogr
 
 import os.path
+import logging
 from .config.config import init_env_vars, ENV_VARS
 import json
+
+# Core tasks (migrated from modules/tasks/)
+from .core.tasks import (
+    FilterEngineTask,
+    LayersManagementEngineTask,
+)
+from .infrastructure.utils import spatialite_connect
 
 # Infrastructure utilities (migrated from modules/appUtils)
 from .infrastructure.utils import (
     POSTGRESQL_AVAILABLE,
+    get_data_source_uri,
+    get_datasource_connexion_from_layer,
     is_layer_source_available,
+    detect_layer_provider_type,
+    validate_and_cleanup_postgres_layers,  # v2.8.1: Orphaned MV cleanup on project load
 )
-from .infrastructure.database.sql_utils import safe_set_subset_string
-from .infrastructure.field_utils import cleanup_corrupted_layer_filters
+from .infrastructure.database.sql_utils import sanitize_sql_identifier, safe_set_subset_string
+from .infrastructure.field_utils import clean_buffer_value, cleanup_corrupted_layer_filters
 from .utils.type_utils import return_typed_value
 from .infrastructure.feedback import (
     show_backend_info, show_success_with_backend,
@@ -52,6 +65,8 @@ from .infrastructure.feedback import (
 )
 from .core.services.history_service import HistoryService
 from .core.services.favorites_service import FavoritesService
+from .core.services.favorites_migration_service import FavoritesMigrationService
+from .ui.config import UIConfig, DisplayProfile
 
 # Config helpers (migrated to config/)
 from .config.config import get_optimization_thresholds
@@ -59,6 +74,7 @@ from .config.config import get_optimization_thresholds
 # Object safety utilities (migrated to infrastructure/utils/)
 from .infrastructure.utils import (
     is_sip_deleted, is_layer_valid as is_valid_layer, is_qgis_alive,
+    GdalErrorHandler
 )
 from .infrastructure.logging import get_app_logger
 from .resources import *  # Qt resources must be imported with wildcard
@@ -89,6 +105,11 @@ try:
         LayerLifecycleConfig
     )
     logger.debug("✓ layer_lifecycle_service")
+    from .core.services.task_management_service import (  # v4.0: Task management extraction
+        TaskManagementService,
+        TaskManagementConfig
+    )
+    logger.debug("✓ task_management_service")
     from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
     logger.debug("✓ undo_redo_handler")
     from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
@@ -115,11 +136,6 @@ try:
     logger.debug("✓ layer_validator")
     from .core.services.filter_application_service import FilterApplicationService
     logger.debug("✓ filter_application_service")
-    
-    # v5.0: Raster filter controller (EPIC Raster Visibility Controls - Sprint 2)
-    from .ui.controllers.raster_filter_controller import RasterFilterController
-    logger.debug("✓ raster_filter_controller")
-    
     HEXAGONAL_AVAILABLE = True
     logger.debug("All hexagonal services loaded successfully")
 except ImportError as e:
@@ -128,10 +144,10 @@ except ImportError as e:
     logger.error(f"Traceback: {traceback.format_exc()}")
     HEXAGONAL_AVAILABLE = False
     TaskParameterBuilder = LayerRefreshManager = LayerTaskCompletionHandler = None
-    LayerLifecycleService = LayerLifecycleConfig = None
+    LayerLifecycleService = LayerLifecycleConfig = TaskManagementService = TaskManagementConfig = None
     UndoRedoHandler = DatabaseManager = VariablesPersistenceManager = TaskOrchestrator = None
     OptimizationManager = FilterResultHandler = AppInitializer = DatasourceManager = LayerFilterBuilder = None
-    LayerValidator = FilterApplicationService = RasterFilterController = None
+    LayerValidator = FilterApplicationService = None
     def _init_hexagonal_services(config=None): pass
     def _cleanup_hexagonal_services(): pass
     def _hexagonal_initialized(): return False
@@ -154,6 +170,8 @@ def safe_show_message(level, title, message):
         return True
     except (RuntimeError, AttributeError): return False
 
+
+from .filter_mate_dockwidget import FilterMateDockWidget
 
 MESSAGE_TASKS_CATEGORIES = {'filter':'FilterLayers', 'unfilter':'FilterLayers', 'reset':'FilterLayers', 'export':'ExportLayers',
     'add_layers':'ManageLayers', 'remove_layers':'ManageLayers', 'remove_all_layers':'ManageLayers',
@@ -212,12 +230,14 @@ class FilterMateApp:
         return self._lifecycle_service
     
     def _get_task_management_service(self):
-        """Get TaskOrchestrator instance (backward-compatible accessor).
-        
-        Deprecated: Use self._task_orchestrator directly.
-        Retained for backward compatibility during Phase 5 consolidation.
-        """
-        return self._task_orchestrator
+        """Get or create TaskManagementService instance (lazy initialization)."""
+        if not hasattr(self, '_task_mgmt_service') or self._task_mgmt_service is None:
+            if TaskManagementService:
+                config = TaskManagementConfig()
+                self._task_mgmt_service = TaskManagementService(config)
+            else:
+                self._task_mgmt_service = None
+        return self._task_mgmt_service
 
     def _get_task_builder(self):
         """Get TaskParameterBuilder instance if available."""
@@ -232,62 +252,9 @@ class FilterMateApp:
         # Fallback: minimal validation
         return [l for l in layers if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)]
 
-    def _on_layers_will_be_removed(self, layers):
-        """Signal handler for layersWillBeRemoved (named method replaces lambda for GC safety)."""
-        self.manage_task('remove_layers', layers)
-
-    def _on_all_layers_removed(self):
-        """Signal handler for allLayersRemoved (named method replaces lambda for GC safety)."""
-        self.manage_task('remove_all_layers')
-
-    def _on_project_filename_changed(self):
-        """Signal handler for PROJECT.fileNameChanged (named method replaces lambda for GC safety)."""
-        self.save_project_variables()
-
-    def _on_launching_task(self, task_name):
-        """Signal handler for launchingTask (named method replaces lambda for GC safety)."""
-        self.manage_task(task_name)
-
-    def _on_setting_layer_variable(self, layer, properties):
-        """Signal handler for settingLayerVariable (named method replaces lambda for GC safety)."""
-        self._safe_layer_operation(layer, properties, self.save_variables_from_layer)
-
-    def _on_resetting_layer_variable(self, layer, properties):
-        """Signal handler for resettingLayerVariable (named method replaces lambda for GC safety)."""
-        self._safe_layer_operation(layer, properties, self.remove_variables_from_layer)
-
-    def _on_resetting_layer_variable_on_error(self, layer, properties):
-        """Signal handler for resettingLayerVariableOnError (named method replaces lambda for GC safety)."""
-        self._safe_layer_operation(layer, properties, self.remove_variables_from_layer)
-
     def _on_layers_added(self, layers):
-        """Signal handler for layersAdded: ignore broken/invalid layers.
-        
-        v5.0.1: Optimized to early-exit for non-vector layers (raster, VRT, mesh)
-        to avoid freeze with large VRT files (e.g., 333 tiles).
-        v5.3 FIX 2026-02-10: Include valid raster layers alongside vectors so they
-        appear in filtering/exporting comboboxes (controllers already handle them).
-        """
+        """Signal handler for layersAdded: ignore broken/invalid layers."""
         import time
-        
-        # v5.0.1 PERFORMANCE: Filter out non-vector layers FIRST before any processing
-        # This prevents freeze with large raster datasets (VRT, etc.)
-        vector_layers_only = [l for l in (layers or []) if isinstance(l, QgsVectorLayer)]
-        
-        # FIX 2026-02-10: Also include valid raster layers (non-VRT) for combobox population
-        # Only do a fast isValid() check - no source access that could freeze on VRT
-        from qgis.core import QgsRasterLayer
-        raster_layers = []
-        for l in (layers or []):
-            if isinstance(l, QgsRasterLayer) and l.isValid():
-                raster_layers.append(l)
-        
-        if not vector_layers_only and not raster_layers:
-            # No usable layers in this batch
-            non_usable_count = len(layers) if layers else 0
-            if non_usable_count > 0:
-                logger.debug(f"FilterMate: layersAdded signal skipped ({non_usable_count} non-usable layer(s))")
-            return
         
         # Debounce rapid layer additions
         current_time = time.time() * 1000
@@ -300,21 +267,17 @@ class FilterMateApp:
         self._last_layer_change_timestamp = current_time
         self._check_and_reset_stale_flags()
         
-        # Identify PostgreSQL layers (only from vector layers)
-        all_postgres = [l for l in vector_layers_only if l.providerType() == 'postgres']
+        # Identify PostgreSQL layers
+        all_postgres = [l for l in layers if isinstance(l, QgsVectorLayer) and l.providerType() == 'postgres']
         if all_postgres and not POSTGRESQL_AVAILABLE:
             names = ', '.join([l.name() for l in all_postgres[:3]]) + (f" (+{len(all_postgres) - 3} autres)" if len(all_postgres) > 3 else "")
             show_warning(f"Couches PostgreSQL détectées ({names}) mais psycopg2 n'est pas installé.")
             logger.warning(f"FilterMate: Cannot use {len(all_postgres)} PostgreSQL layer(s) - psycopg2 not available")
         
-        # Note: _filter_usable_layers now only receives vector layers
-        filtered = self._filter_usable_layers(vector_layers_only)
+        filtered = self._filter_usable_layers(layers)
         postgres_pending = [l for l in all_postgres if l.id() not in [f.id() for f in filtered] and not is_sip_deleted(l)]
         
-        # FIX 2026-02-10: Combine filtered vector layers with valid raster layers
-        all_usable = filtered + raster_layers
-        
-        if not all_usable and not postgres_pending:
+        if not filtered and not postgres_pending:
             logger.info("FilterMate: Ignoring layersAdded (no usable layers)"); return
         
         # Delegate PostgreSQL cleanup/retry to LayerLifecycleService
@@ -322,7 +285,7 @@ class FilterMateApp:
         if service and (postgres_to_validate := [l for l in filtered if l.providerType() == 'postgres']):
             service.validate_and_cleanup_postgres_layers_on_add(postgres_to_validate)
         
-        if all_usable: self.manage_task('add_layers', all_usable)
+        if filtered: self.manage_task('add_layers', filtered)
         
         if postgres_pending and service:
             service.schedule_postgres_layer_retry(postgres_pending, self.PROJECT_LAYERS,
@@ -331,14 +294,6 @@ class FilterMateApp:
 
     def cleanup(self):
         """Clean up plugin resources on unload or reload. Delegates to LayerLifecycleService."""
-        # Clean up raster filter controller temporary layers (v5.0)
-        if hasattr(self, '_raster_filter_controller') and self._raster_filter_controller:
-            try:
-                self._raster_filter_controller.cleanup_on_close()
-                logger.debug("✅ Raster filter controller cleanup completed")
-            except Exception as e:
-                logger.warning(f"Raster filter controller cleanup failed: {e}")
-        
         service = self._get_layer_lifecycle_service()
         if service:
             auto_cleanup_enabled = getattr(self.dockwidget, '_pg_auto_cleanup_enabled', True) if self.dockwidget else True
@@ -438,8 +393,9 @@ class FilterMateApp:
         self.favorites_manager = FavoritesService()
         logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.get_favorites_count()} favorites)")
         
-        # v4.0.7: Migration service consolidated into FavoritesService (Phase 5)
-        self._favorites_migration_service = self.favorites_manager  # backward compat alias
+        # v4.0.7: FavoritesMigrationService for orphan favorites handling
+        self._favorites_migration_service = FavoritesMigrationService()
+        logger.debug("FilterMate: FavoritesMigrationService initialized")
         
         # Spatialite cache
         try:
@@ -611,10 +567,6 @@ class FilterMateApp:
         else:
             self._filter_application_service = None
         
-        # v5.0 Sprint 2: Initialize RasterFilterController (EPIC Raster Visibility Controls)
-        # Note: Initialized later in _on_widgets_initialized() when dockwidget is ready
-        self._raster_filter_controller = None
-        
         # Note: Do NOT call self.run() here - it will be called from filter_mate.py
         # when the user actually activates the plugin to avoid QGIS initialization race conditions
 
@@ -669,30 +621,15 @@ class FilterMateApp:
         # Check _loading_new_project flag timeout
         if self._loading_new_project:
             if self._loading_new_project_timestamp > 0 and (elapsed := current_time - self._loading_new_project_timestamp) > timeout:
-                logger.warning(f"STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                logger.warning(f"🔧 STABILITY: Resetting stale _loading_new_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
                 self._loading_new_project = False; self._loading_new_project_timestamp = 0; flags_reset = True
             elif self._loading_new_project_timestamp <= 0: self._loading_new_project_timestamp = current_time
         # Check _initializing_project flag timeout
         if self._initializing_project:
             if self._initializing_project_timestamp > 0 and (elapsed := current_time - self._initializing_project_timestamp) > timeout:
-                logger.warning(f"STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
+                logger.warning(f"🔧 STABILITY: Resetting stale _initializing_project flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
                 self._initializing_project = False; self._initializing_project_timestamp = 0; flags_reset = True
             elif self._initializing_project_timestamp <= 0: self._initializing_project_timestamp = current_time
-        # FIX 2026-02-10: Check _filtering_in_progress flag timeout on dockwidget
-        # This is the safety net for BUG 1 - if the timer-based reset fails, this catches it
-        if self.dockwidget and getattr(self.dockwidget, '_filtering_in_progress', False):
-            ts = getattr(self.dockwidget, '_filtering_in_progress_timestamp', 0)
-            if ts > 0 and (elapsed := current_time - ts) > timeout:
-                logger.warning(f"STABILITY: Resetting stale _filtering_in_progress flag (elapsed: {elapsed:.0f}ms > {timeout}ms)")
-                self.dockwidget._filtering_in_progress = False
-                self.dockwidget._filtering_in_progress_timestamp = 0
-                try:
-                    self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                    self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-                    self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
-                except Exception as e:
-                    logger.warning(f"STABILITY: Error reconnecting signals after stale flag reset: {e}")
-                flags_reset = True
         # Check queue sizes
         max_queue = STABILITY_CONSTANTS['MAX_ADD_LAYERS_QUEUE']
         if len(self._add_layers_queue) > max_queue: self._add_layers_queue = self._add_layers_queue[-max_queue:]; flags_reset = True
@@ -861,8 +798,12 @@ class FilterMateApp:
         logger.debug("Connecting layer store signals (layersAdded, layersWillBeRemoved...)")
         
         self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-        self.MapLayerStore.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
-        self.MapLayerStore.allLayersRemoved.connect(self._on_all_layers_removed)
+        self.MapLayerStore.layersWillBeRemoved.connect(
+            lambda layers: self.manage_task('remove_layers', layers)
+        )
+        self.MapLayerStore.allLayersRemoved.connect(
+            lambda: self.manage_task('remove_all_layers')
+        )
         
         self._signals_connected = True
         logger.debug("✓ Layer store signals connected")
@@ -889,22 +830,41 @@ class FilterMateApp:
         logger.debug("Connecting dockwidget signals...")
         
         # Task launching signal - triggers filter/unfilter/export tasks
-        self.dockwidget.launchingTask.connect(self._on_launching_task)
+        self.dockwidget.launchingTask.connect(
+            lambda task_name: self.manage_task(task_name)
+        )
+        # FIX 2026-01-15: Log signal connection confirmation
         logger.debug(f"✓ Connected launchingTask signal")
-
+        
         # Current layer changed - update undo/redo buttons
-        self.dockwidget.currentLayerChanged.connect(self.update_undo_redo_buttons)
-
+        self.dockwidget.currentLayerChanged.connect(
+            self.update_undo_redo_buttons
+        )
+        
         # Layer variable signals - persist layer properties
-        self.dockwidget.settingLayerVariable.connect(self._on_setting_layer_variable)
-        self.dockwidget.resettingLayerVariable.connect(self._on_resetting_layer_variable)
-        self.dockwidget.resettingLayerVariableOnError.connect(self._on_resetting_layer_variable_on_error)
+        self.dockwidget.settingLayerVariable.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.save_variables_from_layer
+            )
+        )
+        self.dockwidget.resettingLayerVariable.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.remove_variables_from_layer
+            )
+        )
+        self.dockwidget.resettingLayerVariableOnError.connect(
+            lambda layer, properties: self._safe_layer_operation(
+                layer, properties, self.remove_variables_from_layer
+            )
+        )
         
         # Project variable signals - persist project-level settings
         self.dockwidget.settingProjectVariables.connect(
             self.save_project_variables
         )
-        self.PROJECT.fileNameChanged.connect(self._on_project_filename_changed)
+        self.PROJECT.fileNameChanged.connect(
+            lambda: self.save_project_variables()
+        )
         
         # Widget initialization signal - sync state when widgets ready
         self.dockwidget.widgetsInitialized.connect(
@@ -921,55 +881,31 @@ class FilterMateApp:
         Called before plugin unload or project change to prevent
         access violations from stale signal connections.
         """
-        # Disconnect layer store signals (specific slots)
+        # Disconnect layer store signals
         if self._signals_connected and self.MapLayerStore:
             try:
-                self.MapLayerStore.layersAdded.disconnect(self._on_layers_added)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.MapLayerStore.layersWillBeRemoved.disconnect(self._on_layers_will_be_removed)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.MapLayerStore.allLayersRemoved.disconnect(self._on_all_layers_removed)
-            except (TypeError, RuntimeError):
-                pass
-            self._signals_connected = False
-            logger.debug("Layer store signals disconnected")
-
-        # Disconnect dockwidget signals (specific slots)
+                self.MapLayerStore.layersAdded.disconnect()
+                self.MapLayerStore.layersWillBeRemoved.disconnect()
+                self.MapLayerStore.allLayersRemoved.disconnect()
+                self._signals_connected = False
+                logger.debug("Layer store signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect layer store signals: {e}")
+        
+        # Disconnect dockwidget signals
         if self._dockwidget_signals_connected and self.dockwidget:
             try:
-                self.dockwidget.launchingTask.disconnect(self._on_launching_task)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.currentLayerChanged.disconnect(self.update_undo_redo_buttons)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.settingLayerVariable.disconnect(self._on_setting_layer_variable)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.resettingLayerVariable.disconnect(self._on_resetting_layer_variable)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.resettingLayerVariableOnError.disconnect(self._on_resetting_layer_variable_on_error)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.settingProjectVariables.disconnect(self.save_project_variables)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                self.dockwidget.widgetsInitialized.disconnect(self._on_widgets_initialized)
-            except (TypeError, RuntimeError):
-                pass
-            self._dockwidget_signals_connected = False
-            logger.debug("Dockwidget signals disconnected")
+                self.dockwidget.launchingTask.disconnect()
+                self.dockwidget.currentLayerChanged.disconnect()
+                self.dockwidget.settingLayerVariable.disconnect()
+                self.dockwidget.resettingLayerVariable.disconnect()
+                self.dockwidget.resettingLayerVariableOnError.disconnect()
+                self.dockwidget.settingProjectVariables.disconnect()
+                self.dockwidget.widgetsInitialized.disconnect()
+                self._dockwidget_signals_connected = False
+                logger.debug("Dockwidget signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect dockwidget signals: {e}")
 
     def _safe_layer_operation(self, layer, properties, operation):
         """Safely execute a layer operation by deferring to Qt event loop and re-fetching layer."""
@@ -1066,23 +1002,17 @@ class FilterMateApp:
         if new_layer_store and self._signals_connected:
             logger.debug(f"FilterMate: Disconnecting old layer store signals for {task_name}")
             try:
-                old_layer_store.layersAdded.disconnect(self._on_layers_added)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                old_layer_store.layersWillBeRemoved.disconnect(self._on_layers_will_be_removed)
-            except (TypeError, RuntimeError):
-                pass
-            try:
-                old_layer_store.allLayersRemoved.disconnect(self._on_all_layers_removed)
-            except (TypeError, RuntimeError):
-                pass
-            logger.debug("FilterMate: Old layer store signals disconnected")
+                old_layer_store.layersAdded.disconnect()
+                old_layer_store.layersWillBeRemoved.disconnect()
+                old_layer_store.allLayersRemoved.disconnect()
+                logger.debug("FilterMate: Old layer store signals disconnected")
+            except (TypeError, RuntimeError) as e:
+                logger.debug(f"Could not disconnect old signals (expected): {e}")
             
             self.MapLayerStore = new_layer_store
             self.MapLayerStore.layersAdded.connect(self._on_layers_added)
-            self.MapLayerStore.layersWillBeRemoved.connect(self._on_layers_will_be_removed)
-            self.MapLayerStore.allLayersRemoved.connect(self._on_all_layers_removed)
+            self.MapLayerStore.layersWillBeRemoved.connect(lambda layers: self.manage_task('remove_layers', layers))
+            self.MapLayerStore.allLayersRemoved.connect(lambda: self.manage_task('remove_all_layers'))
             logger.debug("FilterMate: Layer store signals reconnected to new project")
         elif new_layer_store:
             logger.debug("FilterMate: Updating MapLayerStore reference (signals not yet connected)")
@@ -1169,15 +1099,10 @@ class FilterMateApp:
         
         # Connect completion handler
         self.appTasks[task_name].taskCompleted.connect(
-            lambda tn=task_name, cl=current_layer, tp=task_parameters:
+            lambda tn=task_name, cl=current_layer, tp=task_parameters: 
                 self.filter_engine_task_completed(tn, cl, tp)
         )
-
-        # Connect termination handler to unblock combobox on failure/cancellation
-        self.appTasks[task_name].taskTerminated.connect(
-            lambda tn=task_name: self._handle_filter_task_terminated(tn)
-        )
-
+        
         # Cancel conflicting tasks and add to task manager
         self._cancel_conflicting_tasks()
         QgsApplication.taskManager().addTask(self.appTasks[task_name])
@@ -1237,10 +1162,7 @@ class FilterMateApp:
         task_parameters = self.get_task_parameters(task_name, data)
         if task_parameters is None:
             logger.error(f"❌ Cannot execute task {task_name}: parameters are None")
-            try:
-                logger.error(f"   current_layer={self.dockwidget.current_layer if self.dockwidget else None}")
-            except RuntimeError:
-                logger.error("   current_layer=<deleted C++ object>")
+            logger.error(f"   current_layer={self.dockwidget.current_layer if self.dockwidget else None}")
             logger.error(f"   widgets_ready={self._widgets_ready}")
             logger.error(f"   dockwidget_ready={self._is_dockwidget_ready_for_filtering()}")
             return
@@ -1305,9 +1227,6 @@ class FilterMateApp:
         if not self.dockwidget: return
         if self._current_layer_id_before_filter: self.dockwidget._saved_layer_id_before_filter = self._current_layer_id_before_filter
         self.dockwidget._filtering_in_progress = True
-        # FIX 2026-02-10: Track timestamp for stale flag detection
-        import time
-        self.dockwidget._filtering_in_progress_timestamp = time.time() * 1000
         try:
             self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
             self.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
@@ -1315,25 +1234,6 @@ class FilterMateApp:
         except Exception:  # Signal may already be disconnected - expected during filtering protection
             pass
     
-    def _handle_filter_task_terminated(self, task_name):
-        """Handle filter task termination (failure/cancellation) - unblock combobox signals.
-
-        Without this handler, if a filter task fails or is cancelled, the combobox
-        signals remain blocked permanently (blockSignals(True) set in
-        _set_filter_protection_flags but never unblocked).
-        """
-        logger.warning(f"Filter task '{task_name}' was terminated - resetting protection flags")
-        if self.dockwidget is None:
-            return
-        try:
-            self.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-            self.dockwidget._filtering_in_progress = False
-            self.dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            self.dockwidget.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
-            logger.info(f"Filter task '{task_name}' protection flags reset successfully")
-        except Exception as e:
-            logger.error(f"Error resetting filter protection flags after termination: {e}")
-
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
         # Determine dominant backend from distant layers
@@ -1480,18 +1380,20 @@ class FilterMateApp:
 
 
     def _safe_cancel_all_tasks(self):
-        """Safely cancel all tasks via TaskOrchestrator."""
-        if self._task_orchestrator:
-            self._task_orchestrator.safe_cancel_all_tasks()
+        """Safely cancel all tasks via TaskManagementService."""
+        service = self._get_task_management_service()
+        if service:
+            service.safe_cancel_all_tasks()
         else:
-            logger.warning("TaskOrchestrator unavailable - cannot cancel tasks safely")
+            logger.warning("TaskManagementService unavailable - cannot cancel tasks safely")
 
     def _cancel_layer_tasks(self, layer_id):
-        """Cancel all tasks for layer_id via TaskOrchestrator."""
-        if self._task_orchestrator:
-            self._task_orchestrator.cancel_layer_tasks(layer_id)
+        """Cancel all tasks for layer_id via TaskManagementService."""
+        service = self._get_task_management_service()
+        if service:
+            service.cancel_layer_tasks(layer_id, self.dockwidget)
         else:
-            logger.warning("TaskOrchestrator not available, cannot cancel layer tasks")
+            logger.warning("TaskManagementService not available, cannot cancel layer tasks")
 
     def _handle_layer_task_terminated(self, task_name):
         """Handle layer management task termination (failure or cancellation) to prevent stuck UI."""
@@ -1599,15 +1501,6 @@ class FilterMateApp:
         logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
         self._widgets_ready = True
         logger.debug(f"_widgets_ready set to: {self._widgets_ready}")
-        
-        # v5.0 Sprint 2: Initialize RasterFilterController now that dockwidget is ready
-        if HEXAGONAL_AVAILABLE and RasterFilterController and not self._raster_filter_controller:
-            try:
-                self._raster_filter_controller = RasterFilterController(self.dockwidget, self)
-                logger.info("FilterMate: RasterFilterController initialized (v5.0 Sprint 2)")
-            except Exception as e:
-                logger.error(f"Failed to initialize RasterFilterController: {e}", exc_info=True)
-                self._raster_filter_controller = None
         
         # If we have PROJECT_LAYERS but UI wasn't refreshed yet, do it now
         if len(self.PROJECT_LAYERS) > 0:
@@ -2164,7 +2057,7 @@ class FilterMateApp:
         """Handle completion of filtering operations via FilterResultHandler."""
         if not self._filter_result_handler:
             logger.error("FilterResultHandler not available")
-            iface.messageBar().pushCritical("FilterMate", self.tr("Error: result handler missing"))
+            iface.messageBar().pushCritical("FilterMate", "Error: result handler missing")
             return
         
         try:
@@ -2436,11 +2329,7 @@ class FilterMateApp:
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                 self.dockwidget.backend_indicator_label.setText("!")
                 self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#e74c3c;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#fadbd8;}")
-                self.dockwidget.backend_indicator_label.setToolTip(
-                    "Layer Loading Failed\n\n"
-                    "Could not load vector layers after 3 attempts.\n"
-                    "Click to retry loading."
-                )
+                self.dockwidget.backend_indicator_label.setToolTip("Layer loading failed - click to retry")
             return
         
         if len(self.PROJECT_LAYERS) == 0:
@@ -2455,10 +2344,10 @@ class FilterMateApp:
         # Reconnect PROJECT signals for project load
         if validate_postgres:
             try:
-                try: self.PROJECT.fileNameChanged.disconnect(self._on_project_filename_changed)
-                except (TypeError, RuntimeError):  # Signal not connected - expected on first project load
+                try: self.PROJECT.fileNameChanged.disconnect()
+                except TypeError:  # Signal not connected - expected on first project load
                     pass
-                self.PROJECT.fileNameChanged.connect(self._on_project_filename_changed)
+                self.PROJECT.fileNameChanged.connect(lambda: self.save_project_variables())
                 logger.debug("PROJECT signals reconnected")
             except Exception as e: logger.warning(f"Error reconnecting signals: {e}")
         
@@ -2468,25 +2357,16 @@ class FilterMateApp:
         if hasattr(self.dockwidget, 'set_widgets_enabled_state'): self.dockwidget.set_widgets_enabled_state(True)
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                # v5.0: Filter to show vector layers WITH geometry AND raster layers
+                # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
-                filters = _LayerFilter.HasGeometry | _LayerFilter.RasterLayer
-                combo = self.dockwidget.comboBox_filtering_current_layer
-                combo.setFilters(
-                    _LayerFilters(filters) if _LayerFilters else filters)
+                self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")
         
         # Trigger layer change with active or first layer
-        # v5.0: Supports both vector and raster layers
         active = self.iface.activeLayer()
-        if active:
-            # v5.0: Vector layer in PROJECT_LAYERS OR raster layer
-            is_vector_in_project = isinstance(active, QgsVectorLayer) and active.id() in self.PROJECT_LAYERS
-            is_raster = isinstance(active, QgsRasterLayer)
-            if is_vector_in_project or is_raster:
-                self.dockwidget.current_layer_changed(active)
-                layer_type = "raster" if is_raster else "vector"
-                logger.info(f"UI refreshed with active {layer_type} layer: {active.name()}")
+        if active and isinstance(active, QgsVectorLayer) and active.id() in self.PROJECT_LAYERS:
+            self.dockwidget.current_layer_changed(active)
+            logger.info(f"UI refreshed with active layer: {active.name()}")
         elif self.PROJECT_LAYERS:
             first_layer = self.PROJECT.mapLayer(list(self.PROJECT_LAYERS.keys())[0])
             if first_layer:

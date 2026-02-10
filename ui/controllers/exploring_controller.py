@@ -127,16 +127,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
         
         # Configure to show only vector layers
         try:
-            # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
-            try:
-                from qgis.core import Qgis
-                _LayerFilter = Qgis.LayerFilter
-                _LayerFilters = Qgis.LayerFilters
-            except (ImportError, AttributeError):
-                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
-                _LayerFilters = None
-            filters = _LayerFilter.VectorLayer
-            combo.setFilters(_LayerFilters(filters) if _LayerFilters else filters)
+            from qgis.gui import QgsMapLayerProxyModel
+            combo.setFilters(QgsMapLayerProxyModel.VectorLayer)
         except (ImportError, AttributeError):
             pass
 
@@ -1480,50 +1472,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     dw._last_multiple_selection_layer_id = dw.current_layer.id()
                     return features, expression
             
-            # Strategy 3 (FIX 2026-01-31): Try to get feature from picker's internal model
-            # QgsFeaturePickerWidget uses QgsFeaturePickerModel internally. When feature() returns 
-            # invalid, we can try to extract the feature from the model via currentIndex.
-            if (input_feature is None or not input_feature.isValid()) and is_single_selection_mode:
-                try:
-                    model = widget.model()
-                    current_index = widget.currentIndex()
-                    logger.debug(f"Strategy 3: picker.currentIndex()={current_index}, model={type(model).__name__ if model else 'None'}")
-                    if model and current_index >= 0:
-                        from qgis.PyQt.QtCore import Qt
-                        model_index = model.index(current_index, 0)
-                        if model_index.isValid():
-                            # QgsFeaturePickerModelBase::FeatureRole = Qt::UserRole + 1
-                            feature_role = Qt.UserRole + 1
-                            feature_data = model.data(model_index, feature_role)
-                            
-                            # QgsFeaturePickerModelBase::IdentifierValueRole = Qt::UserRole + 2
-                            id_role = Qt.UserRole + 2
-                            id_data = model.data(model_index, id_role)
-                            
-                            logger.debug(f"Strategy 3: feature_data={feature_data}, id_data={id_data}")
-                            
-                            # If we got a QgsFeature directly
-                            if feature_data and hasattr(feature_data, 'isValid') and feature_data.isValid():
-                                input_feature = feature_data
-                                logger.info(f"SINGLE_SELECTION: Strategy 3 SUCCESS - got feature from model FeatureRole")
-                            # If we got an identifier (FID or PK value)
-                            elif id_data is not None:
-                                fid_to_try = None
-                                if isinstance(id_data, int):
-                                    fid_to_try = id_data
-                                elif isinstance(id_data, (list, tuple)) and len(id_data) > 0 and isinstance(id_data[0], int):
-                                    fid_to_try = id_data[0]
-                                
-                                if fid_to_try is not None:
-                                    reloaded = dw.current_layer.getFeature(fid_to_try)
-                                    if reloaded.isValid():
-                                        input_feature = reloaded
-                                        dw._last_single_selection_fid = fid_to_try
-                                        dw._last_single_selection_layer_id = dw.current_layer.id()
-                                        logger.info(f"SINGLE_SELECTION: Strategy 3 SUCCESS - got feature FID={fid_to_try} from IdentifierValueRole")
-                except Exception as e:
-                    logger.debug(f"Strategy 3 (model extraction) failed: {e}")
-            
             # FIX v8: If still no feature and in single_selection mode, return empty
             # This is intentional - user needs to select a feature in the picker
             if input_feature is None or not input_feature.isValid():
@@ -2587,67 +2535,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
             self._dockwidget.get_current_features()
             self._dockwidget._update_buffer_validation()
 
-    def _configure_exploring_widget_buttons(self) -> None:
-        """
-        Configure internal buttons of QGIS composite widgets in EXPLORING section.
-        
-        QgsFieldExpressionWidget (E button) and QgsFeaturePickerWidget (< > buttons)
-        need explicit Python styling because CSS selectors don't work with QGIS class names.
-        
-        FIX 2026-01-31: CSS rules like 'QgsFieldExpressionWidget QToolButton' are ignored
-        by Qt because QGIS widget class names are not recognized in stylesheets.
-        """
-        try:
-            from qgis.PyQt.QtWidgets import QToolButton
-            from qgis.PyQt.QtCore import QSize
-            from qgis.gui import QgsFieldExpressionWidget, QgsFeaturePickerWidget
-            
-            button_size = 24
-            button_style = """
-                QToolButton {
-                    background-color: #FFFFFF;
-                    border: 1px solid #BDBDBD;
-                    border-radius: 3px;
-                    padding: 2px;
-                    min-width: 22px;
-                    min-height: 22px;
-                }
-                QToolButton:hover {
-                    background-color: #E3F2FD;
-                    border: 1px solid #2196F3;
-                }
-                QToolButton:pressed {
-                    background-color: #BBDEFB;
-                }
-            """
-            
-            # Configure QgsFieldExpressionWidget buttons (E button)
-            for widget in self._dockwidget.findChildren(QgsFieldExpressionWidget):
-                for button in widget.findChildren(QToolButton):
-                    button.setMinimumSize(QSize(button_size, button_size))
-                    button.setMaximumSize(QSize(button_size, button_size))
-                    button.setFixedSize(QSize(button_size, button_size))
-                    button.setVisible(True)
-                    button.setStyleSheet(button_style)
-                    button.raise_()
-                    logger.debug(f"✓ Configured E button in {widget.objectName()}")
-            
-            # Configure QgsFeaturePickerWidget buttons (< > navigation)
-            for widget in self._dockwidget.findChildren(QgsFeaturePickerWidget):
-                for button in widget.findChildren(QToolButton):
-                    button.setMinimumSize(QSize(button_size, button_size))
-                    button.setMaximumSize(QSize(button_size, button_size))
-                    button.setFixedSize(QSize(button_size, button_size))
-                    button.setVisible(True)
-                    button.setStyleSheet(button_style)
-                    button.raise_()
-                    logger.debug(f"✓ Configured nav button in {widget.objectName()}")
-                    
-            logger.debug("✓ EXPLORING widget internal buttons configured")
-            
-        except Exception as e:
-            logger.warning(f"Could not configure EXPLORING widget buttons: {e}")
-
     def _reload_exploration_widgets(self, layer, layer_props):
         """
         Force reload of ALL exploration widgets with new layer data.
@@ -2680,11 +2567,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # v4.0 SMART FIELD SELECTION: Upgrade primary-key-only expressions to better fields
             # Priority: 1) User's custom field (if set), 2) Best available field, 3) Primary key
             expressions_updated = False
-            # FIX 2026-02-09: Use .get() to prevent KeyError when exploring keys are missing
-            exploring = layer_props.get("exploring", {})
-            single_expr = exploring.get("single_selection_expression", "")
-            multiple_expr = exploring.get("multiple_selection_expression", "")
-            custom_expr = exploring.get("custom_selection_expression", "")
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
             
             # Get primary key to detect default (unset) expressions
             primary_key = layer_props.get("infos", {}).get("primary_key_name", "")
@@ -2726,28 +2611,22 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 # TOUJOURS mettre à jour les expressions, même si best_field == primary_key
                 # Ceci garantit que les combobox ne soient JAMAIS vides
                 if best_field:
-                    # FIX 2026-02-09: Ensure exploring dict exists before writing
-                    if "exploring" not in layer_props:
-                        layer_props["exploring"] = {}
-                    proj_exploring = self._dockwidget.PROJECT_LAYERS.get(layer.id(), {})
-                    if "exploring" not in proj_exploring:
-                        proj_exploring["exploring"] = {}
                     if should_upgrade_single:
                         layer_props["exploring"]["single_selection_expression"] = best_field
-                        proj_exploring["exploring"]["single_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set single_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_multiple:
                         layer_props["exploring"]["multiple_selection_expression"] = best_field
-                        proj_exploring["exploring"]["multiple_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set multiple_selection to '{best_field}' for layer '{layer.name()}'")
                     if should_upgrade_custom:
                         layer_props["exploring"]["custom_selection_expression"] = best_field
-                        proj_exploring["exploring"]["custom_selection_expression"] = best_field
+                        self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = best_field
                         expressions_updated = True
                         logger.info(f"✨ Set custom_selection to '{best_field}' for layer '{layer.name()}'")
-
+                    
                     # Persist upgraded field to SQLite for future sessions
                     if expressions_updated:
                         logger.debug(f"Persisting field '{best_field}' to SQLite for layer {layer.name()}")
@@ -2769,49 +2648,40 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.debug(f"Using user-customized expressions for layer '{layer.name()}': single={single_expr}, multiple={multiple_expr}")
             
             # Update expressions after potential auto-initialization
-            # FIX 2026-02-09: Use .get() for safe access
-            exploring = layer_props.get("exploring", {})
-            single_expr = exploring.get("single_selection_expression", "")
-            multiple_expr = exploring.get("multiple_selection_expression", "")
-            custom_expr = exploring.get("custom_selection_expression", "")
-
+            single_expr = layer_props["exploring"]["single_selection_expression"]
+            multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
+            custom_expr = layer_props["exploring"]["custom_selection_expression"]
+            
             # FIX v4.1 Simon 2026-01-16: GARANTIR que les expressions ne sont JAMAIS vides
             # Fallback absolu si une expression est vide (dernier rempart avant les widgets)
-            # FIX 2026-02-09: Ensure exploring dict exists before writing fallbacks
-            if "exploring" not in layer_props:
-                layer_props["exploring"] = {}
-            proj_layer = self._dockwidget.PROJECT_LAYERS.get(layer.id(), {})
-            if "exploring" not in proj_layer:
-                proj_layer["exploring"] = {}
-
             if not single_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     single_expr = fields[0].name()
                     layer_props["exploring"]["single_selection_expression"] = single_expr
-                    proj_layer["exploring"]["single_selection_expression"] = single_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["single_selection_expression"] = single_expr
                     logger.warning(f"Emergency fallback: Set single_selection to first field '{single_expr}'")
                 else:
                     single_expr = "$id"
                     logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
-
+            
             if not multiple_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     multiple_expr = fields[0].name()
                     layer_props["exploring"]["multiple_selection_expression"] = multiple_expr
-                    proj_layer["exploring"]["multiple_selection_expression"] = multiple_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["multiple_selection_expression"] = multiple_expr
                     logger.warning(f"Emergency fallback: Set multiple_selection to first field '{multiple_expr}'")
                 else:
                     multiple_expr = "$id"
                     logger.error(f"CRITICAL: Layer '{layer.name()}' has no fields, using $id")
-
+            
             if not custom_expr:
                 fields = layer.fields()
                 if fields.count() > 0:
                     custom_expr = fields[0].name()
                     layer_props["exploring"]["custom_selection_expression"] = custom_expr
-                    proj_layer["exploring"]["custom_selection_expression"] = custom_expr
+                    self._dockwidget.PROJECT_LAYERS[layer.id()]["exploring"]["custom_selection_expression"] = custom_expr
                     logger.warning(f"Emergency fallback: Set custom_selection to first field '{custom_expr}'")
                 else:
                     custom_expr = "$id"
@@ -2838,11 +2708,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 
                 picker_widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 picker_widget.setLayer(None)
-                
-                # v5.2 FIX 2026-01-31: Set fetch limit BEFORE setting layer to prevent QGIS freeze on large layers
-                if hasattr(picker_widget, 'setFetchLimit'):
-                    picker_widget.setFetchLimit(100)  # Only fetch 100 features initially
-                
                 picker_widget.setLayer(layer)
                 # FIX 2026-01-19: Connect willBeDeleted to prevent crash on layer deletion
                 if hasattr(self._dockwidget, '_connect_feature_picker_layer_deletion'):
@@ -2996,10 +2861,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.debug("✓ Reconnected expression widget fieldChanged signals")
             else:
                 logger.warning("_setup_expression_widget_direct_connections not available!")
-            
-            # FIX 2026-01-31: Configure internal buttons of QGIS composite widgets
-            # CSS selectors don't work for QGIS widget children - use Python styling
-            self._configure_exploring_widget_buttons()
                 
         except (AttributeError, KeyError, RuntimeError) as e:
             error_type = type(e).__name__
@@ -3048,10 +2909,14 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._dockwidget._updating_qgis_selection_from_widget = False
                 return True
             
-            # Note: self-healing connect removed - _ensure_layer_signals_connected() is the single entry point
+            # FIX v5: Self-healing - ensure signal stays connected
             if self._dockwidget.current_layer and not self._dockwidget.current_layer_selection_connection:
-                if hasattr(self._dockwidget, '_ensure_layer_signals_connected'):
-                    self._dockwidget._ensure_layer_signals_connected(self._dockwidget.current_layer)
+                try:
+                    self._dockwidget.current_layer.selectionChanged.connect(self._dockwidget.on_layer_selection_changed)
+                    self._dockwidget.current_layer_selection_connection = True
+                    logger.debug("handle_layer_selection_changed: Re-connected selectionChanged (self-healing)")
+                except (TypeError, RuntimeError):
+                    pass
             # Check recursion prevention flag
             if getattr(self._dockwidget, '_syncing_from_qgis', False):
                 logger.debug("handle_layer_selection_changed: Skipping (sync in progress)")

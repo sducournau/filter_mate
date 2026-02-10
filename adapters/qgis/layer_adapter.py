@@ -152,13 +152,27 @@ class QGISVectorLayerAdapter(IVectorLayer):
         """
         Get primary key field name if exists.
         
-        Delegates to the canonical implementation in layer_utils.
-        
         Returns:
             Primary key field name, or None if no PK defined
         """
-        from infrastructure.utils.layer_utils import get_primary_key_name
-        return get_primary_key_name(self._layer)
+        # Try to get primary key from data provider
+        data_provider = self._layer.dataProvider()
+        if data_provider:
+            pk_indexes = data_provider.pkAttributeIndexes()
+            if pk_indexes and len(pk_indexes) > 0:
+                fields = self._layer.fields()
+                pk_idx = pk_indexes[0]  # Take first PK if composite
+                if pk_idx >= 0 and pk_idx < fields.count():
+                    return fields.at(pk_idx).name()
+        
+        # Fallback: look for common PK field names
+        field_names_lower = [f.lower() for f in self.field_names()]
+        for common_pk in ['id', 'fid', 'pk', 'objectid', 'gid']:
+            if common_pk in field_names_lower:
+                idx = field_names_lower.index(common_pk)
+                return self.field_names()[idx]
+        
+        return None
     
     def subset_string(self) -> str:
         """Get current subset filter expression."""

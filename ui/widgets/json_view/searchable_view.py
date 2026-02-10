@@ -72,7 +72,7 @@ class SearchableJsonView(QtWidgets.QWidget):
         
         # Search input
         self._search_input = QtWidgets.QLineEdit()
-        self._search_input.setPlaceholderText(self.tr("Search configuration... (Ctrl+F)"))
+        self._search_input.setPlaceholderText("Search configuration... (Ctrl+F)")
         self._search_input.setClearButtonEnabled(True)
         self._search_input.setMinimumHeight(26)
         search_layout.addWidget(self._search_input)
@@ -177,12 +177,12 @@ class SearchableJsonView(QtWidgets.QWidget):
         count = len(matches)
         
         if count == 0:
-            self._match_label.setText(self.tr("No match"))
+            self._match_label.setText("No match")
             self._match_label.setStyleSheet(
                 self._match_label.styleSheet() + "color: #FF6B6B;"
             )
         else:
-            self._match_label.setText(self.tr("{} found").format(count))
+            self._match_label.setText(f"{count} found")
             self._apply_search_styling()  # Reset color
         
         # Highlight and expand to show matches

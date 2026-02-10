@@ -594,24 +594,32 @@ class ThemeManager(StylerBase):
     
     def apply(self) -> bool:
         """
-        Apply current theme to dockwidget.
-
-        FIX 2026-02-09: Apply to QDockWidget (self.dockwidget), NOT dockWidgetContents.
-        QSS selectors like '#dockWidgetContents QGroupBox' require dockWidgetContents
-        to be a CHILD of the widget where the stylesheet is set. If the stylesheet is
-        set ON dockWidgetContents itself, Qt looks for a child named dockWidgetContents
-        inside it and finds nothing — so no styles are applied.
-
+        Apply current theme to dockwidget contents only.
+        
+        CRITICAL: Apply to dockWidgetContents, NOT the QDockWidget itself.
+        This prevents styles from propagating to child dialogs like
+        QgsExpressionBuilderDialog which are created with dockwidget as parent.
+        
         Returns:
             bool: True if theme applied successfully, False otherwise
         """
         try:
             stylesheet = self._load_stylesheet(self._current_theme)
             if stylesheet:
-                # Apply to QDockWidget so that #dockWidgetContents selectors
-                # correctly match the child widget named dockWidgetContents.
-                self.dockwidget.setStyleSheet(stylesheet)
-                logger.debug(f"Applied theme '{self._current_theme}' to QDockWidget")
+                # FIX 2026-01-21: Apply to dockWidgetContents only to prevent
+                # styles from affecting child dialogs (Expression Builder, etc.)
+                target_widget = self.dockwidget
+                if hasattr(self.dockwidget, 'dockWidgetContents'):
+                    target_widget = self.dockwidget.dockWidgetContents
+                elif hasattr(self.dockwidget, 'findChild'):
+                    # Fallback: find by object name
+                    from qgis.PyQt.QtWidgets import QWidget
+                    contents = self.dockwidget.findChild(QWidget, 'dockWidgetContents')
+                    if contents:
+                        target_widget = contents
+                
+                target_widget.setStyleSheet(stylesheet)
+                logger.debug(f"Applied theme '{self._current_theme}' to {target_widget.objectName() or 'dockwidget'}")
                 return True
             else:
                 logger.warning(f"ThemeManager: No stylesheet loaded for theme '{self._current_theme}'")

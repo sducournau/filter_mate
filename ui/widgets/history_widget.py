@@ -224,11 +224,7 @@ class HistoryWidget(QWidget):
         
         # Undo button
         self._undo_btn = QPushButton("↶")
-        self._undo_btn.setToolTip(self._tr(
-            "Undo Last Filter (Ctrl+Z)\n\n"
-            "Revert to the previous filter state.\n"
-            "Navigate backward through filter history."
-        ))
+        self._undo_btn.setToolTip(self._tr("Undo last filter (Ctrl+Z)"))
         self._undo_btn.setFixedSize(28, 28)
         self._undo_btn.setEnabled(False)
         if PYQT_AVAILABLE:
@@ -237,11 +233,7 @@ class HistoryWidget(QWidget):
         
         # Redo button
         self._redo_btn = QPushButton("↷")
-        self._redo_btn.setToolTip(self._tr(
-            "Redo Filter (Ctrl+Y)\n\n"
-            "Reapply a previously undone filter.\n"
-            "Navigate forward through filter history."
-        ))
+        self._redo_btn.setToolTip(self._tr("Redo filter (Ctrl+Y)"))
         self._redo_btn.setFixedSize(28, 28)
         self._redo_btn.setEnabled(False)
         if PYQT_AVAILABLE:
@@ -250,11 +242,7 @@ class HistoryWidget(QWidget):
         
         # History count label (optional)
         self._history_label = QLabel("")
-        self._history_label.setToolTip(self._tr(
-            "Filter History Position\n\n"
-            "Shows current position in filter history.\n"
-            "Format: position / total states"
-        ))
+        self._history_label.setToolTip(self._tr("Filter history position"))
         self._history_label.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self._history_label)
         
@@ -315,8 +303,8 @@ class HistoryWidget(QWidget):
         can_undo = False
         can_redo = False
         position_text = ""
-        undo_tooltip = self._tr("Undo last filter (Ctrl+Z)")
-        redo_tooltip = self._tr("Redo filter (Ctrl+Y)")
+        undo_tooltip = "Undo last filter (Ctrl+Z)"
+        redo_tooltip = "Redo filter (Ctrl+Y)"
         
         if self._history_manager and self._current_layer_id:
             history = self._get_current_history()
@@ -335,13 +323,13 @@ class HistoryWidget(QWidget):
                     prev_state = history.peek_undo()
                     if prev_state:
                         desc = prev_state.description[:40] + "..." if len(prev_state.description) > 40 else prev_state.description
-                        undo_tooltip = self._tr("Undo: {} (Ctrl+Z)").format(desc)
+                        undo_tooltip = f"Undo: {desc} (Ctrl+Z)"
                 
                 if can_redo:
                     next_state = history.peek_redo()
                     if next_state:
                         desc = next_state.description[:40] + "..." if len(next_state.description) > 40 else next_state.description
-                        redo_tooltip = self._tr("Redo: {} (Ctrl+Y)").format(desc)
+                        redo_tooltip = f"Redo: {desc} (Ctrl+Y)"
         
         self._undo_btn.setEnabled(can_undo)
         self._redo_btn.setEnabled(can_redo)
@@ -385,13 +373,13 @@ class HistoryWidget(QWidget):
         menu = QMenu(self)
         
         # Undo action
-        undo_action = menu.addAction(self._tr("↶ Undo"))
+        undo_action = menu.addAction("↶ Undo")
         undo_action.setEnabled(self._undo_btn.isEnabled())
         if PYQT_AVAILABLE:
             undo_action.triggered.connect(self._on_undo_clicked)
         
         # Redo action
-        redo_action = menu.addAction(self._tr("↷ Redo"))
+        redo_action = menu.addAction("↷ Redo")
         redo_action.setEnabled(self._redo_btn.isEnabled())
         if PYQT_AVAILABLE:
             redo_action.triggered.connect(self._on_redo_clicked)
@@ -399,7 +387,7 @@ class HistoryWidget(QWidget):
         menu.addSeparator()
         
         # Clear history action
-        clear_action = menu.addAction(self._tr("🗑 Clear History"))
+        clear_action = menu.addAction("🗑 Clear History")
         history = self._get_current_history()
         clear_action.setEnabled(history is not None and len(history._states) > 0)
         if PYQT_AVAILABLE:
@@ -408,7 +396,7 @@ class HistoryWidget(QWidget):
         menu.addSeparator()
         
         # Browse history action (for future expansion)
-        browse_action = menu.addAction(self._tr("📋 Browse History..."))
+        browse_action = menu.addAction("📋 Browse History...")
         browse_action.setEnabled(history is not None and len(history._states) > 0)
         if PYQT_AVAILABLE:
             browse_action.triggered.connect(self._on_browse_history)

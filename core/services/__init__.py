@@ -75,15 +75,6 @@ from .buffer_service import (
 # NOT exported here - has QGIS dependencies (iface, QgsProject)
 # Import directly: from core.services.canvas_refresh_service import single_canvas_refresh
 
-# Raster Support: RasterFilterService - Bidirectional Raster/Vector filtering
-# NOT exported here - has QGIS dependencies (QgsRasterLayer, processing)
-# Import directly: from core.services.raster_filter_service import (
-#     RasterFilterService, get_raster_filter_service,
-#     RasterFilterRequest, VectorFilterRequest,
-#     RasterFilterResult, VectorRasterResult,
-#     RasterPredicate, SamplingMethod, RasterOperation
-# )
-
 __all__ = [
     # Expression Service
     'ExpressionService',
@@ -106,4 +97,3 @@ __all__ = [
     'SimplificationResult',
     'create_buffer_service',
 ]
-

@@ -293,12 +293,24 @@ class LayerFilterBuilder:
         return 'NULL'
     
     def _detect_primary_key(self, layer: 'QgsVectorLayer') -> Optional[str]:
-        """Detect primary key from layer.
+        """Detect primary key from layer."""
+        # Check declared primary key
+        pk_attrs = layer.primaryKeyAttributes()
+        if pk_attrs:
+            field = layer.fields()[pk_attrs[0]]
+            return field.name()
         
-        Delegates to the canonical implementation in layer_utils.
-        """
-        from infrastructure.utils.layer_utils import get_primary_key_name
-        return get_primary_key_name(layer)
+        # Look for 'id' field
+        for field in layer.fields():
+            if 'id' in field.name().lower():
+                return field.name()
+        
+        # First numeric field
+        for field in layer.fields():
+            if field.isNumeric():
+                return field.name()
+        
+        return None
     
     def _log_diagnostics(self, source_layer: 'QgsVectorLayer', raw_layers_list: List[str]):
         """Log diagnostic information about layer selection."""

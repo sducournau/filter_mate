@@ -33,7 +33,6 @@ import os.path
 from .filter_mate_app import FilterMateApp
 from .config.config import reload_config
 from .infrastructure.logging import get_logger
-from .ui.dialogs.welcome_dialog import WelcomeDialog
 
 logger = get_logger(__name__)
 
@@ -785,26 +784,14 @@ class FilterMate:
                 self.app.dockwidget.PROJECT_LAYERS = {}
                 self.app.dockwidget._plugin_busy = False
                 self.app.dockwidget._updating_layers = False
-                # FIX 2026-02-10: Reset _filtering_in_progress to prevent stale flag
-                self.app.dockwidget._filtering_in_progress = False
-                self.app.dockwidget._filtering_in_progress_timestamp = 0
                 
-                # FIX 2026-02-10: Block signals before clearing combobox to prevent
-                # cascading layerChanged(None) → current_layer_changed(None) that
-                # corrupts internal state and prevents subsequent layer population
+                # Clear combobox safely
                 try:
                     if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
-                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(True)
                         self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
                         self.app.dockwidget.comboBox_filtering_current_layer.clear()
-                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox on project cleared: {e}")
-                    # Ensure signals are unblocked even on error
-                    try:
-                        self.app.dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                    except Exception:
-                        pass
                 
                 # CRITICAL FIX: Clear QgsFeaturePickerWidget to prevent access violation
                 # The widget has an internal timer that triggers scheduledReload which
@@ -1257,12 +1244,6 @@ class FilterMate:
             )
 
 
-    def _show_welcome_dialog(self):
-        """Show the Discord community dialog on first launch."""
-        if WelcomeDialog.should_show():
-            dialog = WelcomeDialog(self.iface.mainWindow())
-            dialog.exec_()
-
     def run(self):
         """Run method that loads and starts the plugin"""
 
@@ -1282,8 +1263,6 @@ class FilterMate:
                     self.app.run()
                     if self.app.dockwidget:
                         self.app.dockwidget.closingPlugin.connect(self.onClosePlugin)
-                    # Show welcome dialog on first launch
-                    self._show_welcome_dialog()
                 else:
                     # App already exists, call run() which will show the dockwidget
                     # and refresh layers if needed

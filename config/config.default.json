@@ -175,13 +175,6 @@
             "HAS_DATATYPE_TO_EXPORT": "datatype.png",
             "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
             "HAS_ZIP_TO_EXPORT": "zip.png"
-          },
-          "RASTER_EXPLORING": {
-            "PIXEL_PICKER": "raster_pipette.png",
-            "RECT_PICKER": "raster_rectangle_picker.png",
-            "SYNC_HISTOGRAM": "raster_sync.png",
-            "ALL_BANDS": "raster_all_bands.png",
-            "RESET_RANGE": "raster_reset_bands.png"
           }
         }
       },
@@ -571,32 +564,5 @@
       "IS_ACTIVE_POSTGRESQL": false
     },
     "layers": []
-  },
-  "RASTER_FILTER": {
-    "MEMORY_WARNING_THRESHOLD_MB": {
-      "value": 200,
-      "description": "Memory threshold in MB before warning user about temp layer RAM usage (adjust higher for systems with more RAM)",
-      "applies_to": "Raster filtering memory management"
-    },
-    "DEFAULT_OPACITY": {
-      "value": 70,
-      "description": "Default opacity percentage for newly created filtered raster layers (0-100%)",
-      "applies_to": "Raster filtered layer display"
-    },
-    "USE_FILE_BASED_THRESHOLD_MB": {
-      "value": 50,
-      "description": "Raster size threshold in MB to use file-based temp layers instead of in-memory",
-      "applies_to": "Raster filtering performance optimization"
-    },
-    "CLEANUP_ON_CLOSE": {
-      "value": true,
-      "description": "Automatically prompt to cleanup temporary filtered layers when closing FilterMate dockwidget",
-      "applies_to": "Raster filtering lifecycle management"
-    },
-    "SKIP_CLEANUP_CONFIRMATION": {
-      "value": false,
-      "description": "Skip confirmation dialog when cleaning up temporary layers",
-      "applies_to": "Raster filtering user experience"
-    }
   }
 }

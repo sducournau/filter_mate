@@ -321,10 +321,10 @@ def deprecated_class(
     Usage:
         @deprecated_class(
             version="4.0",
-            reason="Use new controller architecture",
-            replacement="ui.controllers"
+            reason="Use new OrchestratedDockWidget",
+            replacement="ui.DockWidgetOrchestrator"
         )
-        class LegacyWidget:
+        class LegacyDockWidget:
             pass
     """
     def decorator(cls):

@@ -226,8 +226,15 @@ class FilterParameterBuilder:
         
         # Auto-fill primary_key_name
         if "primary_key_name" not in infos or infos["primary_key_name"] is None:
-            from infrastructure.utils.layer_utils import get_primary_key_name
-            infos["primary_key_name"] = get_primary_key_name(context.source_layer) or 'id'
+            pk_indices = context.source_layer.primaryKeyAttributes()
+            if pk_indices:
+                infos["primary_key_name"] = context.source_layer.fields()[pk_indices[0]].name()
+            else:
+                # Fallback to first field
+                if context.source_layer.fields():
+                    infos["primary_key_name"] = context.source_layer.fields()[0].name()
+                else:
+                    infos["primary_key_name"] = 'id'
             logger.info(f"Auto-filled primary_key_name='{infos['primary_key_name']}'")
         
         # Auto-fill layer_schema (empty for non-PostgreSQL)

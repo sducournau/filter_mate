@@ -80,10 +80,11 @@ END OF REMOVED SECTION */
    QGIS Widgets - Common Styling with better spacing
    SCOPED to FilterMate only to avoid polluting global QGIS styles
    ======================================================================== */
-/* Simple widgets with fixed height */
+#dockWidgetContents QgsFeaturePickerWidget,
 #dockWidgetContents QgsProjectionSelectionWidget,
 #dockWidgetContents QgsMapLayerComboBox,
 #dockWidgetContents QgsFieldComboBox,
+#dockWidgetContents QgsFieldExpressionWidget,
 #dockWidgetContents QgsCheckableComboBox,
 #dockWidgetContents QComboBox,
 #dockWidgetContents QgsCheckableComboBoxLayer {
@@ -96,46 +97,11 @@ END OF REMOVED SECTION */
     max-height: 20px;
 }
 
-/* Composite widgets (with navigation/expression buttons) - NO max-height constraint */
-#dockWidgetContents QgsFeaturePickerWidget,
-#dockWidgetContents QgsFieldExpressionWidget {
-    background-color: transparent;
-    border: none;
-    padding: 0px;
-    color: {color_font_0};
-    min-height: 28px;
-}
-
-/* Navigation/Expression buttons inside QGIS composite widgets (< > E buttons) */
-/* These are QToolButton children - ensure they are visible and properly sized */
-#dockWidgetContents QgsFeaturePickerWidget QToolButton,
-#dockWidgetContents QgsFieldExpressionWidget QToolButton {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 3px;
-    padding: 2px;
-    min-width: 22px;
-    max-width: 22px;
-    min-height: 22px;
-    max-height: 22px;
-    margin: 1px;
-}
-
-#dockWidgetContents QgsFeaturePickerWidget QToolButton:hover,
-#dockWidgetContents QgsFieldExpressionWidget QToolButton:hover {
-    background-color: {color_accent_light_bg};
-    border: 1px solid {color_accent};
-}
-
-#dockWidgetContents QgsFeaturePickerWidget QToolButton:pressed,
-#dockWidgetContents QgsFieldExpressionWidget QToolButton:pressed {
-    background-color: {color_accent_pressed};
-    border: 1px solid {color_accent_dark};
-}
-
+#dockWidgetContents QgsFeaturePickerWidget:hover,
 #dockWidgetContents QgsProjectionSelectionWidget:hover,
 #dockWidgetContents QgsMapLayerComboBox:hover,
 #dockWidgetContents QgsFieldComboBox:hover,
+#dockWidgetContents QgsFieldExpressionWidget:hover,
 #dockWidgetContents QgsCheckableComboBox:hover,
 #dockWidgetContents QComboBox:hover,
 #dockWidgetContents QgsCheckableComboBoxLayer:hover {
@@ -143,9 +109,11 @@ END OF REMOVED SECTION */
     padding: 2px 4px; /* Adjusted for thicker border */
 }
 
+#dockWidgetContents QgsFeaturePickerWidget:focus,
 #dockWidgetContents QgsProjectionSelectionWidget:focus,
 #dockWidgetContents QgsMapLayerComboBox:focus,
 #dockWidgetContents QgsFieldComboBox:focus,
+#dockWidgetContents QgsFieldExpressionWidget:focus,
 #dockWidgetContents QgsCheckableComboBox:focus,
 #dockWidgetContents QComboBox:focus,
 #dockWidgetContents QgsCheckableComboBoxLayer:focus {
@@ -214,24 +182,25 @@ END OF REMOVED SECTION */
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 4px;
-    padding: 0px 0px 0px 0px;
-    margin: 2px 0px 0px 0px;
+    padding: 0;
+    margin: 2px;
     color: {color_font_0};
     font-weight: normal;
-    min-height: 24px;
+    min-height: 50px;
+    max-height: 50px;
 }
 
-/* Style pour les boutons à l'intérieur des onglets - alignement icône/texte */
+/* Style pour les boutons à l'intérieur des onglets - C'EST ICI QU'IL FAUT DÉFINIR LA HAUTEUR */
 #dockWidgetContents QToolBox QToolButton {
     background-color: transparent;
     border: none;
-    padding: 0px 0px 0px 0px;
-    margin: 2px 0px 0px 0px;
-    min-height: 24px;
+    padding: 12px 10px 12px 45px;
+    min-height: 50px;
+    max-height: 50px;
+    height: 50px;
     color: {color_font_0};
     font-weight: normal;
     text-align: left;
-    qproperty-iconSize: 16px 16px;
 }
 
 #dockWidgetContents QToolBox::tab:selected {
@@ -588,9 +557,9 @@ QWidget#widget_exporting_content {
     background-color: transparent;
     border: 1px solid {color_2};
     border-radius: 6px;
-    margin-top: 16px;
-    padding: 12px;
-    padding-top: 26px;
+    margin-top: 1ex;
+    padding: 10px;
+    padding-top: 16px;
     font-weight: 600;
     color: {color_font_0};
 }
@@ -598,12 +567,10 @@ QWidget#widget_exporting_content {
 #dockWidgetContents QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 4px 12px;
+    padding: 2px 10px;
     color: {color_font_0};
-    background-color: {color_1};
-    border-radius: 4px;
+    background-color: transparent;
     margin-left: 8px;
-    margin-top: 2px;
     /* Improved text handling */
     max-width: 400px;
     text-overflow: ellipsis;
@@ -616,25 +583,18 @@ QWidget#widget_exporting_content {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 10px;
-    padding-top: 42px;
-    margin-top: 12px;
-    margin-bottom: 4px;
-    margin-left: 0px;
-    margin-right: 0px;
+    padding: 8px;
+    padding-top: 26px;
+    margin: 0px 0px 2px 0px;
     color: {color_font_0};
 }
 
 #dockWidgetContents QgsCollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 8px 14px;
-    margin-left: 24px;
+    padding: 4px 10px;
+    margin-left: 28px;
     margin-top: 4px;
-    background-color: {color_accent_light_bg};
-    border-radius: 4px;
-    color: {color_accent_dark};
-    font-weight: bold;
 }
 
 /* Exploring Section GroupBox - Subtle styling */
@@ -969,7 +929,6 @@ QLabel#label_backend_indicator {
 /* Widget Keys Panels - Sidebar buttons with responsive layout */
 /* Enhanced styling for better alignment and visual hierarchy */
 QWidget#widget_exploring_keys,
-QWidget#widget_raster_keys,
 QWidget#widget_filtering_keys,
 QWidget#widget_exporting_keys {
     background-color: {color_1};
@@ -980,24 +939,21 @@ QWidget#widget_exporting_keys {
     /* Smooth transitions for responsive behavior */
 }
 
-/* Buttons inside widget_exploring_keys and widget_raster_keys - Non-checkable - Harmonized with filtering_keys */
-QWidget#widget_exploring_keys QPushButton:!checkable,
-QWidget#widget_raster_keys QPushButton:!checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+/* Buttons inside widget_exploring_keys - Non-checkable - Responsive sizing */
+QWidget#widget_exploring_keys QPushButton:!checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable::icon,
-QWidget#widget_raster_keys QPushButton:!checkable::icon {
+QWidget#widget_exploring_keys QPushButton:!checkable::icon {
     filter: {icon_filter};
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable:hover,
-QWidget#widget_raster_keys QPushButton:!checkable:hover {
+QWidget#widget_exploring_keys QPushButton:!checkable:hover {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
     padding: 2px;
@@ -1005,40 +961,35 @@ QWidget#widget_raster_keys QPushButton:!checkable:hover {
     /* Subtle scale effect on hover */
 }
 
-QWidget#widget_exploring_keys QPushButton:!checkable:pressed,
-QWidget#widget_raster_keys QPushButton:!checkable:pressed {
+QWidget#widget_exploring_keys QPushButton:!checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;
     margin: 1px 0px;
 }
 
-/* Buttons inside widget_exploring_keys and widget_raster_keys - Checkable - Harmonized with filtering_keys */
-QWidget#widget_exploring_keys QPushButton:checkable,
-QWidget#widget_raster_keys QPushButton:checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+/* Buttons inside widget_exploring_keys - Checkable - Enhanced visibility */
+QWidget#widget_exploring_keys QPushButton:checkable {
+    background-color: transparent;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable::icon,
-QWidget#widget_raster_keys QPushButton:checkable::icon {
+QWidget#widget_exploring_keys QPushButton:checkable::icon {
     filter: {icon_filter};
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked,
-QWidget#widget_raster_keys QPushButton:checkable:hover:!checked {
+QWidget#widget_exploring_keys QPushButton:checkable:hover:!checked {
     background-color: {color_accent_light_bg};
     border: 2px solid {color_accent};
     padding: 2px;
     margin: 1px 0px;
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked,
-QWidget#widget_raster_keys QPushButton:checkable:checked {
+QWidget#widget_exploring_keys QPushButton:checkable:checked {
     background-color: {color_accent};
     border: 2px solid {color_accent_dark};
     padding: 2px;
@@ -1046,8 +997,7 @@ QWidget#widget_raster_keys QPushButton:checkable:checked {
     box-shadow: 0 2px 6px rgba(25, 118, 210, 0.45);
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked:hover,
-QWidget#widget_raster_keys QPushButton:checkable:checked:hover {
+QWidget#widget_exploring_keys QPushButton:checkable:checked:hover {
     background-color: {color_accent_hover};
     border: 2px solid {color_accent_dark};
     padding: 2px;
@@ -1055,16 +1005,14 @@ QWidget#widget_raster_keys QPushButton:checkable:checked:hover {
     box-shadow: 0 3px 10px rgba(33, 150, 243, 0.65);
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:pressed,
-QWidget#widget_raster_keys QPushButton:checkable:pressed {
+QWidget#widget_exploring_keys QPushButton:checkable:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;
     margin: 1px 0px;
 }
 
-QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed,
-QWidget#widget_raster_keys QPushButton:checkable:checked:pressed {
+QWidget#widget_exploring_keys QPushButton:checkable:checked:pressed {
     background-color: {color_accent_pressed};
     border: 2px solid {color_accent_dark};
     padding: 2px;
@@ -1072,10 +1020,10 @@ QWidget#widget_raster_keys QPushButton:checkable:checked:pressed {
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
 }
 
-/* Buttons inside widget_filtering_keys - Checkable only - Harmonized style */
+/* Buttons inside widget_filtering_keys - Checkable only - Enhanced visibility */
 QWidget#widget_filtering_keys QPushButton:checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+    background-color: transparent;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
@@ -1124,10 +1072,10 @@ QWidget#widget_filtering_keys QPushButton:checkable:checked:pressed {
     box-shadow: 0 1px 3px rgba(25, 118, 210, 0.3);
 }
 
-/* Buttons inside widget_exporting_keys - Checkable only - Harmonized style */
+/* Buttons inside widget_exporting_keys - Checkable only - Enhanced visibility */
 QWidget#widget_exporting_keys QPushButton:checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+    background-color: transparent;
+    border: 2px solid transparent;
     border-radius: 6px;
     padding: 2px;
     margin: 1px 0px;
@@ -1225,8 +1173,8 @@ QFrame#frame_actions {
 
 /* Action buttons - Responsive sizing managed by UIConfig */
 QFrame#frame_actions QPushButton:!checkable {
-    background-color: {color_1};
-    border: 1px solid {color_2};
+    background-color: transparent;
+    border: 1px solid transparent;
     border-radius: 6px;
     padding: 6px;
     /* Dimensions managed by UIConfig for profile-specific sizing */
@@ -1319,215 +1267,4 @@ QFrame#frame_actions QSpacerItem {
 #dockWidgetContents QGroupBox QLabel {
     color: {color_font_0};
     font-weight: normal;
-}
-/* ========================================================================
-   RASTER FILTER SECTION - Styling for v5.0 EPIC Raster Visibility Controls
-   Added: 2026-02-01 (Sprint 2 completion)
-   ======================================================================== */
-
-/* Main raster filter collapsible group */
-#groupBox_raster_filter {
-    background-color: {color_bg_0};
-    border: 1px solid {color_2};
-    border-radius: 6px;
-    padding: 8px;
-    margin: 4px 0px;
-}
-
-#groupBox_raster_filter::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0px 4px;
-    background-color: transparent;
-    color: {color_font_0};
-    font-weight: 600;
-}
-
-/* Sub-groups for range filter and vector mask */
-#groupBox_range_filter,
-#groupBox_vector_mask {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 8px;
-    margin: 6px 0px;
-}
-
-#groupBox_range_filter::title,
-#groupBox_vector_mask::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    padding: 0px 4px;
-    color: {color_font_0};
-    font-weight: 500;
-    font-size: 10pt;
-}
-
-/* Raster source layer combo */
-#comboBox_raster_source_layer,
-#comboBox_vector_mask_layer {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: {color_font_0};
-    min-height: 22px;
-    max-height: 22px;
-}
-
-#comboBox_raster_source_layer:hover,
-#comboBox_vector_mask_layer:hover {
-    border: 2px solid {color_accent};
-    padding: 3px 7px;
-}
-
-#comboBox_raster_source_layer:focus,
-#comboBox_vector_mask_layer:focus {
-    border: 2px solid {color_accent};
-    padding: 3px 7px;
-}
-
-/* Band selector combo */
-#comboBox_raster_band {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: {color_font_0};
-    min-height: 20px;
-    max-height: 20px;
-}
-
-#comboBox_raster_band:hover {
-    border: 2px solid {color_accent};
-    padding: 3px 7px;
-}
-
-#comboBox_raster_band:focus {
-    border: 2px solid {color_accent};
-    padding: 3px 7px;
-}
-
-/* Double spin boxes for min/max values */
-#doubleSpinBox_raster_min,
-#doubleSpinBox_raster_max {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 4px 6px;
-    color: {color_font_0};
-    min-height: 20px;
-    max-height: 20px;
-}
-
-#doubleSpinBox_raster_min:hover,
-#doubleSpinBox_raster_max:hover {
-    border: 2px solid {color_accent};
-    padding: 3px 5px;
-}
-
-#doubleSpinBox_raster_min:focus,
-#doubleSpinBox_raster_max:focus {
-    border: 2px solid {color_accent};
-    padding: 3px 5px;
-}
-
-/* Action buttons for raster filtering */
-#pushButton_apply_range_filter,
-#pushButton_apply_vector_mask,
-#pushButton_clear_all_temp_layers {
-    background-color: {color_accent};
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
-    font-weight: 500;
-    min-height: 26px;
-}
-
-#pushButton_apply_range_filter:hover,
-#pushButton_apply_vector_mask:hover,
-#pushButton_clear_all_temp_layers:hover {
-    background-color: {color_accent_dark};
-}
-
-#pushButton_apply_range_filter:pressed,
-#pushButton_apply_vector_mask:pressed,
-#pushButton_clear_all_temp_layers:pressed {
-    background-color: {color_accent_pressed};
-}
-
-#pushButton_apply_range_filter:disabled,
-#pushButton_apply_vector_mask:disabled,
-#pushButton_clear_all_temp_layers:disabled {
-    background-color: {color_2};
-    color: {color_font_2};
-}
-
-/* Clear all button - distinctive styling */
-#pushButton_clear_all_temp_layers {
-    background-color: #e74c3c;
-    color: white;
-}
-
-#pushButton_clear_all_temp_layers:hover {
-    background-color: #c0392b;
-}
-
-#pushButton_clear_all_temp_layers:pressed {
-    background-color: #a93226;
-}
-
-/* Active filtered layers list */
-#listWidget_active_filtered_layers {
-    background-color: {color_1};
-    border: 1px solid {color_2};
-    border-radius: 4px;
-    padding: 4px;
-    min-height: 150px;
-}
-
-#listWidget_active_filtered_layers:focus {
-    border: 2px solid {color_accent};
-    padding: 3px;
-}
-
-#listWidget_active_filtered_layers::item {
-    border-radius: 4px;
-    margin: 2px 0px;
-    padding: 4px;
-}
-
-#listWidget_active_filtered_layers::item:hover {
-    background-color: {color_accent_light_bg};
-}
-
-#listWidget_active_filtered_layers::item:selected {
-    background-color: {color_accent};
-    color: white;
-}
-
-/* Label for active layers list */
-#label_active_filtered_layers {
-    color: {color_font_0};
-    font-weight: 600;
-    font-size: 10pt;
-    padding: 4px 0px;
-}
-
-/* Label for raster source layer */
-#label_raster_source_layer,
-#label_mask_layer {
-    color: {color_font_0};
-    font-weight: 500;
-    padding: 2px 0px;
-}
-
-/* Labels for min/max values */
-#label_min_value,
-#label_max_value,
-#label_band {
-    color: {color_font_0};
-    font-weight: normal;
-    padding: 2px 0px;
 }

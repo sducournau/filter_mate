@@ -31,69 +31,49 @@ BACKEND_STYLES = {
         'color': 'white',
         'background': '#58d68d',  # Softer green
         'icon': '🐘',
-        'tooltip': 'Backend: PostgreSQL (High Performance)\n\n'
-                   'Native SQL execution with spatial indexes.\n'
-                   'Best choice for large datasets (100k+ features).\n'
-                   'Supports all spatial operations.'
+        'tooltip': 'Backend: PostgreSQL (High Performance)'
     },
     'spatialite': {
         'text': 'Spatialite',
         'color': 'white',
         'background': '#bb8fce',  # Softer purple
         'icon': '💾',
-        'tooltip': 'Backend: Spatialite (Good Performance)\n\n'
-                   'Local SQLite with spatial extension.\n'
-                   'Good for medium datasets (up to 100k features).\n'
-                   'GeoPackage and Spatialite files.'
+        'tooltip': 'Backend: Spatialite (Good Performance)'
     },
     'spatialite_fallback': {
         'text': 'Spatialite*',
         'color': 'white',
         'background': '#a569bd',  # Softer dark purple
         'icon': '💾',
-        'tooltip': 'Backend: Spatialite → OGR fallback\n\n'
-                   'Complex geometry detected.\n'
-                   'Spatial operations handled by OGR instead.\n'
-                   'Performance may be reduced.'
+        'tooltip': 'Backend: Spatialite → OGR fallback\n(Complex geometry handled by OGR)'
     },
     'ogr': {
         'text': 'OGR',
         'color': 'white',
         'background': '#5dade2',  # Softer blue
         'icon': '📁',
-        'tooltip': 'Backend: OGR (Universal)\n\n'
-                   'GDAL/OGR for Shapefiles and other formats.\n'
-                   'Works with all vector file types.\n'
-                   'Recommended for smaller datasets.'
+        'tooltip': 'Backend: OGR (Universal)'
     },
     'ogr_fallback': {
         'text': 'OGR*',
         'color': 'white',
         'background': '#f0b27a',  # Softer orange
         'icon': '📁',
-        'tooltip': 'Backend: OGR (Fallback)\n\n'
-                   'Database connection unavailable.\n'
-                   'Using GDAL/OGR as fallback.\n'
-                   'Check database connection settings.'
+        'tooltip': 'Backend: OGR (Fallback - Connection unavailable)'
     },
     'postgresql_fallback': {
         'text': 'PostgreSQL*',
         'color': 'white',
         'background': '#45b39d',  # Softer teal green
         'icon': '🐘',
-        'tooltip': 'Backend: PostgreSQL → OGR fallback\n\n'
-                   'Some operations handled by OGR.\n'
-                   'Complex geometry or unsupported function.\n'
-                   'Most operations still use PostgreSQL.'
+        'tooltip': 'Backend: PostgreSQL → OGR fallback'
     },
     'unknown': {
         'text': '...',
         'color': '#7f8c8d',
         'background': '#f4f6f6',  # Softer light gray
         'icon': '❓',
-        'tooltip': 'Backend: Unknown\n\n'
-                   'No layer selected or backend not detected.\n'
-                   'Select a layer to see its backend.'
+        'tooltip': 'Backend: Unknown'
     }
 }
 
@@ -704,7 +684,7 @@ class BackendController(BaseController):
         """)
 
         # Header
-        header = menu.addAction(self._tr("Select Backend:"))
+        header = menu.addAction("Select Backend:")
         header.setEnabled(False)
         menu.addSeparator()
 
@@ -720,7 +700,7 @@ class BackendController(BaseController):
         menu.addSeparator()
 
         # Auto option
-        auto_action = menu.addAction(self._tr("⚙️ Auto (Default)"))
+        auto_action = menu.addAction("⚙️ Auto (Default)")
         auto_action.setData(None)
         if not current_forced:
             auto_action.setText(auto_action.text() + " ✓")
@@ -728,36 +708,28 @@ class BackendController(BaseController):
         menu.addSeparator()
 
         # Auto-select all
-        auto_all_action = menu.addAction(self._tr("🎯 Auto-select Optimal for All Layers"))
+        auto_all_action = menu.addAction("🎯 Auto-select Optimal for All Layers")
         auto_all_action.setData('__AUTO_ALL__')
 
         # Force all
         current_backend = self.get_current_backend(layer)
-        force_all_action = menu.addAction(self._tr("🔒 Force {} for All Layers").format(current_backend.upper()))
+        force_all_action = menu.addAction(f"🔒 Force {current_backend.upper()} for All Layers")
         force_all_action.setData('__FORCE_ALL__')
 
         menu.addSeparator()
 
         # Cleanup Temp Tables submenu
-        cleanup_menu = menu.addMenu(self._tr("🧹 Clear Temp Tables"))
+        cleanup_menu = menu.addMenu("🧹 Clear Temp Tables")
         
         # Project cleanup
         project_cleanup_action = cleanup_menu.addAction(self._tr("📁 Current Project"))
         project_cleanup_action.setData('__CLEANUP_PROJECT__')
-        project_cleanup_action.setToolTip(self._tr(
-            "Clear Temporary Tables (Project)\n\n"
-            "Remove FilterMate temporary tables for current project only.\n"
-            "Use this to free database space without affecting other projects."
-        ))
+        project_cleanup_action.setToolTip(self._tr("Clear temporary tables for the current project only"))
         
         # Global cleanup  
         global_cleanup_action = cleanup_menu.addAction(self._tr("🌐 All Projects (Global)"))
         global_cleanup_action.setData('__CLEANUP_GLOBAL__')
-        global_cleanup_action.setToolTip(self._tr(
-            "Clear ALL Temporary Tables (Global)\n\n"
-            "Remove ALL FilterMate temporary tables from ALL databases.\n"
-            "Use this for complete cleanup when closing QGIS."
-        ))
+        global_cleanup_action.setToolTip(self._tr("Clear ALL FilterMate temporary tables from all databases"))
 
         # Show menu
         selected_action = menu.exec_(QCursor.pos())

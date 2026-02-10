@@ -473,64 +473,6 @@
         "default": true,
         "user_friendly_label": "Show Simplification Warnings"
       }
-    },
-    "raster_filter": {
-      "memory_warning_threshold_mb": {
-        "description": "Memory threshold in MB before warning user about temp layer RAM usage (50-2000 MB range, higher for systems with more RAM)",
-        "widget_type": "spinbox",
-        "data_type": "integer",
-        "validation": {
-          "required": true,
-          "min": 50,
-          "max": 2000
-        },
-        "default": 200,
-        "user_friendly_label": "Memory Warning Threshold (MB)"
-      },
-      "default_opacity": {
-        "description": "Default opacity percentage for newly created filtered raster layers (0-100%)",
-        "widget_type": "spinbox",
-        "data_type": "integer",
-        "validation": {
-          "required": true,
-          "min": 0,
-          "max": 100
-        },
-        "default": 70,
-        "user_friendly_label": "Default Filtered Layer Opacity (%)"
-      },
-      "use_file_based_threshold_mb": {
-        "description": "Raster size threshold in MB to use file-based temp layers instead of in-memory (prevents RAM exhaustion for large rasters)",
-        "widget_type": "spinbox",
-        "data_type": "integer",
-        "validation": {
-          "required": true,
-          "min": 10,
-          "max": 500
-        },
-        "default": 50,
-        "user_friendly_label": "File-Based Threshold (MB)"
-      },
-      "cleanup_on_close": {
-        "description": "Automatically prompt to cleanup temporary filtered layers when closing FilterMate dockwidget",
-        "widget_type": "checkbox",
-        "data_type": "boolean",
-        "validation": {
-          "required": true
-        },
-        "default": true,
-        "user_friendly_label": "Cleanup on Close"
-      },
-      "skip_cleanup_confirmation": {
-        "description": "Skip confirmation dialog when cleaning up temporary layers (applies 'Don't ask again' permanently)",
-        "widget_type": "checkbox",
-        "data_type": "boolean",
-        "validation": {
-          "required": true
-        },
-        "default": false,
-        "user_friendly_label": "Skip Cleanup Confirmation"
-      }
     }
   }
 }

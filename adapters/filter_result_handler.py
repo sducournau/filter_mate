@@ -487,11 +487,6 @@ class FilterResultHandler:
                 dockwidget._update_exploring_buttons_state()
                 logger.info(f"v2.9.41: ✅ Updated exploring button states after {display_backend} filter")
             
-            # v5.6: Update vector statistics display after filtering
-            if hasattr(dockwidget, '_update_vector_statistics_display'):
-                dockwidget._update_vector_statistics_display(target_layer)
-                logger.info(f"v5.6: ✅ Updated vector stats display after {display_backend} filter")
-            
             logger.info(f"v2.9.20: ✅ Exploring widgets reloaded successfully")
         except Exception as exploring_error:
             logger.error(f"v2.9.20: ❌ Error reloading exploring widgets: {exploring_error}")
@@ -772,43 +767,20 @@ class FilterResultHandler:
                     return
                 # Unblock Qt internal signals
                 dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                
-                # v5.2 FIX 2026-01-31: CRITICAL - Clear cache before reconnection to avoid skip
-                # The cache may show 'connected' while the actual signal was disconnected
-                cache_key = "FILTERING.CURRENT_LAYER.layerChanged"
-                if hasattr(dockwidget, '_signal_connection_states'):
-                    if cache_key in dockwidget._signal_connection_states:
-                        logger.debug(f"v5.2: Clearing cache '{cache_key}' before reconnection (was: {dockwidget._signal_connection_states[cache_key]})")
-                        del dockwidget._signal_connection_states[cache_key]
-                # Also clear in signal_manager if exists
-                if hasattr(dockwidget, '_signal_manager') and dockwidget._signal_manager:
-                    if cache_key in dockwidget._signal_manager._signal_connection_states:
-                        del dockwidget._signal_manager._signal_connection_states[cache_key]
-                
                 # Reconnect our handler
                 if hasattr(dockwidget, 'manageSignal'):
-                    result = dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-                    logger.info(f"v5.2: manageSignal CURRENT_LAYER connect result: {result}")
+                    dockwidget.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
                 
                 # v3.0.19: CRITICAL FIX - Reset _filtering_in_progress HERE, not earlier
                 dockwidget._filtering_in_progress = False
                 
-                logger.debug("v3.0.19: Unblocked combobox, reconnected handler, and reset filtering flag after protection")
+                logger.debug("v3.0.19: ✅ Unblocked combobox, reconnected handler, and reset filtering flag after protection")
                 QgsMessageLog.logMessage(
-                    "v3.0.19: Combobox protection ENDED - signals reconnected, filtering flag reset",
+                    "v3.0.19: ✅ Combobox protection ENDED - signals reconnected, filtering flag reset",
                     "FilterMate", Qgis.Info
                 )
             except Exception as e:
                 logger.error(f"v3.0.19: Error reconnecting combobox: {e}")
-                # FIX 2026-02-10: ALWAYS reset _filtering_in_progress even on error
-                # Without this, the flag stays True permanently, blocking all UI updates
-                try:
-                    if dockwidget:
-                        dockwidget._filtering_in_progress = False
-                        dockwidget.comboBox_filtering_current_layer.blockSignals(False)
-                        logger.warning("v5.3: Safety reset of _filtering_in_progress after error")
-                except Exception:
-                    pass
         
         # Schedule checks during protection window (signals still blocked)
         # v4.1.3: Reduced delays for faster response time

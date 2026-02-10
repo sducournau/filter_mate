@@ -102,6 +102,7 @@ class ItemDelegate(QStyledItemDelegate):
 
     def __init__(self, parent=None, *args):
         QStyledItemDelegate.__init__(self, parent, *args)
+        self.parent = parent
 
     def sizeHint(self, option, index):
         # BUGFIX: Return fixed size hint for consistent row height
@@ -199,6 +200,8 @@ class QgsCheckableComboBoxLayer(QComboBox):
 
     def __init__(self, parent=None):
         super(QgsCheckableComboBoxLayer, self).__init__(parent)
+
+        self.parent = parent
         
         # Dimensions managed by QSS (20px standard height from resources/styles/default.qss)
         # Width and size policy still configured in Python for layout flexibility
@@ -221,10 +224,7 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.view().viewport().installEventFilter(self)
 
     def createMenuContext(self):
-        """Create the context menu with selection actions.
-        
-        v5.1: Added raster layer selection actions.
-        """
+        """Create the context menu with selection actions."""
         self.context_menu = QMenu(self)
         
         self.action_check_all = QAction('Select All', self)
@@ -243,11 +243,6 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.action_check_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Checked))
         self.action_uncheck_all_geometry_polygon = QAction('De-Select all layers by geometry type (Polygon)', self)
         self.action_uncheck_all_geometry_polygon.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Polygon', Qt.Unchecked))
-        # v5.1: Raster layer selection actions
-        self.action_check_all_geometry_raster = QAction('Select all layers by geometry type (Rasters)', self)
-        self.action_check_all_geometry_raster.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Raster', Qt.Checked))
-        self.action_uncheck_all_geometry_raster = QAction('De-Select all layers by geometry type (Rasters)', self)
-        self.action_uncheck_all_geometry_raster.triggered.connect(partial(self.select_by_geometry, 'GeometryType.Raster', Qt.Unchecked))
 
         self.context_menu.addAction(self.action_check_all)
         self.context_menu.addAction(self.action_uncheck_all)
@@ -260,10 +255,6 @@ class QgsCheckableComboBoxLayer(QComboBox):
         self.context_menu.addSeparator()        
         self.context_menu.addAction(self.action_check_all_geometry_polygon)
         self.context_menu.addAction(self.action_uncheck_all_geometry_polygon)
-        self.context_menu.addSeparator()
-        # v5.1: Raster menu items
-        self.context_menu.addAction(self.action_check_all_geometry_raster)
-        self.context_menu.addAction(self.action_uncheck_all_geometry_raster)
 
     def addItem(self, icon, text, data=None):
         """
@@ -662,7 +653,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(2)
         self.filter_le = QLineEdit(self)
-        self.filter_le.setPlaceholderText(self.tr('Type to filter...'))
+        self.filter_le.setPlaceholderText('Type to filter...')
         self.items_le = QLineEdit(self)
         self.items_le.setReadOnly(True)
 
@@ -671,17 +662,17 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         # Context menu
         self.context_menu = QMenu(self)
-        self.action_check_all = QAction(self.tr('Select All'), self)
+        self.action_check_all = QAction('Select All', self)
         self.action_check_all.triggered.connect(lambda state, x='Select All': self.select_all(x))
-        self.action_check_all_non_subset = QAction(self.tr('Select All (non subset)'), self)
+        self.action_check_all_non_subset = QAction('Select All (non subset)', self)
         self.action_check_all_non_subset.triggered.connect(lambda state, x='Select All (non subset)': self.select_all(x))
-        self.action_check_all_subset = QAction(self.tr('Select All (subset)'), self)
+        self.action_check_all_subset = QAction('Select All (subset)', self)
         self.action_check_all_subset.triggered.connect(lambda state, x='Select All (subset)': self.select_all(x))
-        self.action_uncheck_all = QAction(self.tr('De-select All'), self)
+        self.action_uncheck_all = QAction('De-select All', self)
         self.action_uncheck_all.triggered.connect(lambda state, x='De-select All': self.deselect_all(x))
-        self.action_uncheck_all_non_subset = QAction(self.tr('De-select All (non subset)'), self)
+        self.action_uncheck_all_non_subset = QAction('De-select All (non subset)', self)
         self.action_uncheck_all_non_subset.triggered.connect(lambda state, x='De-select All (non subset)': self.deselect_all(x))
-        self.action_uncheck_all_subset = QAction(self.tr('De-select All (subset)'), self)
+        self.action_uncheck_all_subset = QAction('De-select All (subset)', self)
         self.action_uncheck_all_subset.triggered.connect(lambda state, x='De-select All (subset)': self.deselect_all(x))
 
         self.context_menu.addAction(self.action_check_all)
@@ -1046,17 +1037,13 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     logger.warning(f"Could not restore checked items: {restore_err}")
 
     def _populate_features_sync(self, expression, preserve_checked=False):
-        """Populate features list synchronously with limit for large layers.
+        """Populate features list synchronously.
         
         FIX 2026-01-19: Added explicit visual refresh after population to ensure
         the list is displayed correctly.
         
         FIX 2026-01-19 v4: Added preserve_checked parameter to maintain checkbox state
         during repopulation. This prevents the auto-uncheck issue.
-        
-        v5.2 FIX 2026-01-31: Added initial limit for large layers to prevent QGIS freeze.
-        For layers with >10k features, only loads first 1000 initially. User can
-        search/filter to find specific features.
         
         Args:
             expression: The display expression to use
@@ -1083,22 +1070,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         identifier_field = list_widget.getIdentifierFieldName()
         
-        # v5.2 FIX 2026-01-31: Check layer size and set limit for large layers
-        feature_count = self.layer.featureCount()
-        LARGE_LAYER_THRESHOLD = 10_000
-        INITIAL_LOAD_LIMIT = 1_000
-        
-        is_large_layer = feature_count > LARGE_LAYER_THRESHOLD
-        if is_large_layer:
-            logger.info(f"v5.2: Large layer detected ({feature_count:,} features), limiting initial load to {INITIAL_LOAD_LIMIT}")
-        
         # Request features
         request = QgsFeatureRequest()
         request.setFlags(QgsFeatureRequest.NoGeometry)
-        
-        # v5.2 FIX: Limit features for large layers
-        if is_large_layer:
-            request.setLimit(INITIAL_LOAD_LIMIT)
         
         features_data = []
         for feature in safe_iterate_features(self.layer, request):
@@ -1156,14 +1130,6 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         list_widget.setFeaturesList(features_data)
         list_widget.setTotalFeaturesListCount(len(features_data))
-        
-        # v5.2 FIX 2026-01-31: Update placeholder text for large layers
-        if is_large_layer:
-            remaining = feature_count - len(features_data)
-            self.filter_le.setPlaceholderText(self.tr('Type to search... ({} of {} shown)').format(len(features_data), feature_count))
-            logger.info(f"v5.2: Loaded {len(features_data):,} features, {remaining:,} more available via search")
-        else:
-            self.filter_le.setPlaceholderText(self.tr('Type to filter...'))
         
         # FIX 2026-01-19: Force visual refresh after population
         # This ensures the list is displayed correctly, especially after layer changes
@@ -1286,14 +1252,14 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if is_layer_valid(self.layer) and self.layer.id() in self.list_widgets:
             if self.list_widgets[self.layer.id()].getTotalFeaturesListCount() == self.list_widgets[self.layer.id()].count():
                 try:
-                    self.filter_le.editingFinished.disconnect(self.filter_items)
-                except (TypeError, RuntimeError):
+                    self.filter_le.editingFinished.disconnect()
+                except TypeError:
                     pass
                 self.filter_le.textChanged.connect(self._on_filter_text_changed)
             else:
                 try:
-                    self.filter_le.textChanged.disconnect(self._on_filter_text_changed)
-                except (TypeError, RuntimeError):
+                    self.filter_le.textChanged.disconnect()
+                except TypeError:
                     pass
                 self.filter_le.editingFinished.connect(self.filter_items)
     
@@ -1423,13 +1389,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         
         self.list_widgets[self.layer.id()] = ListWidgetWrapper(pk_name, pk_is_numeric, self)
         self.list_widgets[self.layer.id()].viewport().installEventFilter(self)
-        # FIX 2026-02-09: Insert list widget BEFORE items_le so visual order is:
-        # filter_le (index 0) → QListWidget (index 1) → items_le (index 2)
-        items_le_index = self.layout.indexOf(self.items_le)
-        if items_le_index >= 0:
-            self.layout.insertWidget(items_le_index, self.list_widgets[self.layer.id()])
-        else:
-            self.layout.addWidget(self.list_widgets[self.layer.id()])
+        self.layout.addWidget(self.list_widgets[self.layer.id()])
+        # FIX 2026-01-18: Ensure list widget is visible after adding to layout
         self.list_widgets[self.layer.id()].setVisible(True)
         self.list_widgets[self.layer.id()].show()
 
@@ -1600,161 +1561,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         return feature_ids
 
 
-class QgsCheckableComboBoxBands(QgsCheckableComboBox):
-    """
-    A checkable combobox for selecting multiple raster bands.
-    
-    v5.10: New widget for multi-band selection in raster exploring.
-    Extends QgsCheckableComboBox to provide:
-    - Multi-select capability for raster bands
-    - Single-select mode when all_bands mode is disabled
-    - Integration with pushButton_raster_all_bands toggle
-    
-    Signals:
-        checkedBandsChanged: Emitted when checked bands change (list of band indices, 1-based)
-        currentBandChanged: Emitted when single-select band changes (band index, 1-based)
-    """
-    
-    checkedBandsChanged = pyqtSignal(list)
-    currentBandChanged = pyqtSignal(int)
-    
-    def __init__(self, parent=None):
-        super(QgsCheckableComboBoxBands, self).__init__(parent)
-        
-        self._multi_select_enabled = False
-        self._band_count = 0
-        self._layer = None
-        
-        # Connect internal signal to our custom signal
-        self.checkedItemsChanged.connect(self._on_checked_items_changed)
-        
-        # Style
-        self.setMinimumWidth(100)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        logger.debug("QgsCheckableComboBoxBands initialized")
-    
-    def setMultiSelectEnabled(self, enabled: bool):
-        """Enable or disable multi-select mode.
-        
-        Args:
-            enabled: True for multi-select (all bands mode), False for single-select
-        """
-        if self._multi_select_enabled == enabled:
-            return
-        
-        self._multi_select_enabled = enabled
-        
-        if enabled:
-            # Multi-select: check all bands by default
-            self.selectAllOptions()
-            self.setToolTip(self.tr("Multi-band mode: Select bands to analyze"))
-        else:
-            # Single-select: keep only first checked or check first
-            checked = self.checkedItems()
-            self.deselectAllOptions()
-            if checked:
-                # Keep the first one checked
-                first_band = checked[0]
-                for i in range(self.count()):
-                    if self.itemText(i) == first_band:
-                        self.setItemCheckState(i, Qt.Checked)
-                        break
-            elif self.count() > 0:
-                self.setItemCheckState(0, Qt.Checked)
-            self.setToolTip(self.tr("Single-band mode: Select one band to analyze"))
-        
-        logger.debug(f"QgsCheckableComboBoxBands multi-select: {enabled}")
-    
-    def isMultiSelectEnabled(self) -> bool:
-        """Return whether multi-select mode is enabled."""
-        return self._multi_select_enabled
-    
-    def setLayer(self, layer):
-        """Set the raster layer and populate bands.
-        
-        Args:
-            layer: QgsRasterLayer to get bands from
-        """
-        from qgis.core import QgsRasterLayer
-        
-        self._layer = layer
-        self.clear()
-        self._band_count = 0
-        
-        if not layer or not isinstance(layer, QgsRasterLayer):
-            return
-        
-        self._band_count = layer.bandCount()
-        
-        for i in range(1, self._band_count + 1):
-            band_name = layer.bandName(i) if layer.bandName(i) else f"Band {i}"
-            self.addItem(f"{i} - {band_name}")
-        
-        # Check first band by default in single-select mode
-        if self.count() > 0:
-            if self._multi_select_enabled:
-                self.selectAllOptions()
-            else:
-                self.setItemCheckState(0, Qt.Checked)
-        
-        logger.debug(f"QgsCheckableComboBoxBands populated with {self._band_count} bands")
-    
-    def checkedBandIndices(self) -> List[int]:
-        """Get list of checked band indices (1-based).
-        
-        Returns:
-            List of band indices that are checked
-        """
-        indices = []
-        for i in range(self.count()):
-            if self.itemCheckState(i) == Qt.Checked:
-                # Band index is 1-based (first band is 1)
-                indices.append(i + 1)
-        return indices
-    
-    def currentBandIndex(self) -> int:
-        """Get the current/first checked band index (1-based).
-        
-        Returns:
-            First checked band index, or 1 if none checked
-        """
-        indices = self.checkedBandIndices()
-        return indices[0] if indices else 1
-    
-    def _on_checked_items_changed(self, items: list):
-        """Handle checked items change.
-        
-        In single-select mode, ensure only one item is checked.
-        """
-        if not self._multi_select_enabled:
-            # Single-select mode: ensure only one band
-            checked_count = len([i for i in range(self.count()) if self.itemCheckState(i) == Qt.Checked])
-            if checked_count > 1:
-                # Uncheck all except the last one
-                last_checked_idx = -1
-                for i in range(self.count()):
-                    if self.itemCheckState(i) == Qt.Checked:
-                        last_checked_idx = i
-                
-                for i in range(self.count()):
-                    if i != last_checked_idx:
-                        self.setItemCheckState(i, Qt.Unchecked)
-            elif checked_count == 0 and self.count() > 0:
-                # Ensure at least one is checked
-                self.setItemCheckState(0, Qt.Checked)
-        
-        # Emit appropriate signal
-        indices = self.checkedBandIndices()
-        self.checkedBandsChanged.emit(indices)
-        if indices:
-            self.currentBandChanged.emit(indices[0])
-
-
 __all__ = [
     'ItemDelegate',
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
-    'QgsCheckableComboBoxBands',
 ]

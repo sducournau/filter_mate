@@ -419,7 +419,7 @@ class LayerExporter:
         import zipfile
         
         if config.batch_zip:
-            # Note: Implement ZIP archive creation
+            # v5.0: Implement ZIP archive creation
             # Export to temp directory first, then zip
             temp_dir = tempfile.mkdtemp(prefix='filtermate_export_')
             try:

@@ -465,7 +465,7 @@ class SimpleConfigDialog(QDialog):
         button_layout = QHBoxLayout()
         
         # Reset button
-        self._reset_btn = QPushButton(self.tr("Reset to Defaults"))
+        self._reset_btn = QPushButton("Reset to Defaults")
         self._reset_btn.clicked.connect(self._on_reset)
         button_layout.addWidget(self._reset_btn)
         
@@ -499,8 +499,8 @@ class SimpleConfigDialog(QDialog):
             if errors:
                 QMessageBox.warning(
                     self,
-                    self.tr("Validation Error"),
-                    self.tr("Please fix the following errors:") + "\n\n" + "\n".join(errors)
+                    "Validation Error",
+                    "Please fix the following errors:\n\n" + "\n".join(errors)
                 )
                 return
                 
@@ -510,8 +510,8 @@ class SimpleConfigDialog(QDialog):
         """Handle reset button."""
         reply = QMessageBox.question(
             self,
-            self.tr("Reset Configuration"),
-            self.tr("Reset all values to defaults?"),
+            "Reset Configuration",
+            "Reset all values to defaults?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
@@ -565,7 +565,7 @@ class TabbedConfigDialog(QDialog):
         # Button box
         button_layout = QHBoxLayout()
         
-        self._reset_btn = QPushButton(self.tr("Reset to Defaults"))
+        self._reset_btn = QPushButton("Reset to Defaults")
         self._reset_btn.clicked.connect(self._on_reset)
         button_layout.addWidget(self._reset_btn)
         
@@ -585,7 +585,7 @@ class TabbedConfigDialog(QDialog):
         if not self._metadata:
             # Single tab for all
             editor = ConfigEditorWidget(self._config_data, None)
-            self._tabs.addTab(editor, self.tr("General"))
+            self._tabs.addTab(editor, "General")
             return
             
         groups = self._metadata.get_config_groups()

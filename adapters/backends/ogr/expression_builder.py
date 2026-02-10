@@ -29,12 +29,6 @@ from qgis.core import QgsVectorLayer, QgsExpression
 
 logger = logging.getLogger('FilterMate.Backend.OGR.ExpressionBuilder')
 
-# v6.0 Phase 2.1: Import unified predicate registry
-try:
-    from ....core.filter.predicate_registry import get_predicate_functions
-except ImportError:
-    get_predicate_functions = None
-
 # Import the port interface
 try:
     from ....core.ports.geometric_filter_port import GeometricFilterPort
@@ -138,10 +132,16 @@ class OGRExpressionBuilder(GeometricFilterPort):
         builder.apply_filter(layer, expr)
     """
     
-    # v6.0: Predicate codes from unified registry (core/filter/predicate_registry.py)
-    PREDICATE_CODES = get_predicate_functions('ogr') if get_predicate_functions else {
-        'intersects': 0, 'contains': 1, 'disjoint': 2, 'equals': 3,
-        'touches': 4, 'overlaps': 5, 'within': 6, 'crosses': 7,
+    # QGIS predicate codes for selectbylocation
+    PREDICATE_CODES = {
+        'intersects': 0,
+        'contains': 1,
+        'disjoint': 2,
+        'equals': 3,
+        'touches': 4,
+        'overlaps': 5,
+        'within': 6,
+        'crosses': 7,
     }
     
     def __init__(self, task_params: Dict[str, Any]):
@@ -821,8 +821,13 @@ class OGRExpressionBuilder(GeometricFilterPort):
         """
         Get primary key field name with improved detection (v4.0.7).
         
-        Delegates to the canonical implementation in layer_utils.
-        Defaults to "fid" if no PK is found (OGR convention).
+        Priority order:
+        1. Provider-declared primary key
+        2. Exact PK names: id, fid, pk, gid, ogc_fid, objectid, oid, rowid
+        3. UUID fields (uuid, guid in name)
+        4. Numeric fields with ID patterns (_id, id_, identifier, etc.)
+        5. First numeric integer field
+        6. Default to "fid"
         
         Args:
             layer: QGIS vector layer
@@ -830,12 +835,64 @@ class OGRExpressionBuilder(GeometricFilterPort):
         Returns:
             Primary key field name
         """
-        from infrastructure.utils.layer_utils import get_primary_key_name
-        pk = get_primary_key_name(layer)
-        if pk:
-            self.log_debug(f"Using primary key: {pk}")
-            return pk
-        self.log_debug("No primary key found, defaulting to 'fid'")
+        # Common primary key field names (exact match, case-insensitive)
+        PK_EXACT_NAMES = ['id', 'fid', 'pk', 'gid', 'ogc_fid', 'objectid', 'oid', 'rowid']
+        # UUID field patterns (contains, case-insensitive)
+        UUID_PATTERNS = ['uuid', 'guid']
+        # ID field patterns (contains, case-insensitive)
+        ID_PATTERNS = ['_id', 'id_', 'identifier', 'feature_id', 'object_id']
+        
+        try:
+            from qgis.PyQt.QtCore import QVariant
+            
+            fields = layer.fields()
+            if not fields:
+                return "fid"
+            
+            # 1. Try provider-declared primary key
+            try:
+                pk_indexes = layer.dataProvider().pkAttributeIndexes()
+                if pk_indexes:
+                    pk_name = fields.at(pk_indexes[0]).name()
+                    self.log_debug(f"Using provider PK: {pk_name}")
+                    return pk_name
+            except Exception:
+                pass
+            
+            # 2. Look for exact match PK names
+            for field in fields:
+                if field.name().lower() in PK_EXACT_NAMES:
+                    self.log_debug(f"Found exact PK name: {field.name()}")
+                    return field.name()
+            
+            # 3. Look for UUID fields
+            for field in fields:
+                field_name_lower = field.name().lower()
+                for pattern in UUID_PATTERNS:
+                    if pattern in field_name_lower:
+                        self.log_debug(f"Found UUID field: {field.name()}")
+                        return field.name()
+            
+            # 4. Look for numeric fields with ID patterns
+            numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong)
+            for field in fields:
+                field_name_lower = field.name().lower()
+                if field.type() in numeric_types:
+                    for pattern in ID_PATTERNS:
+                        if pattern in field_name_lower:
+                            self.log_debug(f"Found numeric ID field: {field.name()}")
+                            return field.name()
+            
+            # 5. First numeric integer field
+            for field in fields:
+                if field.type() in numeric_types:
+                    self.log_debug(f"Using first numeric field: {field.name()}")
+                    return field.name()
+            
+        except Exception as e:
+            self.log_warning(f"Error detecting primary key: {e}")
+        
+        # 6. Default to fid
         return "fid"
     
     def _is_geometric_filter(self, subset: str) -> bool:

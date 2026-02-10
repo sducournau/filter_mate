@@ -161,10 +161,6 @@ class SpacingManager(LayoutManagerBase):
             if hasattr(self.dockwidget, 'verticalLayout_exploring_content'):
                 self.dockwidget.verticalLayout_exploring_content.setSpacing(button_spacing)
             
-            # Apply spacing to raster key layout (same style as exploring)
-            if hasattr(self.dockwidget, 'verticalLayout_raster_keys'):
-                self.dockwidget.verticalLayout_raster_keys.setSpacing(button_spacing)
-            
             section_spacing_adjusted = UIConfig.get_config('layout', 'spacing_section') or 4
             horizontal_layouts = [
                 'horizontalLayout_filtering_content',
@@ -255,10 +251,9 @@ class SpacingManager(LayoutManagerBase):
             
             spacer_width = 20  # Standard width for vertical spacers
             
-            # Harmonize spacers in all key widgets
+            # Harmonize spacers in all three key widgets
             sections = {
                 'exploring': 'widget_exploring_keys',
-                'raster': 'widget_raster_keys',
                 'filtering': 'widget_filtering_keys',
                 'exporting': 'widget_exporting_keys'
             }

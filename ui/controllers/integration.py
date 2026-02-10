@@ -689,19 +689,14 @@ class ControllerIntegration:
                 except Exception as e:
                     logger.debug(f"Could not sync exploring controller: {e}")
         
-        # Notify exporting controller to populate layers and setup UI signals
+        # Notify exporting controller to populate layers
         if self._exporting_controller and self._dockwidget:
             try:
-                # EPIC-4 v5.0: Setup raster UI signal connections
-                if hasattr(self._exporting_controller, 'setup'):
-                    self._exporting_controller.setup()
-                    logger.debug("ExportingController.setup() completed")
-                    
                 if hasattr(self._exporting_controller, 'refresh_layers'):
                     self._exporting_controller.refresh_layers()
                     logger.debug("ExportingController layers refreshed")
             except Exception as e:
-                logger.debug(f"Could not setup/refresh exporting controller: {e}")
+                logger.debug(f"Could not refresh exporting layers: {e}")
     
     def _on_launching_task(self, task_type: str) -> None:
         """
@@ -747,7 +742,6 @@ class ControllerIntegration:
         2. Populates export combobox via ExportingController
         3. Populates filtering layers combobox via FilteringController
         4. Notifies LayerSyncController
-        5. FIX 2026-02-10: Synchronizes dependent widget states (filtering, exploring pages)
         """
         logger.info("✓ Project layers ready - populating comboboxes (unified handler)")
         
@@ -764,88 +758,27 @@ class ControllerIntegration:
             try:
                 dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
                 if hasattr(self._exporting_controller, 'populate_export_combobox'):
-                    result = self._exporting_controller.populate_export_combobox()
-                    logger.info(f"Export layers combobox populated via controller: result={result}")
+                    self._exporting_controller.populate_export_combobox()
+                    logger.debug("Export layers combobox populated via controller")
                 elif hasattr(self._exporting_controller, 'refresh_layers'):
                     self._exporting_controller.refresh_layers()
-                    logger.info("Export layers combobox populated via refresh_layers")
+                    logger.debug("Export layers combobox populated via refresh_layers")
                 dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
             except Exception as e:
-                logger.warning(f"Could not populate export layers: {e}", exc_info=True)
-                # FIX 2026-02-09: Fallback to direct method if controller fails
-                try:
-                    if hasattr(dw, '_populate_export_combobox_direct'):
-                        dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
-                        dw._populate_export_combobox_direct()
-                        dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
-                        logger.info("Export layers combobox populated via direct fallback")
-                except Exception as e2:
-                    logger.warning(f"Direct fallback for export also failed: {e2}")
-        else:
-            # FIX 2026-02-09: No controller - use direct method
-            logger.warning("_on_project_layers_ready: No exporting controller, using direct method")
-            try:
-                if hasattr(dw, '_populate_export_combobox_direct'):
-                    dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
-                    dw._populate_export_combobox_direct()
-                    dw.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
-            except Exception as e:
-                logger.warning(f"Direct export population failed: {e}")
-
+                logger.debug(f"Could not populate export layers: {e}")
+        
         # Step 3: Populate filtering layers combobox
-        # FIX 2026-02-09: Resolve active layer with fallback when current_layer is None
-        # (current_layer_changed is deferred due to _plugin_busy during initial load)
-        layer = dw.current_layer
-        if layer is None:
-            # Fallback: try iface.activeLayer or first PROJECT_LAYERS entry
-            if hasattr(dw, 'iface') and dw.iface and dw.iface.activeLayer():
-                layer = dw.iface.activeLayer()
-                logger.info(f"_on_project_layers_ready: current_layer was None, using iface.activeLayer={layer.name()}")
-            elif dw.PROJECT_LAYERS:
-                from qgis.core import QgsProject
-                first_id = list(dw.PROJECT_LAYERS.keys())[0]
-                layer = QgsProject.instance().mapLayer(first_id)
+        if self._filtering_controller:
+            try:
+                layer = dw.current_layer
                 if layer:
-                    logger.info(f"_on_project_layers_ready: current_layer was None, using first PROJECT_LAYERS entry={layer.name()}")
-
-        if self._filtering_controller and layer:
-            try:
-                dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                self._filtering_controller.populate_layers_checkable_combobox(layer)
-                dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-                logger.info("Filtering layers combobox populated via controller")
-
-                # v5.4: Also populate raster filtering layers-to-filter combobox
-                # (same data, different widget - shows vector layers as targets)
-                if hasattr(dw, 'checkableComboBoxLayer_filtering_raster_layers_to_filter'):
-                    try:
-                        self._populate_raster_filtering_layers(dw, layer)
-                    except Exception as re:
-                        logger.debug(f"Could not populate raster filtering layers: {re}")
-            except Exception as e:
-                logger.warning(f"Could not populate filtering layers via controller: {e}", exc_info=True)
-                # FIX 2026-02-09: Fallback to direct method
-                try:
-                    if hasattr(dw, '_populate_filtering_layers_direct'):
-                        dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                        dw._populate_filtering_layers_direct(layer)
-                        dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-                        logger.info("Filtering layers combobox populated via direct fallback")
-                except Exception as e2:
-                    logger.warning(f"Direct fallback for filtering also failed: {e2}")
-        elif layer:
-            # FIX 2026-02-09: No controller - use direct method
-            logger.warning("_on_project_layers_ready: No filtering controller, using direct method")
-            try:
-                if hasattr(dw, '_populate_filtering_layers_direct'):
                     dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                    dw._populate_filtering_layers_direct(layer)
+                    self._filtering_controller.populate_layers_checkable_combobox(layer)
                     dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+                    logger.debug("Filtering layers combobox populated via controller")
             except Exception as e:
-                logger.warning(f"Direct filtering population failed: {e}")
-        else:
-            logger.warning("_on_project_layers_ready: No layer available for filtering combobox population")
-
+                logger.debug(f"Could not populate filtering layers: {e}")
+        
         # Step 4: Notify layer sync controller
         if self._layer_sync_controller:
             try:
@@ -853,99 +786,15 @@ class ControllerIntegration:
                     self._layer_sync_controller.on_layers_ready()
             except Exception as e:
                 logger.debug(f"LayerSyncController layers ready notification failed: {e}")
-
-        # FIX 2026-02-10: Step 5 - Synchronize dependent widget states
-        # These calls were present in dockwidget._on_project_layers_ready() but missing
-        # here, causing filtering buttons to remain disabled and exploring pages to not
-        # reflect available layer types after project load.
-        try:
-            dw.filtering_layers_to_filter_state_changed()
-            logger.info("✓ Filtering layers state synchronized after layers ready")
-        except Exception as e:
-            logger.warning(f"Could not sync filtering layers state: {e}")
-
-        try:
-            dw._update_exploring_pages_availability()
-            logger.info("✓ Exploring pages availability updated after layers ready")
-        except Exception as e:
-            logger.warning(f"Could not update exploring pages availability: {e}")
     
     def _on_getting_project_layers(self) -> None:
         """
         FIX-4b: Handle getting project layers event from dockwidget.
-
+        
         This signal is emitted when layer loading starts.
         Could show loading indicator.
         """
         logger.debug("⏳ Loading project layers...")
-
-    def _populate_raster_filtering_layers(self, dw, layer) -> None:
-        """Populate the raster filtering 'layers to filter' combobox with vector layers only.
-
-        v5.4: The raster→vector filter targets only vector layers (excluding
-        the current source layer).  This mirrors the logic of
-        ``populate_layers_checkable_combobox`` but writes to the dedicated
-        raster-target widget and only includes vector layers.
-
-        Args:
-            dw: The dockwidget instance.
-            layer: The current source layer.
-        """
-        from qgis.core import QgsVectorLayer, QgsProject
-        from qgis.PyQt.QtCore import Qt
-        from ...infrastructure.utils.validation_utils import is_layer_source_available
-
-        widget = dw.checkableComboBoxLayer_filtering_raster_layers_to_filter
-        widget.clear()
-
-        project = QgsProject.instance()
-        source_id = layer.id() if layer else None
-
-        # Read saved state from layer properties
-        layer_props = dw.PROJECT_LAYERS.get(source_id, {}) if source_id else {}
-        has_layers = layer_props.get("filtering", {}).get("has_raster_layers_to_filter", False)
-        saved_ids = layer_props.get("filtering", {}).get("raster_layers_to_filter", [])
-
-        item_index = 0
-        for key, props in dw.PROJECT_LAYERS.items():
-            if key == source_id:
-                continue
-
-            if "infos" not in props:
-                continue
-
-            info = props["infos"]
-            lid = info.get("layer_id")
-            if not lid:
-                continue
-
-            layer_obj = project.mapLayer(lid)
-            if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
-                continue
-
-            if not layer_obj.isSpatial():
-                continue
-
-            if not is_layer_source_available(layer_obj, require_psycopg2=False):
-                continue
-
-            layer_name = info.get("layer_name", layer_obj.name())
-            layer_crs = info.get("layer_crs_authid", layer_obj.crs().authid())
-            geom_type = info.get("layer_geometry_type", "")
-            layer_icon = dw.icon_per_geometry_type(geom_type)
-
-            display_name = f"{layer_name} [{layer_crs}]"
-            item_data = {"layer_id": key, "layer_geometry_type": geom_type}
-            widget.addItem(layer_icon, display_name, item_data)
-
-            item = widget.model().item(item_index)
-            if has_layers and lid in saved_ids:
-                item.setCheckState(Qt.Checked)
-            else:
-                item.setCheckState(Qt.Unchecked)
-            item_index += 1
-
-        logger.debug(f"Raster filtering layers populated: {item_index} vector layers")
 
     def _cleanup_on_error(self) -> None:
         """Cleanup after setup error."""
@@ -1486,29 +1335,10 @@ class ControllerIntegration:
         return False
 
     def delegate_execute_filter(self) -> bool:
-        """Delegate filter execution to filtering controller.
-
-        v5.4: Also triggers raster→vector filtering when the raster
-        filter section is enabled (pushButton_checkable_filtering_raster_source
-        is checked).
-        """
-        handled = False
+        """Delegate filter execution to filtering controller."""
         if self._filtering_controller:
-            handled = self._filtering_controller.execute_filter()
-
-        # v5.4: Execute raster filter if raster source section is active
-        if self._filtering_controller and self._dockwidget:
-            raster_btn = getattr(self._dockwidget, 'pushButton_checkable_filtering_raster_source', None)
-            if raster_btn and raster_btn.isChecked():
-                try:
-                    raster_handled = self._filtering_controller.execute_raster_filter()
-                    if raster_handled:
-                        handled = True
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).error(f"Raster filter execution failed: {e}", exc_info=True)
-
-        return handled
+            return self._filtering_controller.execute_filter()
+        return False
     
     def delegate_execute_unfilter(self) -> bool:
         """
@@ -2220,7 +2050,7 @@ class ControllerIntegration:
         Call this to update UI from controller state,
         for example after loading a configuration.
         
-        Note: Full implementation of widget synchronization.
+        v5.0: Full implementation of widget synchronization.
         """
         if not self._is_setup:
             return

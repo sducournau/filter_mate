@@ -1,1 +1,0 @@
-"""Adapter unit tests."""

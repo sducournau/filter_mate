@@ -897,49 +897,11 @@ class LayersManagementEngineTask(QgsTask):
         Add a spatial layer to the project with all necessary metadata and indexes.
         
         Args:
-            layer (QgsVectorLayer|QgsRasterLayer): Layer to add
+            layer (QgsVectorLayer): Layer to add
             
         Returns:
             bool: True if successful, False otherwise
         """
-        from qgis.core import QgsRasterLayer
-        
-        # FIX 2026-02-10: Handle raster layers with minimal metadata
-        # so they appear in filtering/exporting comboboxes
-        if isinstance(layer, QgsRasterLayer):
-            if not layer.isValid():
-                logger.debug(f"add_project_layer: Skipping invalid raster layer '{layer.name()}'")
-                return False
-            layer_props = {
-                "infos": {
-                    "layer_id": layer.id(),
-                    "layer_name": layer.name(),
-                    "layer_crs_authid": layer.crs().authid() if layer.crs() else "EPSG:4326",
-                    "layer_geometry_type": "Raster",
-                    "layer_provider_type": layer.providerType(),
-                    "source_schema": "NULL",
-                    "geometry_field": "NULL",
-                    "primary_key_name": "NULL",
-                    "primary_key_type": "NULL",
-                    "primary_key_idx": -1,
-                    "is_raster": True
-                },
-                "exploring": {
-                    "is_selecting": False,
-                    "is_tracking": False,
-                    "is_linking": False
-                },
-                "filtering": {
-                    "layers_to_filter": [],
-                    "predicate": "",
-                    "buffer": 0,
-                    "current_filter": ""
-                }
-            }
-            self.project_layers[layer.id()] = layer_props
-            logger.info(f"add_project_layer: Added raster layer '{layer.name()}' (id={layer.id()})")
-            return True
-        
         if not isinstance(layer, QgsVectorLayer) or not layer.isSpatial():
             # Log skipped non-spatial layers
             layer_name = layer.name() if hasattr(layer, 'name') else 'unknown'

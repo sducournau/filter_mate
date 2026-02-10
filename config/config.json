@@ -175,13 +175,6 @@
             "HAS_DATATYPE_TO_EXPORT": "datatype.png",
             "HAS_OUTPUT_FOLDER_TO_EXPORT": "folder_black.png",
             "HAS_ZIP_TO_EXPORT": "zip.png"
-          },
-          "RASTER_EXPLORING": {
-            "PIXEL_PICKER": "raster_pipette.png",
-            "RECT_PICKER": "raster_rectangle_picker.png",
-            "SYNC_HISTOGRAM": "raster_sync.png",
-            "ALL_BANDS": "raster_all_bands.png",
-            "RESET_RANGE": "raster_reset_bands.png"
           }
         }
       },

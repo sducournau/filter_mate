@@ -9,15 +9,14 @@ to prevent CRIT-005 (layer loss after filter).
 
 Story: MIG-073
 Phase: 6 - God Class DockWidget Migration
-Note: Supports both vector and raster layers for unified exploring
 """
 
-from typing import TYPE_CHECKING, Optional, List, Union
+from typing import TYPE_CHECKING, Optional, List
 import logging
 import time
 
 from qgis.PyQt.QtCore import pyqtSignal
-from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject, QgsMapLayer
+from qgis.core import QgsVectorLayer, QgsProject
 
 from .base_controller import BaseController
 
@@ -40,7 +39,6 @@ class LayerSyncController(BaseController):
     - Widget synchronization on layer change
     - Post-filter protection (CRIT-005 fix)
     - Layer add/remove events
-    - Note: Supports both vector and raster layers for unified exploring
 
     CRITICAL FIX (CRIT-005): This controller implements a 5-second protection
     window after filtering to prevent unwanted layer changes from async signals.
@@ -77,7 +75,6 @@ class LayerSyncController(BaseController):
         self._current_layer_id: Optional[str] = None
         # Lock to prevent reentrant calls
         self._updating_current_layer: bool = False
-        self._updating_lock_time: float = 0  # v5.2: Track lock timestamp for timeout
         # Filtering state
         self._filtering_in_progress: bool = False
 
@@ -147,22 +144,12 @@ class LayerSyncController(BaseController):
             True if layer change was accepted, False if blocked
         """
         layer_name = layer.name() if layer else "(None)"
-        logger.info(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
+        logger.debug(f"on_current_layer_changed called with layer='{layer_name}', manual={manual_change}")
 
-        # v5.2 FIX: Check lock for reentrant calls with timeout protection
+        # Check lock for reentrant calls
         if self._updating_current_layer:
-            # Check if lock has been held too long (safety reset)
-            if hasattr(self, '_updating_lock_time'):
-                elapsed = time.time() - self._updating_lock_time
-                if elapsed > 2.0:  # 2 second timeout
-                    logger.warning(f"⚠️ on_current_layer_changed: Lock held for {elapsed:.2f}s - FORCING RESET")
-                    self._updating_current_layer = False
-                else:
-                    logger.debug(f"on_current_layer_changed BLOCKED - already updating (held for {elapsed:.2f}s)")
-                    return False
-            else:
-                logger.debug("on_current_layer_changed BLOCKED - already updating")
-                return False
+            logger.debug("on_current_layer_changed BLOCKED - already updating")
+            return False
 
         # Block during active filtering UNLESS manual change
         if self._filtering_in_progress and not manual_change:
@@ -218,7 +205,6 @@ class LayerSyncController(BaseController):
 
         # Accept the layer change
         self._updating_current_layer = True
-        self._updating_lock_time = time.time()  # v5.2: Track lock timestamp for timeout
         try:
             self._current_layer_id = layer.id()
             self.layer_changed.emit(layer)
@@ -227,7 +213,6 @@ class LayerSyncController(BaseController):
             return True
         finally:
             self._updating_current_layer = False
-            self._updating_lock_time = 0  # v5.2: Clear lock timestamp
 
     def set_filtering_in_progress(self, in_progress: bool) -> None:
         """
@@ -473,12 +458,9 @@ class LayerSyncController(BaseController):
         # Try to find a fallback layer
         return self._find_fallback_layer()
 
-    def _find_fallback_layer(self) -> Optional[Union[QgsVectorLayer, QgsRasterLayer]]:
-        """Find a fallback layer from project.
-        
-        Note: Supports both vector and raster layers for unified exploring.
-        """
-        # Try PROJECT_LAYERS first (for vector layers)
+    def _find_fallback_layer(self) -> Optional[QgsVectorLayer]:
+        """Find a fallback layer from project."""
+        # Try PROJECT_LAYERS first
         if hasattr(self.dockwidget, 'PROJECT_LAYERS'):
             for layer_id in self.dockwidget.PROJECT_LAYERS:
                 project = QgsProject.instance()
@@ -487,11 +469,10 @@ class LayerSyncController(BaseController):
                     logger.debug(f"Using fallback layer from PROJECT_LAYERS: {layer.name()}")
                     return layer
 
-        # Try all project layers (vector and raster)
+        # Try all project layers
         project = QgsProject.instance()
         for layer in project.mapLayers().values():
-            # Note: Accept both vector layers with geometry AND raster layers
-            if isinstance(layer, (QgsVectorLayer, QgsRasterLayer)) and self.validate_layer(layer):
+            if isinstance(layer, QgsVectorLayer) and self.validate_layer(layer):
                 logger.debug(f"Using fallback layer from project: {layer.name()}")
                 return layer
 
@@ -527,17 +508,14 @@ class LayerSyncController(BaseController):
 
     # === Layer Events ===
 
-    def on_layer_added(self, layer: Union[QgsVectorLayer, QgsRasterLayer]) -> None:
+    def on_layer_added(self, layer: QgsVectorLayer) -> None:
         """
         Handle layer added event.
 
-        Note: Supports both vector and raster layers.
-        
         Args:
             layer: Layer that was added
         """
-        # Note: Accept both vector and raster layers
-        if not isinstance(layer, (QgsVectorLayer, QgsRasterLayer)):
+        if not isinstance(layer, QgsVectorLayer):
             return
 
         if not self.validate_layer(layer):
@@ -1150,27 +1128,21 @@ class LayerSyncController(BaseController):
                     dw.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
 
     def _connect_layer_selection_signal(self) -> None:
-        """Connect selectionChanged signal for current layer.
-
-        Delegates to dockwidget._ensure_layer_signals_connected() for safe
-        disconnect-then-connect pattern (prevents duplicate connections).
-        """
+        """Connect selectionChanged signal for current layer."""
         dw = self.dockwidget
         current_layer = getattr(dw, 'current_layer', None)
-
+        
         if current_layer is None:
             return
-
-        if hasattr(dw, '_ensure_layer_signals_connected'):
-            dw._ensure_layer_signals_connected(current_layer)
-        else:
-            # Fallback for backwards compatibility
-            try:
-                if hasattr(dw, 'on_layer_selection_changed'):
-                    current_layer.selectionChanged.connect(dw.on_layer_selection_changed)
-                    dw.current_layer_selection_connection = True
-            except (TypeError, RuntimeError) as e:
-                logger.warning(f"Could not connect selectionChanged signal: {e}")
+        
+        try:
+            if hasattr(dw, 'on_layer_selection_changed'):
+                current_layer.selectionChanged.connect(dw.on_layer_selection_changed)
+                dw.current_layer_selection_connection = True
+        except (TypeError, RuntimeError) as e:
+            logger.warning(f"Could not connect selectionChanged signal: {e}")
+            if hasattr(dw, 'current_layer_selection_connection'):
+                dw.current_layer_selection_connection = None
 
     def _restore_exploring_groupbox_state(self, layer_props: dict) -> None:
         """

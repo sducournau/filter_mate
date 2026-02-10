@@ -23,7 +23,7 @@ from .infrastructure.logging import get_app_logger
 logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
-# Dual QToolBox Phase 2: Add DockwidgetSignalManager for signal management extraction
+# v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
 from .ui.managers import ConfigurationManager, DockwidgetSignalManager
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
@@ -34,16 +34,18 @@ from qgis.PyQt.QtCore import (
     pyqtSignal,
     QTimer
 )
-from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtGui import QColor, QFont
 from qgis.core import (
     QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
     QgsExpression,
+    QgsFeature,
     QgsFeatureRequest,
+    QgsGeometry,
     QgsLayerItem,
     QgsProject,
     QgsProperty,
     QgsPropertyDefinition,
-    QgsRasterLayer,  # Note: Added for Dual QToolBox raster support
     QgsRectangle,
     QgsVectorLayer
 )
@@ -51,6 +53,7 @@ from qgis.gui import (
     QgsCheckableComboBox,
     QgsCollapsibleGroupBox,
     QgsFeaturePickerWidget,
+    QgsFieldComboBox,
     QgsFieldExpressionWidget,
     QgsMapLayerComboBox,
     QgsProjectionSelectionWidget
@@ -80,10 +83,15 @@ except ImportError:
             TiledSceneLayer = 2048
             All = -1
 
+try: from qgis.gui import QgsFieldProxyModel
+except ImportError:
+    try: from qgis.core import QgsFieldProxyModel
+    except ImportError:
+        class QgsFieldProxyModel: AllTypes = 0
 from qgis.utils import iface
 
 import webbrowser
-from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxBands
+from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget, QgsCheckableComboBoxLayer
 from .ui.widgets.json_view.model import JsonModel
 from .ui.widgets.json_view.view import JsonView
 
@@ -94,6 +102,7 @@ from .infrastructure.utils import (
     is_layer_source_available
 )
 from .core.domain.exceptions import SignalStateChangeError
+from .infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, get_geometry_type_string
 from .ui.styles import StyleLoader, QGISThemeWatcher
 from .infrastructure.feedback import show_info, show_warning, show_error, show_success
 
@@ -104,13 +113,11 @@ except ImportError:
     def should_show_message(category): return True
 
 # Config helpers (migrated to config/)
-from .config.config import get_optimization_thresholds, save_config_value, get_config_value
+from .config.config import get_optimization_thresholds
+from .infrastructure.config import set_config_value
 
 from .infrastructure.cache import ExploringFeaturesCache
 from .filter_mate_dockwidget_base import Ui_FilterMateDockWidgetBase
-
-# Qt resources for icons (must be imported before UI is created)
-from . import resources  # noqa: F401
 
 # Import async expression evaluation for large layers (v2.5.10)
 # EPIC-1: Migrated to core/tasks/
@@ -121,7 +128,7 @@ except ImportError:
     ASYNC_EXPRESSION_AVAILABLE = False; get_expression_manager = None
 
 # CRS utilities (migrated to core/geometry/)
-try: from .core.geometry.crs_utils import DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
+try: from .core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs, DEFAULT_METRIC_CRS; CRS_UTILS_AVAILABLE = True
 except ImportError: CRS_UTILS_AVAILABLE = False; DEFAULT_METRIC_CRS = "EPSG:3857"
 
 # Icon utilities for dark mode (migrated to ui/)
@@ -155,16 +162,6 @@ except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = Dimensi
 # Style Managers
 try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
 except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
-
-# Dual QToolBox Dual QToolBox Architecture (Feature Flag)
-DUAL_TOOLBOX_ENABLED = True  # Set to True to enable new UI architecture
-try:
-    from .ui.widgets.toolbox import DualToolBoxContainer, ToolBoxIntegrationBridge
-    DUAL_TOOLBOX_AVAILABLE = True
-except ImportError as e:
-    DUAL_TOOLBOX_AVAILABLE = False
-    DualToolBoxContainer = ToolBoxIntegrationBridge = None
-    logger.debug(f"Dual QToolBox DualToolBox import failed: {e}")
 
 
 class ClickableLabel(QtWidgets.QLabel):
@@ -259,10 +256,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._updating_layers = self._updating_current_layer = self._updating_groupbox = self._signals_connected = False
         self._pending_layers_update = self._plugin_busy = self._syncing_from_qgis = False
         self._filtering_in_progress, self._filter_completed_time, self._saved_layer_id_before_filter = False, 0, None
-        self._filtering_in_progress_timestamp = 0  # FIX 2026-02-10: Track when _filtering_in_progress was set
         self._layer_tree_view_signal_connected, self._signal_connection_states, self._theme_watcher = False, {}, None
-        # v5.2 FIX 2026-01-31: Flag to prevent handler interference during programmatic page changes
-        self._programmatic_page_change = False
         # FIX 2026-01-19: Flag to prevent feedback loop when widget updates QGIS selection
         self._updating_qgis_selection_from_widget = False
         self._configuring_groupbox = False  # FIX 2026-01-19: Prevent nested groupbox config
@@ -281,10 +275,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # When a layer is deleted, its QgsFeaturePickerWidget must be cleared BEFORE
         # the internal QTimer triggers scheduledReload, which would cause access violation
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
-        # Dual QToolBox Phase 2: Initialize signal manager for progressive migration
+        # v5.0 Phase 2: Initialize signal manager for progressive migration
         self._signal_manager = DockwidgetSignalManager(self)
-        # Phase 3.1: RasterExploringManager (initialized later in _setup_page_components)
-        self._raster_manager = None
         self._initialize_layer_state()
     
     def _safe_get_layer_props(self, layer):
@@ -327,7 +319,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     
     @property
     def signal_manager(self):
-        """Dual QToolBox Phase 2: Access to DockwidgetSignalManager for signal management.
+        """v5.0 Phase 2: Access to DockwidgetSignalManager for signal management.
         
         Progressive migration: methods can use either:
         - self.manageSignal() (legacy, will be deprecated)
@@ -448,35 +440,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._feature_picker_layer_connection = None
 
     def _initialize_layer_state(self):
-        """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI.
-        
-        v5.3 FIX 2026-01-31: Also consider raster layers as valid initial layer
-        to ensure toolBox_exploring shows correct page at startup.
-        """
+        """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
         self.init_layer, self.has_loaded_layers = None, False
         if self.PROJECT:
-            # v5.3: Consider both vector and raster layers for initial layer
-            active_layer = self.iface.activeLayer()
             vector_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsVectorLayer)]
-            raster_layers = [l for l in self.PROJECT.mapLayers().values() if isinstance(l, QgsRasterLayer)]
-            
-            # Priority: active layer > first vector layer > first raster layer
-            if active_layer:
-                self.init_layer = active_layer
-                self.has_loaded_layers = True
-            elif vector_layers:
-                self.init_layer = vector_layers[0]
-                self.has_loaded_layers = True
-            elif raster_layers:
-                self.init_layer = raster_layers[0]
-                self.has_loaded_layers = True
+            if vector_layers:
+                self.init_layer, self.has_loaded_layers = self.iface.activeLayer() or vector_layers[0], True
         self.widgets, self.widgets_initialized, self.current_exploring_groupbox, self.tabTools_current_index = None, False, None, 0
         self.backend_indicator_label, self.plugin_title_label, self.frame_header = None, None, None
         self._exploring_cache = ExploringFeaturesCache(max_layers=50, max_age_seconds=300.0)
-        
-        # v5.3 FIX 2026-01-31: Track last active layer by type for manual toolbox switching
-        self._last_vector_layer_id = None  # ID of last used vector layer
-        self._last_raster_layer_id = None  # ID of last used raster layer
         
         # Layout/Style managers
         self._splitter_manager = self._dimensions_manager = self._spacing_manager = self._action_bar_manager = None
@@ -544,78 +516,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # The palette with alpha=0 colors was removed from filter_mate_dockwidget_base.ui/.py
         # No need to reset palette here anymore - dockwidget now inherits QGIS default palette.
         
-        try:
-            self.setupUiCustom()
-        except Exception as e:
-            logger.error(f"setupUiCustom failed: {e}", exc_info=True)
-
+        self.setupUiCustom()
         self.manage_ui_style()
-
-        # FIX 2026-02-09: After all styling is applied, verify that dynamically-
-        # inserted widgets are still in their layouts and visible. ThemeManager and
-        # ButtonStyler can trigger re-polish cycles that hide dynamic widgets.
-        self._ensure_dynamic_widgets_layout()
-
-        try:
+        try: 
             self.manage_interactions()
-        except Exception as e:
+        except Exception as e: 
             logger.error(f"Error in manage_interactions: {e}", exc_info=True)
             from qgis.utils import iface
             iface.messageBar().pushCritical("FilterMate", self.tr("Initialization error: {}").format(str(e)))
-
-    def showEvent(self, event):
-        """FIX 2026-02-09: Ensure key widgets visible and reload icons when shown."""
-        super().showEvent(event)
-        from qgis.PyQt.QtCore import QTimer
-        # Deferred: verify layout membership and visibility of dynamic widgets
-        QTimer.singleShot(0, self._ensure_key_widgets_visible)
-        # Reload icons after styling/layout has fully settled
-        QTimer.singleShot(300, self._deferred_icon_reload)
-
-    def _deferred_icon_reload(self):
-        """FIX 2026-02-09: Reload icons after layout settles.
-        
-        ThemeManager.apply() and ButtonStyler.setup() can trigger re-polishing
-        that sometimes interferes with programmatically set icons. This method
-        reloads all icons after the widget is shown and layout has settled.
-        """
-        try:
-            self._load_all_pushbutton_icons()
-            self._load_raster_tool_icons()
-            if self._icon_manager:
-                self._icon_manager.apply()
-            # FIX 2026-02-09d: Restore centroid checkbox icons after re-polish
-            self._load_centroids_checkbox_icons()
-            # Also ensure frame_actions is visible
-            if hasattr(self, 'frame_actions') and self.frame_actions:
-                if not self.frame_actions.isVisible():
-                    logger.warning("FIX-2026-02-09: frame_actions was hidden - restoring")
-                    self.frame_actions.setVisible(True)
-                self.frame_actions.updateGeometry()
-            logger.debug("_deferred_icon_reload: Icons reloaded after show")
-        except Exception as e:
-            logger.debug(f"_deferred_icon_reload: {e}")
-
-    def _load_centroids_checkbox_icons(self):
-        """FIX 2026-02-09d: Reload centroid icons on both centroids checkboxes.
-        
-        Re-polishing can clear programmatically-set icons on QCheckBox widgets.
-        """
-        import os
-        from qgis.PyQt import QtGui
-        icon_path = os.path.join(self.plugin_dir, "icons", "centroid.png") if hasattr(self, 'plugin_dir') else ""
-        if not icon_path or not os.path.exists(icon_path):
-            return
-        try:
-            from .ui.icons import get_themed_icon, ICON_THEME_AVAILABLE
-        except ImportError:
-            ICON_THEME_AVAILABLE = False
-        icon = get_themed_icon(icon_path) if ICON_THEME_AVAILABLE else QtGui.QIcon(icon_path)
-        for cb_name in ('checkBox_filtering_use_centroids_source_layer',
-                        'checkBox_filtering_use_centroids_distant_layers'):
-            cb = getattr(self, cb_name, None)
-            if cb is not None:
-                cb.setIcon(icon)
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""
@@ -631,7 +539,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def manageSignal(self, widget_path, custom_action=None, custom_signal_name=None):
         """v4.0 S16: Manage signal connection/disconnection.
         
-        DEPRECATED Note: Use self.signal_manager.manage_signal() instead.
+        DEPRECATED v5.0: Use self.signal_manager.manage_signal() instead.
         This method delegates to DockwidgetSignalManager and syncs caches.
         """
         if not isinstance(widget_path, list) or len(widget_path) != 2:
@@ -649,7 +557,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
-            # Note: Sync cache with signal manager
+            # v5.0: Sync cache with signal manager
             self._signal_manager._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         return True if state is None and widget_object["SIGNALS"] else state
@@ -756,27 +664,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         logger.debug(f"Created multiple selection widget: {self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection}")
         
         # Create custom combobox widgets early so configure_widgets() can reference them
-        # FIX 2026-02-09b: Create dynamic widgets with the CORRECT parent widget
-        # (FILTERING/EXPORTING page), NOT dockWidgetContents. Widgets parented to
-        # dockWidgetContents are invisible inside QToolBox pages because Qt clips
-        # rendering to the widget's actual parent, not to the layout owner.
         from .ui.widgets.custom_widgets import QgsCheckableComboBoxLayer
-        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
+        self.checkableComboBoxLayer_filtering_layers_to_filter = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_filtering_layers_to_filter.show()
         logger.debug(f"Created filtering layers widget: {self.checkableComboBoxLayer_filtering_layers_to_filter}")
-
-        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.EXPORTING)
+        
+        self.checkableComboBoxLayer_exporting_layers = QgsCheckableComboBoxLayer(self.dockWidgetContents)
+        # Height managed by QSS (20px standard)
         self.checkableComboBoxLayer_exporting_layers.show()
         logger.debug(f"Created exporting layers widget: {self.checkableComboBoxLayer_exporting_layers}")
-
-        # v5.4: Create raster filtering section custom widgets
-        self.checkableComboBoxLayer_filtering_raster_layers_to_filter = QgsCheckableComboBoxLayer(self.FILTERING)
-        self.checkableComboBoxLayer_filtering_raster_layers_to_filter.show()
-        logger.debug(f"Created raster filtering layers widget: {self.checkableComboBoxLayer_filtering_raster_layers_to_filter}")
-
-        # Create centroids checkbox with correct parent
+        
+        # Create centroids checkbox BEFORE configure_widgets() to ensure it's in the registry
         from qgis.PyQt import QtWidgets
-        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.FILTERING)
+        self.checkBox_filtering_use_centroids_distant_layers = QtWidgets.QCheckBox(self.dockWidgetContents)
         self.checkBox_filtering_use_centroids_distant_layers.setObjectName("checkBox_filtering_use_centroids_distant_layers")
         logger.debug(f"Created centroids distant layers checkbox: {self.checkBox_filtering_use_centroids_distant_layers}")
         
@@ -784,12 +685,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         from .ui.managers.configuration_manager import ConfigurationManager
         if self._configuration_manager is None:
             self._configuration_manager = ConfigurationManager(self)
-        
-        # Note: Initialize Dual QToolBox container (if enabled)
-        self._dual_toolbox_container = None
-        self._toolbox_bridge = None
-        if DUAL_TOOLBOX_ENABLED and DUAL_TOOLBOX_AVAILABLE:
-            self._setup_dual_toolbox()
         
         if self._splitter_manager:
             self._splitter_manager.setup()
@@ -799,76 +694,66 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._fix_toolbox_icons()
         self._setup_backend_indicator()
         self._setup_action_bar_layout()
-        # FIX 2026-02-09: Protect each tab setup independently so failure in one
-        # does not prevent the others (and subsequent icon loading) from running.
-        for setup_fn in [self._setup_exploring_tab_widgets,
-                         self._setup_filtering_tab_widgets,
-                         self._setup_exporting_tab_widgets]:
-            try:
-                setup_fn()
-            except Exception as e:
-                logger.error(f"setupUiCustom: {setup_fn.__name__} FAILED: {e}", exc_info=True)
+        self._setup_exploring_tab_widgets()
+        self._setup_filtering_tab_widgets()
+        self._setup_exporting_tab_widgets()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
             self.project_props = self.CONFIG_DATA["CURRENT_PROJECT"]
         self.manage_configuration_model()
-        try:
-            self.dockwidget_widgets_configuration()
-        except Exception as e:
-            logger.error(f"setupUiCustom: dockwidget_widgets_configuration FAILED: {e}", exc_info=True)
+        self.dockwidget_widgets_configuration()
         self._load_all_pushbutton_icons()
-        self._load_raster_tool_icons()  # Delegates to manager if available
         self._setup_truncation_tooltips()
     
     def _load_all_pushbutton_icons(self):
         """v4.0 S16: Load icons from config.
-
+        
         v4.0.3: Fixed icon sizes extraction to support both int and dict formats.
         """
         try:
             pb_cfg = self.CONFIG_DATA.get("APP", {}).get("DOCKWIDGET", {}).get("PushButton", {})
             icons, sizes = pb_cfg.get("ICONS", {}), pb_cfg.get("ICONS_SIZES", {})
-
+            
             # Extract sizes - support both int direct and dict with "value" key
             sz_act_raw = sizes.get("ACTION", 24)
             sz_act = sz_act_raw.get("value", 24) if isinstance(sz_act_raw, dict) else sz_act_raw
-
+            
             sz_oth_raw = sizes.get("OTHERS", 20)
             sz_oth = sz_oth_raw.get("value", 20) if isinstance(sz_oth_raw, dict) else sz_oth_raw
-
+            
             if not icons:
-                logger.warning("_load_all_pushbutton_icons: No icons in CONFIG_DATA")
+                logger.warning("_load_all_pushbutton_icons: No icons found in CONFIG_DATA")
+                logger.warning(f"CONFIG_DATA has APP: {bool(self.CONFIG_DATA.get('APP'))}")
+                logger.warning(f"PushButton config exists: {bool(pb_cfg)}")
                 return
-
+            
             loaded_count = 0
-            missing_widgets = []
-            missing_files = []
-            for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING", "RASTER_EXPLORING"]:
+            for grp in ["ACTION", "EXPLORING", "FILTERING", "EXPORTING"]:
                 sz = sz_act if grp == "ACTION" else sz_oth
                 icons_grp = icons.get(grp, {})
+                logger.info(f"Group {grp}: {len(icons_grp)} icons configured")
                 for name, ico_file in icons_grp.items():
                     attr = self._get_widget_attr_name(grp, name)
                     if not attr:
+                        logger.debug(f"_load_all_pushbutton_icons: No mapping for {grp}.{name}")
                         continue
                     if not hasattr(self, attr):
-                        missing_widgets.append(f"{grp}.{name}={attr}")
+                        logger.warning(f"_load_all_pushbutton_icons: Widget {attr} not found for {grp}.{name}")
                         continue
                     w, p = getattr(self, attr), os.path.join(self.plugin_dir, "icons", ico_file)
                     if not os.path.exists(p):
-                        missing_files.append(f"{ico_file}")
+                        logger.warning(f"_load_all_pushbutton_icons: Icon file not found: {p}")
                         continue
                     icon = get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p)
                     w.setIcon(icon)
                     w.setIconSize(QtCore.QSize(sz, sz))
                     loaded_count += 1
-
-            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons")
-            if missing_widgets:
-                logger.debug(f"Missing widgets: {missing_widgets}")
-            if missing_files:
-                logger.warning(f"Missing icon files: {missing_files}")
-
+                    logger.info(f"✓ {grp}.{name}: {ico_file}")
+            
+            logger.info(f"_load_all_pushbutton_icons: Loaded {loaded_count} icons TOTAL")
         except Exception as e:
-            logger.error(f"_load_all_pushbutton_icons: {e}", exc_info=True)
+            logger.error(f"_load_all_pushbutton_icons failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
     
     def _get_widget_attr_name(self, widget_group, widget_name):
         """v3.1 Sprint 14: Map config names to widget attribute names."""
@@ -896,1878 +781,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPORTING", "HAS_STYLES_TO_EXPORT"): "pushButton_checkable_exporting_styles",
             ("EXPORTING", "HAS_DATATYPE_TO_EXPORT"): "pushButton_checkable_exporting_datatype",
             ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
-            ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip",
-            # RASTER FILTERING buttons (v5.4)
-            ("FILTERING", "HAS_RASTER_SOURCE"): "pushButton_checkable_filtering_raster_source",
-            ("FILTERING", "HAS_RASTER_LAYERS_TO_FILTER"): "pushButton_checkable_filtering_raster_layers_to_filter",
-            ("FILTERING", "HAS_RASTER_COMBINE_OPERATOR"): "pushButton_checkable_filtering_raster_combine_operator",
-            ("FILTERING", "HAS_RASTER_PREDICATES"): "pushButton_checkable_filtering_raster_predicates",
-            ("FILTERING", "HAS_SAMPLING_METHOD"): "pushButton_checkable_filtering_sampling_method",
-            # RASTER_EXPLORING buttons
-            ("RASTER_EXPLORING", "PIXEL_PICKER"): "pushButton_raster_pixel_picker",
-            ("RASTER_EXPLORING", "RECT_PICKER"): "pushButton_raster_rect_picker",
-            ("RASTER_EXPLORING", "SYNC_HISTOGRAM"): "pushButton_raster_sync_histogram",
-            ("RASTER_EXPLORING", "ALL_BANDS"): "pushButton_raster_all_bands",
-            ("RASTER_EXPLORING", "RESET_RANGE"): "pushButton_raster_reset_range"}
+            ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip"}
         return widget_map.get((widget_group, widget_name), "")
-
-    def _load_raster_tool_icons(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._load_tool_icons()
-
-    def _setup_dual_toolbox(self):
-        """Note: Setup the new Dual QToolBox architecture.
-        
-        Creates and integrates the DualToolBoxContainer which provides:
-        - EXPLORING QToolBox (Vector/Raster pages with auto-switch)
-        - TOOLSET QToolBox (Filtering/Exporting/Configuration pages)
-        - Integration bridge for signal routing
-        
-        This replaces the legacy frame_exploring and toolBox_tabTools widgets
-        when DUAL_TOOLBOX_ENABLED is True.
-        """
-        if not DUAL_TOOLBOX_AVAILABLE:
-            logger.warning("Dual QToolBox DualToolBox not available - using legacy UI")
-            return
-        
-        try:
-            logger.info("Note: Setting up Dual QToolBox architecture...")
-            
-            # Create the container
-            self._dual_toolbox_container = DualToolBoxContainer(self)
-            self._dual_toolbox_container.hide()  # Not displayed - used only for signal bridge
-            self._toolbox_bridge = self._dual_toolbox_container.get_bridge()
-            
-            # Connect bridge signals to dockwidget handlers
-            self._connect_toolbox_bridge_signals()
-            
-            # --- EXPLORING QToolBox ---
-            # Note: Use native toolBox_exploring from .ui file instead of dynamic creation
-            # The UI now has toolBox_exploring with page_exploring_vector and page_exploring_raster
-            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
-            
-            if hasattr(self, 'toolBox_exploring'):
-                # Note: Native QToolBox exists in UI - use it directly
-                # The DualToolBoxContainer's exploring_toolbox is used for signal routing
-                # but we keep the native UI toolBox_exploring visible
-                logger.debug("Note: Using native toolBox_exploring from UI file")
-                # Connect native UI toolBox signals to the bridge
-                self._connect_native_exploring_toolbox_signals()
-            elif hasattr(self, 'frame_exploring') and hasattr(self, 'verticalLayout_main_content'):
-                # Fallback: Insert dynamically created toolbox
-                self.verticalLayout_main_content.insertWidget(0, exploring_tb)
-                logger.debug("Note: EXPLORING QToolBox inserted into frame_exploring (fallback)")
-            
-            # Hide legacy exploring content (scrollArea if it exists)
-            if hasattr(self, 'scrollArea_frame_exploring'):
-                self.scrollArea_frame_exploring.hide()
-            
-            # --- TOOLSET QToolBox ---
-            # Use placeholder widget from .ui file if available, otherwise insert dynamically
-            toolset_tb = self._dual_toolbox_container.get_toolset_toolbox()
-            
-            if hasattr(self, 'widget_toolset_placeholder'):
-                # Note: Use the placeholder from .ui file (without v5 prefix)
-                placeholder_layout = self.widget_toolset_placeholder.layout()
-                if placeholder_layout is None:
-                    from qgis.PyQt.QtWidgets import QVBoxLayout
-                    placeholder_layout = QVBoxLayout(self.widget_toolset_placeholder)
-                    placeholder_layout.setContentsMargins(0, 0, 0, 0)
-                placeholder_layout.addWidget(toolset_tb)
-                self.widget_toolset_placeholder.show()
-                logger.debug("Note: TOOLSET QToolBox added to UI placeholder widget")
-            elif hasattr(self, 'frame_toolset') and hasattr(self, 'verticalLayout_filtering_container'):
-                # Fallback: Insert dynamically
-                self.verticalLayout_filtering_container.insertWidget(0, toolset_tb)
-                logger.debug("Note: TOOLSET QToolBox inserted into frame_toolset (fallback)")
-            
-            # Hide legacy toolBox
-            if hasattr(self, 'toolBox_tabTools'):
-                self.toolBox_tabTools.hide()
-            
-            logger.info("✅ Dual QToolBox Dual QToolBox architecture initialized successfully")
-            
-            # Load config values into ConfigurationPage
-            self._load_config_into_toolbox()
-            
-        except Exception as e:
-            logger.error(f"Dual QToolBox DualToolBox setup failed: {e}", exc_info=True)
-            self._dual_toolbox_container = None
-            self._toolbox_bridge = None
-    
-    def _connect_native_exploring_toolbox_signals(self):
-        """Note: Connect signals from native UI toolBox_exploring widgets.
-        
-        This method connects the widgets defined in the .ui file (toolBox_exploring,
-        page_exploring_vector, page_exploring_raster) to the filter engine.
-        """
-        try:
-            # Connect toolBox_exploring page changes for auto-switch
-            if hasattr(self, 'toolBox_exploring'):
-                self.toolBox_exploring.currentChanged.connect(self._on_native_exploring_page_changed)
-                logger.debug("Note: Connected toolBox_exploring.currentChanged")
-                
-                # v5.2 FIX 2026-01-31: Disable manual page switching - depends on current layer type
-                self._disable_toolbox_manual_switch()
-            
-            # Phase 3.1: Initialize RasterExploringManager (handles all raster setup)
-            try:
-                from .ui.managers.raster_exploring_manager import RasterExploringManager
-                self._raster_manager = RasterExploringManager(self)
-                self._raster_manager.setup()
-            except ImportError:
-                logger.warning("RasterExploringManager not available, using inline setup")
-                self._raster_manager = None
-
-            # Connect raster page widgets to delegation stubs
-            if hasattr(self, 'comboBox_band'):
-                if isinstance(self.comboBox_band, QgsCheckableComboBoxBands):
-                    self.comboBox_band.currentBandChanged.connect(self._on_raster_band_changed)
-                    self.comboBox_band.checkedBandsChanged.connect(self._on_raster_bands_changed)
-                else:
-                    self.comboBox_band.currentIndexChanged.connect(self._on_raster_band_changed)
-            # H4/H5 fix: doubleSpinBox_min/max.valueChanged and comboBox_predicate.currentIndexChanged
-            # are already connected in RasterExploringManager._connect_combobox_triggers() with proper
-            # groupbox-active checks. Removed duplicate connections here to prevent double signal firing.
-            if hasattr(self, 'pushButton_refresh_stats'):
-                self.pushButton_refresh_stats.clicked.connect(self._on_refresh_raster_stats)
-
-            # v5.5: Connect vector stats refresh button
-            if hasattr(self, 'pushButton_vector_refresh_stats'):
-                self.pushButton_vector_refresh_stats.clicked.connect(self._on_refresh_vector_stats)
-
-            # v5.11: Connect histogram groupbox toggle (disconnect first to avoid duplication)
-            if hasattr(self, 'mGroupBox_raster_histogram'):
-                try:
-                    self.mGroupBox_raster_histogram.toggled.disconnect(self._on_histogram_groupbox_toggled)
-                except (TypeError, RuntimeError):
-                    pass
-                self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
-            
-            logger.info("Note: Native exploring toolbox signals connected")
-            
-        except Exception as e:
-            logger.error(f"Failed to connect native exploring toolbox signals: {e}")
-    
-    def _disable_toolbox_manual_switch(self):
-        """v5.2 FIX 2026-01-31: Disable manual page switching on toolBox_exploring.
-        
-        The page (vector/raster) is controlled ONLY by the type of layer selected
-        in comboBox_filtering_current_layer. User cannot manually click to switch pages.
-        
-        v5.3 FIX 2026-01-31: Keep icons styled as ACTIVE (not grayed out).
-        We block manual switching by reverting changes in currentChanged handler,
-        NOT by disabling the items (which causes grayed-out appearance).
-        
-        Strategy: Keep pages enabled (active style) but revert any manual change
-        back to the correct page based on current layer type.
-        """
-        try:
-            if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
-                return
-            
-            # v5.3: Keep all pages ENABLED (not grayed) - blocking is done in handler
-            # Do NOT call setItemEnabled(i, False) as it grays out the icons
-            
-            # Set flag to track that manual switching should be blocked
-            self._toolbox_manual_switch_blocked = True
-            
-            logger.info("🔒 toolBox_exploring manual switching blocked (icons remain active style)")
-            
-        except Exception as e:
-            logger.warning(f"Could not setup toolBox manual switch blocking: {e}")
-    
-    def _enable_toolbox_page_for_switch(self, index: int):
-        """v5.2 FIX 2026-01-31: Switch to a page programmatically.
-        
-        v5.3 FIX 2026-01-31: Pages are now always enabled (active style).
-        We just need to mark this as a programmatic change and switch.
-        """
-        try:
-            if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
-                return
-            
-            toolbox = self.toolBox_exploring
-            
-            # v5.3: Mark as programmatic change so handler doesn't revert it
-            self._programmatic_page_change = True
-            try:
-                toolbox.setCurrentIndex(index)
-            finally:
-                self._programmatic_page_change = False
-            
-        except Exception as e:
-            logger.warning(f"Could not switch toolBox page: {e}")
-    
-    def _setup_raster_scrollarea(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._setup_scrollarea()
-
-    def _setup_checkable_band_combobox(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._setup_checkable_band_combobox()
-
-    def _on_raster_bands_changed(self, band_indices: list):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_bands_changed(band_indices)
-
-    def _refresh_raster_stats_for_bands(self, band_indices: list):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._refresh_stats_for_bands(band_indices)
-
-    def _setup_raster_histogram_widget(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._setup_histogram_widget()
-
-    def _on_histogram_range_changed(self, min_val: float, max_val: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_histogram_range_changed(min_val, max_val)
-
-    def _on_histogram_range_finished(self, min_val: float, max_val: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_histogram_range_finished(min_val, max_val)
-
-    def _on_histogram_groupbox_toggled(self, checked: bool):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_histogram_groupbox_toggled(checked)
-
-    def _on_native_exploring_page_changed(self, index: int):
-        """Note: Handle page change in native toolBox_exploring.
-        
-        v5.3 FIX 2026-01-31: When user manually clicks on a page (Vector/Raster),
-        switch to the last used layer of that type and update comboBox_filtering_current_layer.
-        This provides a better UX - user can switch between vector and raster workflows.
-        
-        v5.4 FIX 2026-02-01: Uses _get_default_layer_for_page for smarter layer selection
-        (considers QGIS active layer first, then last used, then first available).
-        
-        v5.4.1 FIX 2026-02-01: Always switch to best layer of target type on manual click,
-        even if already on same type. This ensures comboBox is always synced.
-        
-        v5.4.2 FIX 2026-02-01: Also check layer TYPE mismatch, not just ID. If current layer
-        is vector but user clicked raster page (or vice versa), ALWAYS switch.
-        """
-        page_names = {0: 'vector', 1: 'raster'}
-        page_name = page_names.get(index, 'unknown')
-        logger.debug(f"Note: Exploring page changed to {page_name} (index {index})")
-        
-        # v5.3 FIX: If manual click (not programmatic), switch to best layer of that type
-        if not getattr(self, '_programmatic_page_change', False):
-            # User manually clicked on a page - switch to best layer of that type
-            # v5.4.1: Always try to switch to best layer of target type
-            target_layer = self._get_default_layer_for_page(index)
-            
-            if target_layer:
-                # Get current layer to check if we actually need to switch
-                current_layer = self._get_current_exploring_layer()
-                
-                # v5.4.2 FIX: Check if current layer type matches target page
-                # If user clicked on raster page, we need a raster layer
-                # If user clicked on vector page, we need a vector layer
-                current_is_wrong_type = False
-                if current_layer is not None:
-                    is_raster_page = (index == 1)
-                    current_is_raster = isinstance(current_layer, QgsRasterLayer)
-                    current_is_wrong_type = (is_raster_page != current_is_raster)
-                
-                # v5.4.2: Switch if no current layer OR different ID OR wrong type for this page
-                if current_layer is None or current_layer.id() != target_layer.id() or current_is_wrong_type:
-                    logger.info(f"🔄 Manual switch to {page_name} - updating comboBox to: {target_layer.name()}")
-                    # Switch the combobox to the target layer (this updates comboBox_filtering_current_layer)
-                    self._switch_to_layer(target_layer)
-                else:
-                    logger.debug(f"🔄 Manual switch to {page_name} - already on correct layer: {target_layer.name()}")
-            else:
-                # No layer of that type available - revert to current page if possible
-                layer = self._get_current_exploring_layer()
-                if layer:
-                    is_raster = isinstance(layer, QgsRasterLayer)
-                    current_type_index = 1 if is_raster else 0
-                    if current_type_index >= 0 and current_type_index != index:
-                        logger.warning(f"🔒 No {page_name} layer available - staying on current page")
-                        self._programmatic_page_change = True
-                        try:
-                            self.toolBox_exploring.blockSignals(True)
-                            self.toolBox_exploring.setCurrentIndex(current_type_index)
-                        finally:
-                            self.toolBox_exploring.blockSignals(False)
-                            self._programmatic_page_change = False
-                else:
-                    logger.warning(f"🔒 No {page_name} layer available and no current layer")
-        
-        # Notify the bridge if available
-        if hasattr(self, '_toolbox_bridge') and self._toolbox_bridge:
-            self._toolbox_bridge.layerSwitched.emit(page_name)
-    
-    def _get_last_layer_by_type(self, page_index: int):
-        """v5.3 FIX 2026-01-31: Get the last used layer of the specified type.
-        
-        Args:
-            page_index: 0 for vector, 1 for raster
-            
-        Returns:
-            Last used layer of that type, or first available layer of that type,
-            or None if no layers of that type exist.
-        """
-        try:
-            if page_index == 0:  # Vector
-                # Try last used vector layer first
-                if self._last_vector_layer_id:
-                    layer = self.PROJECT.mapLayer(self._last_vector_layer_id)
-                    if layer and isinstance(layer, QgsVectorLayer):
-                        return layer
-                # Fallback to first vector layer
-                for layer in self.PROJECT.mapLayers().values():
-                    if isinstance(layer, QgsVectorLayer):
-                        return layer
-            else:  # Raster
-                # Try last used raster layer first
-                if self._last_raster_layer_id:
-                    layer = self.PROJECT.mapLayer(self._last_raster_layer_id)
-                    if layer and isinstance(layer, QgsRasterLayer):
-                        return layer
-                # Fallback to first raster layer
-                for layer in self.PROJECT.mapLayers().values():
-                    if isinstance(layer, QgsRasterLayer):
-                        return layer
-            return None
-        except Exception as e:
-            logger.warning(f"Error getting last layer by type: {e}")
-            return None
-    
-    def _switch_to_layer(self, layer):
-        """v5.3 FIX 2026-01-31: Switch current layer combobox to the specified layer.
-        
-        This triggers the normal layer change flow which updates all widgets.
-        Uses QgsMapLayerComboBox.setLayer() for proper layer selection.
-        
-        v5.4.1 FIX 2026-02-01: Explicitly call current_layer_changed after setLayer()
-        because setLayer() may not always emit layerChanged signal.
-        
-        v5.4.2 FIX 2026-02-01: Check if setLayer() actually changed the layer, and
-        force current_layer_changed if the combobox layer doesn't match.
-        """
-        try:
-            if layer is None:
-                logger.warning("_switch_to_layer: layer is None, skipping")
-                return False
-            
-            logger.debug(f"_switch_to_layer: layer={layer.name()}, type={type(layer).__name__}")
-                
-            if hasattr(self, 'comboBox_filtering_current_layer') and self.comboBox_filtering_current_layer:
-                # v5.4.2: Check current layer before setLayer
-                old_layer = self.comboBox_filtering_current_layer.currentLayer()
-                
-                # Use setLayer() which is the proper method for QgsMapLayerComboBox
-                self.comboBox_filtering_current_layer.setLayer(layer)
-                
-                # v5.4.2: Verify the layer was actually set
-                new_layer = self.comboBox_filtering_current_layer.currentLayer()
-                
-                if new_layer and new_layer.id() == layer.id():
-                    logger.info(f"✓ Switched comboBox_filtering_current_layer to: {layer.name()}")
-                else:
-                    logger.warning(f"⚠️ setLayer() didn't change combobox to expected layer. Expected: {layer.name()}, Got: {new_layer.name() if new_layer else 'None'}")
-                
-                # v5.4.1 FIX: Explicitly trigger current_layer_changed 
-                # because setLayer() may not emit layerChanged signal if layer was already set
-                # or if signals are blocked
-                try:
-                    self.current_layer_changed(layer, manual_change=True)
-                    logger.debug(f"✓ Explicitly called current_layer_changed for: {layer.name()}")
-                except Exception as e:
-                    logger.warning(f"Error in explicit current_layer_changed call: {e}")
-                
-                return True
-            else:
-                # Fallback: directly call current_layer_changed
-                logger.debug("comboBox_filtering_current_layer not available, calling current_layer_changed directly")
-                self.current_layer_changed(layer, manual_change=True)
-                return True
-        except Exception as e:
-            logger.warning(f"Error switching to layer: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def _update_last_layer_by_type(self, layer):
-        """v5.3 FIX 2026-01-31: Update the last used layer tracking.
-        
-        Called when a layer becomes active to remember it for manual switching.
-        """
-        if layer is None:
-            return
-        try:
-            if isinstance(layer, QgsVectorLayer):
-                self._last_vector_layer_id = layer.id()
-                logger.debug(f"Updated last vector layer: {layer.name()}")
-            elif isinstance(layer, QgsRasterLayer):
-                self._last_raster_layer_id = layer.id()
-                logger.debug(f"Updated last raster layer: {layer.name()}")
-        except Exception as e:
-            logger.debug(f"Could not update last layer tracking: {e}")
-    
-    def _get_project_layers_by_type(self):
-        """v5.4 FIX 2026-02-01: Get lists of vector and raster layers in project.
-        
-        Returns:
-            tuple: (vector_layers, raster_layers) lists
-        """
-        vector_layers = []
-        raster_layers = []
-        try:
-            if self.PROJECT:
-                for layer in self.PROJECT.mapLayers().values():
-                    if isinstance(layer, QgsVectorLayer):
-                        vector_layers.append(layer)
-                    elif isinstance(layer, QgsRasterLayer):
-                        raster_layers.append(layer)
-        except Exception as e:
-            logger.warning(f"Error getting layers by type: {e}")
-        return vector_layers, raster_layers
-    
-    def _update_exploring_pages_availability(self):
-        """v5.4 FIX 2026-02-01: Update toolBox_exploring pages based on layer availability.
-        
-        Disables/enables the Vector page (index 0) and Raster page (index 1) 
-        based on whether layers of that type exist in the project.
-        
-        When a page becomes available and is the only type with layers,
-        automatically switches to that page.
-        """
-        try:
-            if not hasattr(self, 'toolBox_exploring') or self.toolBox_exploring is None:
-                return
-            
-            vector_layers, raster_layers = self._get_project_layers_by_type()
-            has_vectors = len(vector_layers) > 0
-            has_rasters = len(raster_layers) > 0
-            
-            toolbox = self.toolBox_exploring
-            current_index = toolbox.currentIndex()
-            
-            # Enable/disable pages based on layer availability
-            # Note: setItemEnabled(index, False) grays out the page header
-            toolbox.setItemEnabled(0, has_vectors)  # Vector page
-            toolbox.setItemEnabled(1, has_rasters)  # Raster page
-            
-            logger.info(f"🔄 Exploring pages availability: Vector={has_vectors}, Raster={has_rasters}")
-            
-            # Auto-switch logic when current page becomes unavailable
-            if current_index == 0 and not has_vectors and has_rasters:
-                # Currently on Vector page but no vectors - switch to Raster
-                logger.info("🔄 No vector layers - auto-switching to Raster page")
-                self._programmatic_page_change = True
-                try:
-                    toolbox.setCurrentIndex(1)
-                    # Also switch to first raster layer
-                    if raster_layers:
-                        self._switch_to_layer(raster_layers[0])
-                finally:
-                    self._programmatic_page_change = False
-                    
-            elif current_index == 1 and not has_rasters and has_vectors:
-                # Currently on Raster page but no rasters - switch to Vector
-                logger.info("🔄 No raster layers - auto-switching to Vector page")
-                self._programmatic_page_change = True
-                try:
-                    toolbox.setCurrentIndex(0)
-                    # Also switch to first vector layer
-                    if vector_layers:
-                        self._switch_to_layer(vector_layers[0])
-                finally:
-                    self._programmatic_page_change = False
-            
-            # Handle case where no layers of either type exist
-            if not has_vectors and not has_rasters:
-                logger.debug("No layers in project - both pages remain as-is")
-                
-        except Exception as e:
-            logger.warning(f"Error updating exploring pages availability: {e}")
-    
-    def _get_default_layer_for_page(self, page_index: int):
-        """v5.4 FIX 2026-02-01: Get the default layer when switching to a page.
-        
-        Priority:
-        1. QGIS active layer (if it's the right type)
-        2. Last used layer of that type
-        3. First layer of that type
-        
-        Args:
-            page_index: 0 for vector, 1 for raster
-            
-        Returns:
-            Default layer to use, or None if no layers of that type exist
-        """
-        try:
-            target_type = QgsVectorLayer if page_index == 0 else QgsRasterLayer
-            type_name = "vector" if page_index == 0 else "raster"
-            
-            # 1. Check if QGIS active layer is the right type
-            active_layer = self.iface.activeLayer() if hasattr(self, 'iface') and self.iface else None
-            if active_layer and isinstance(active_layer, target_type):
-                return active_layer
-            
-            # 2. Try last used layer of this type
-            last_layer = self._get_last_layer_by_type(page_index)
-            if last_layer:
-                return last_layer
-            
-            # 3. Fall back to first layer of this type
-            vector_layers, raster_layers = self._get_project_layers_by_type()
-            if page_index == 0 and vector_layers:
-                return vector_layers[0]
-            elif page_index == 1 and raster_layers:
-                return raster_layers[0]
-            
-            logger.debug(f"_get_default_layer_for_page: no {type_name} layer found")
-            return None
-        except Exception as e:
-            logger.warning(f"Error getting default layer for page {page_index}: {e}")
-            return None
-    
-    def _on_raster_band_changed(self, index: int):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_band_changed(index)
-
-    def _on_refresh_vector_stats(self):
-        """v5.5: Refresh vector statistics for current layer.
-        
-        Updates the label_vector_stats and label_vector_metadata labels
-        with current layer statistics.
-        """
-        logger.debug("v5.5: Refresh vector stats requested")
-        
-        # Get current layer
-        layer = self._get_current_exploring_layer()
-        
-        if layer and isinstance(layer, QgsVectorLayer):
-            self._update_vector_stats(layer)
-        else:
-            logger.warning("v5.5: Cannot refresh stats - no vector layer selected")
-    
-    def _update_vector_stats(self, layer: 'QgsVectorLayer') -> None:
-        """v5.5: Update vector stats header labels for the given layer.
-        
-        Updates:
-        - label_vector_stats: Features count, selected, filtered
-        - label_vector_metadata: Provider, geometry type, CRS
-        
-        Args:
-            layer: QgsVectorLayer to display stats for
-        """
-        try:
-            if not layer or not isinstance(layer, QgsVectorLayer):
-                self._clear_vector_stats()
-                return
-            
-            # === Stats Line ===
-            total_features = layer.featureCount()
-            selected_count = layer.selectedFeatureCount()
-            
-            # Check if layer has a subset string (filter applied)
-            subset_string = layer.subsetString()
-            if subset_string:
-                # Filtered count is the current feature count (after filter)
-                filtered_count = total_features
-                # Get original count by temporarily removing filter
-                # (Note: this is expensive, so we estimate based on data source)
-                try:
-                    # Try to get total from provider
-                    original_count = layer.dataProvider().featureCount() if layer.dataProvider() else total_features
-                except:
-                    original_count = total_features
-                
-                if original_count > 0:
-                    filter_pct = f"{(filtered_count / original_count * 100):.0f}%"
-                else:
-                    filter_pct = "-"
-                stats_text = f"📊 Features: {total_features:,} | Selected: {selected_count:,} | Filtered: {filtered_count:,} ({filter_pct})"
-            else:
-                stats_text = f"📊 Features: {total_features:,} | Selected: {selected_count:,} | Filtered: - (no filter)"
-            
-            # === Metadata Line ===
-            # Provider type
-            provider_type = layer.providerType()
-            provider_map = {
-                'postgres': 'PostgreSQL',
-                'spatialite': 'SpatiaLite', 
-                'ogr': 'OGR',
-                'memory': 'Memory',
-                'delimitedtext': 'CSV',
-                'wfs': 'WFS',
-                'gpkg': 'GeoPackage'
-            }
-            provider_display = provider_map.get(provider_type, provider_type.title())
-            
-            # Geometry type
-            from qgis.core import QgsWkbTypes
-            geom_type = QgsWkbTypes.displayString(layer.wkbType())
-            
-            # CRS
-            crs = layer.crs()
-            crs_display = crs.authid() if crs.isValid() else "No CRS"
-            
-            metadata_text = f"Data: {provider_display} | Geom: {geom_type} | CRS: {crs_display}"
-            
-            # Update labels
-            if hasattr(self, 'label_vector_stats'):
-                self.label_vector_stats.setText(stats_text)
-            if hasattr(self, 'label_vector_metadata'):
-                self.label_vector_metadata.setText(metadata_text)
-            
-            logger.debug(f"v5.5: Updated vector stats for '{layer.name()}'")
-            
-        except Exception as e:
-            logger.error(f"v5.5: Failed to update vector stats: {e}")
-            self._clear_vector_stats()
-    
-    def _clear_vector_stats(self):
-        """v5.5: Clear vector stats labels to default values."""
-        if hasattr(self, 'label_vector_stats'):
-            self.label_vector_stats.setText(self.tr("📊 Features: - | Selected: - | Filtered: - (-)"))
-        if hasattr(self, 'label_vector_metadata'):
-            self.label_vector_metadata.setText(self.tr("Data: - | Geom: - | CRS: -"))
-
-    def _on_refresh_raster_stats(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_refresh_stats()
-
-    def _on_pixel_picker_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_pixel_picker_button_clicked()
-
-    def _on_pixel_values_picked(self, min_val: float, max_val: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_pixel_values_picked(min_val, max_val)
-
-    def _on_single_pixel_picked(self, value: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_single_pixel_picked(value)
-
-    def _on_pixel_picked_with_coords(self, value: float, x: float, y: float):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_pixel_picked_with_coords(value, x, y)
-
-    def _on_all_bands_picked(self, values: list):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_all_bands_picked(values)
-
-    def _deactivate_pixel_picker_tool(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._deactivate_pixel_picker_tool()
-    
-    def _on_add_pixel_to_selection_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_add_pixel_to_selection_clicked()
-
-    def _on_pixel_picking_finished(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_pixel_picking_finished()
-
-    def _connect_raster_tool_buttons(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._setup_tool_buttons()
-
-    def _on_raster_button_group_toggled(self, button, checked):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_button_group_toggled(button, checked)
-
-    def _connect_raster_combobox_triggers(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._connect_combobox_triggers()
-
-    def _on_raster_combobox_predicate_trigger(self, index):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_combobox_predicate_trigger(index)
-
-    def _on_raster_spinbox_range_trigger(self, value):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_spinbox_range_trigger(value)
-
-    def _on_raster_rect_spinbox_trigger(self, value):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_rect_spinbox_trigger(value)
-
-    def _trigger_raster_combobox_for_groupbox(self, groupbox):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._trigger_combobox_for_groupbox(groupbox)
-
-    def _update_raster_filter_from_ui(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._update_filter_from_ui()
-
-    def _on_raster_tool_button_toggled(self, groupbox, checked):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_tool_button_toggled(groupbox, checked)
-
-    def _sync_raster_button_from_groupbox(self, button, checked):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._sync_button_from_groupbox(button, checked)
-
-    def _on_raster_groupbox_collapsed_changed(self, groupbox, collapsed):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_groupbox_collapsed_changed(groupbox, collapsed)
-
-    def _ensure_raster_exclusive_groupbox(self, current_groupbox, checked):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._ensure_exclusive_groupbox(current_groupbox, checked)
-
-    def _uncheck_raster_tool_buttons(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._uncheck_tool_buttons()
-
-    def _initialize_raster_groupbox_exclusive_state(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._initialize_groupbox_exclusive_state()
-
-    def _update_raster_tool_buttons_state(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._update_tool_buttons_state()
-
-    def _on_raster_pixel_picker_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_pixel_picker_button_clicked()
-
-    def _on_raster_rect_picker_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_rect_picker_clicked()
-
-    def _on_raster_sync_histogram_action(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_sync_histogram_action()
-
-    def _on_raster_sync_histogram_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_sync_histogram_clicked()
-
-    def _on_raster_all_bands_toggled(self, checked: bool):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_all_bands_toggled(checked)
-
-    def _on_raster_all_bands_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_all_bands_clicked()
-
-    def _on_raster_reset_range_clicked(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_reset_range_clicked()
-
-    def _refresh_raster_statistics(self, force_full_scan: bool = False, layer=None):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._refresh_statistics(force_full_scan, layer)
-
-    def _refresh_raster_statistics_async(self, layer, band_index: int, force_full_scan: bool = False):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._refresh_statistics_async(layer, band_index, force_full_scan)
-
-    def _refresh_raster_statistics_sync(self, layer, band_index: int, force_full_scan: bool = False):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._refresh_statistics_sync(layer, band_index, force_full_scan)
-
-    def _show_raster_statistics_loading(self, layer_name: str, band_index: int):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._show_statistics_loading(layer_name, band_index)
-
-    def _on_raster_stats_computed(self, stats: dict):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_stats_computed(stats)
-
-    def _on_raster_stats_failed(self, error_message: str):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._on_stats_failed(error_message)
-
-    def _update_raster_statistics_display(self, min_val, max_val, mean_val, stddev_val, 
-                                          nodata_val, band_index, layer):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._update_statistics_display(min_val, max_val, mean_val, stddev_val, nodata_val, band_index, layer)
-
-    def _clear_raster_statistics_display(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.clear_statistics_display()
-
-    def _get_raster_data_type_name(self, data_type):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            return self._raster_manager._get_data_type_name(data_type)
-        return ""
-
-    def _update_vector_statistics_display(self, layer=None):
-        """Update vector layer statistics display.
-        
-        Similar to raster stats, displays:
-        - Line 1: Features count, Selected count, Fields count, Geometry type
-        - Line 2: Provider type, CRS, Extent
-        - Line 3: Filter status with expression preview
-        
-        Args:
-            layer: QgsVectorLayer to display stats for. If None, tries to get current layer.
-        """
-        from qgis.core import QgsVectorLayer
-        
-        # Get layer if not provided
-        if layer is None:
-            layer = self._get_current_exploring_layer()
-        
-        # Clear stats if no valid vector layer
-        if not layer or not isinstance(layer, QgsVectorLayer):
-            self._clear_vector_statistics_display()
-            return
-        
-        try:
-            # Line 1: Layer metrics
-            total = layer.featureCount()
-            selected = layer.selectedFeatureCount()
-            sel_pct = (selected / total * 100) if total > 0 else 0
-            fields_count = len(layer.fields())
-            
-            # Geometry type mapping
-            geom_map = {0: "Point", 1: "Line", 2: "Polygon", 3: "Unknown", 4: "Null"}
-            geom = geom_map.get(layer.geometryType(), "Unknown")
-            
-            if hasattr(self, 'label_vector_stats'):
-                self.label_vector_stats.setText(
-                    f"📊 Features: {total:,} | Selected: {selected:,} ({sel_pct:.1f}%) | Fields: {fields_count} | Geom: {geom}"
-                )
-            
-            # Line 2: Data source info
-            provider = layer.providerType()
-            provider_names = {
-                'postgres': 'PostgreSQL',
-                'spatialite': 'Spatialite', 
-                'ogr': 'OGR/File',
-                'memory': 'Memory',
-                'wfs': 'WFS',
-                'gpx': 'GPX'
-            }
-            provider_display = provider_names.get(provider, provider.title() if provider else "Unknown")
-            
-            crs = layer.crs().authid() if layer.crs().isValid() else "Unknown"
-            
-            # Extent with auto-unit
-            extent = layer.extent()
-            if not extent.isEmpty():
-                width = extent.width()
-                height = extent.height()
-                # Detect unit based on CRS (geographic vs projected)
-                if layer.crs().isGeographic():
-                    ext_str = f"{width:.2f}°×{height:.2f}°"
-                elif width > 10000:
-                    ext_str = f"{width/1000:.1f}×{height/1000:.1f} km"
-                else:
-                    ext_str = f"{width:.0f}×{height:.0f} m"
-            else:
-                ext_str = "Empty"
-            
-            if hasattr(self, 'label_vector_metadata'):
-                self.label_vector_metadata.setText(f"Data: {provider_display} | CRS: {crs} | Extent: {ext_str}")
-            
-            # Line 3: Filter status
-            subset = layer.subsetString()
-            if hasattr(self, 'label_vector_filter_status'):
-                if subset:
-                    expr_preview = subset[:40] + "..." if len(subset) > 40 else subset
-                    self.label_vector_filter_status.setText(f"🔍 Filter: Active | {expr_preview}")
-                    self.label_vector_filter_status.setStyleSheet("color: #27ae60; font-size: 9px; font-weight: bold;")
-                else:
-                    self.label_vector_filter_status.setText(self.tr("🔍 Filter: None"))
-                    self.label_vector_filter_status.setStyleSheet("color: #666; font-size: 9px;")
-                    
-        except Exception as e:
-            logger.warning(f"Error updating vector stats display: {e}")
-            if hasattr(self, 'label_vector_stats'):
-                self.label_vector_stats.setText(self.tr("📊 Features: Error"))
-    
-    def _clear_vector_statistics_display(self):
-        """Clear vector statistics display when no vector layer is selected."""
-        if hasattr(self, 'label_vector_stats'):
-            self.label_vector_stats.setText(self.tr("📊 Features: -- | Selected: -- | Fields: -- | Geom: --"))
-        if hasattr(self, 'label_vector_metadata'):
-            self.label_vector_metadata.setText(self.tr("Data: -- | CRS: -- | Extent: --"))
-        if hasattr(self, 'label_vector_filter_status'):
-            self.label_vector_filter_status.setText(self.tr("🔍 Filter: None"))
-            self.label_vector_filter_status.setStyleSheet("color: #666; font-size: 9px;")
-    
-    def _get_current_exploring_layer(self):
-        """Note: Get the current layer being explored.
-        
-        Returns the layer from the current layer combobox or iface.activeLayer().
-        
-        v5.2 FIX 2026-01-31: Use currentLayer() method directly instead of
-        currentText() + mapLayersByName(). The text includes CRS suffix when
-        showCrs=true, which breaks layer lookup by name.
-        """
-        from qgis.utils import iface
-        
-        # Try to get from current layer combobox first using currentLayer() (FIX v5.2)
-        if hasattr(self, 'comboBox_filtering_current_layer'):
-            layer = self.comboBox_filtering_current_layer.currentLayer()
-            if layer:
-                return layer
-        
-        # Fallback to active layer
-        if iface and iface.activeLayer():
-            return iface.activeLayer()
-        
-        return None
-    
-    def _populate_raster_band_combobox(self, layer):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.populate_band_combobox(layer)
-
-    def _populate_raster_predicate_combobox(self):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.populate_predicate_combobox()
-
-    def _auto_switch_exploring_page(self, layer):
-        """Note: Auto-switch exploring toolbox page based on layer type.
-        
-        Automatically switches between vector (index 0) and raster (index 1) 
-        exploring pages in toolBox_exploring based on the layer type.
-        Also syncs the appropriate widgets for the layer type.
-        
-        v5.2 FIX 2026-01-31: Enhanced logging for debugging autoswitch issues.
-        
-        Args:
-            layer: QgsVectorLayer or QgsRasterLayer to switch page for
-        """
-        if not layer:
-            logger.debug("_auto_switch_exploring_page: No layer provided, returning early")
-            return
-        
-        try:
-            # Determine layer type
-            is_raster = isinstance(layer, QgsRasterLayer)
-            is_vector = isinstance(layer, QgsVectorLayer)
-            
-            # v5.2 FIX: Disable centroids checkboxes for raster layers (centroids only apply to vectors)
-            # Inline implementation instead of separate method
-            try:
-                if hasattr(self, 'checkBox_filtering_use_centroids_source_layer'):
-                    self.checkBox_filtering_use_centroids_source_layer.setEnabled(not is_raster)
-                if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
-                    self.checkBox_filtering_use_centroids_distant_layers.setEnabled(not is_raster)
-            except Exception as e:
-                logger.debug(f"Could not update centroids checkboxes: {e}")
-            
-            # v5.2 FIX: Check toolBox_exploring existence
-            has_toolbox = hasattr(self, 'toolBox_exploring')
-            toolbox_not_none = self.toolBox_exploring is not None if has_toolbox else False
-            
-            if has_toolbox and toolbox_not_none:
-                # v5.2 FIX: Log toolbox state for debugging
-                current_idx = self.toolBox_exploring.currentIndex()
-                page_count = self.toolBox_exploring.count()
-                logger.info(f"🔧 toolBox_exploring: current_index={current_idx}, page_count={page_count}")
-                
-                # v5.2 FIX: Mark as programmatic change to avoid handler interference
-                self._programmatic_page_change = True
-                try:
-                    if is_raster:
-                        # Switch to raster page (index 1)
-                        # v5.2 FIX: Use helper method that temporarily enables the page
-                        self._enable_toolbox_page_for_switch(1)
-                        logger.info(f"🔧 Toolbox: Auto-switched to RASTER exploring page (index 1) for '{layer.name()}'")
-                        
-                        # Sync raster-specific widgets
-                        self._sync_native_raster_widgets_with_layer(layer)
-                        
-                        # v5.2 FIX 2026-01-31: Also sync DualToolBox for rasters (same as vectors)
-                        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-                            self._sync_toolbox_exploring_with_layer(layer)
-                        
-                    elif is_vector:
-                        # Switch to vector page (index 0)
-                        # v5.2 FIX: Use helper method that temporarily enables the page
-                        self._enable_toolbox_page_for_switch(0)
-                        logger.info(f"🔧 Toolbox: Auto-switched to VECTOR exploring page (index 0) for '{layer.name()}'")
-                        
-                        # v5.5: Update vector stats header
-                        self._update_vector_stats(layer)
-                        
-                        # Sync vector-specific widgets via Dual QToolBox if available
-                        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-                            self._sync_toolbox_exploring_with_layer(layer)
-                    else:
-                        logger.warning(f"🔧 Toolbox: Unknown layer type for '{layer.name()}', defaulting to vector page")
-                        # v5.2 FIX: Use helper method that temporarily enables the page
-                        self._enable_toolbox_page_for_switch(0)
-                    
-                    # v5.2 FIX: Confirm the switch happened
-                    new_idx = self.toolBox_exploring.currentIndex()
-                    logger.info(f"🔧 toolBox_exploring: new_index={new_idx} (expected: {1 if is_raster else 0})")
-                finally:
-                    self._programmatic_page_change = False
-            else:
-                logger.warning("🔧 toolBox_exploring NOT FOUND - cannot switch pages")
-            
-            # v5.0: Sync FilteringPage source context when layer changes
-            self._sync_filtering_page_with_layer(layer)
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            logger.error(f"Toolbox: Error in _auto_switch_exploring_page: {e}")
-    
-    def _sync_filtering_page_with_layer(self, layer):
-        """Note: v5.0 Synchronize TOOLSET FilteringPage with current layer.
-        
-        Updates the source context display and refreshes target layers list
-        in the new FilteringPage when the current layer changes.
-        
-        Args:
-            layer: Current layer (QgsVectorLayer or QgsRasterLayer)
-        """
-        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
-            return
-        
-        try:
-            toolset = self._dual_toolbox_container.get_toolset_toolbox()
-            if not toolset:
-                return
-            
-            filtering_page = toolset.get_filtering_page()
-            if not filtering_page:
-                return
-            
-            # Build selection info based on layer type
-            selection_info = {}
-            
-            if isinstance(layer, QgsVectorLayer):
-                # Get selected features count from layer
-                selected_count = layer.selectedFeatureCount()
-                
-                # Try to get selection info from exploring widgets
-                if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
-                    feat = self.mFeaturePickerWidget_exploring_single_selection.feature()
-                    if feat.isValid():
-                        selected_count = 1
-                
-                selection_info = {
-                    'selected_count': selected_count,
-                    'selection_type': 'Single Selection' if selected_count == 1 else 'Multiple' if selected_count > 1 else 'None',
-                    'selection_value': '',
-                    'geometry_type': layer.geometryType().name if hasattr(layer.geometryType(), 'name') else str(layer.geometryType()),
-                }
-                
-            elif isinstance(layer, QgsRasterLayer):
-                # Get range values from spinboxes
-                min_val = self.doubleSpinBox_min.value() if hasattr(self, 'doubleSpinBox_min') else 0.0
-                max_val = self.doubleSpinBox_max.value() if hasattr(self, 'doubleSpinBox_max') else 0.0
-                
-                selection_info = {
-                    'min_value': min_val,
-                    'max_value': max_val,
-                    'predicate': self.comboBox_predicate.currentText() if hasattr(self, 'comboBox_predicate') else 'Within Range',
-                    'band': self.comboBox_band.currentIndex() + 1 if hasattr(self, 'comboBox_band') else 1,
-                    'data_type': 'Unknown',
-                }
-            
-            # Update FilteringPage source display
-            filtering_page.set_source(layer, selection_info)
-            
-            # Refresh target layers list
-            filtering_page.refresh_target_layers()
-            
-            # Also sync ExportingPage with filtered layers
-            self._sync_exporting_page_with_project_layers()
-            
-            logger.debug(f"FilteringPage synced with layer '{layer.name() if layer else 'None'}'")
-            
-        except Exception as e:
-            logger.warning(f"Failed to sync FilteringPage with layer: {e}")
-    
-    def _sync_exporting_page_with_project_layers(self):
-        """v5.0: Synchronize ExportingPage with layers that have filters applied.
-        
-        Populates the export table with layers from PROJECT_LAYERS that have
-        active filters, allowing users to export filtered data.
-        """
-        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
-            return
-        
-        try:
-            toolset = self._dual_toolbox_container.get_toolset_toolbox()
-            if not toolset:
-                return
-            
-            export_page = toolset.get_exporting_page()
-            if not export_page:
-                return
-            
-            # Build list of layers with filter status
-            layers_to_export = []
-            
-            for layer_id, layer_props in self.PROJECT_LAYERS.items():
-                layer = QgsProject.instance().mapLayer(layer_id)
-                if not layer:
-                    continue
-                
-                # Determine filter status
-                has_filter = False
-                status = "No filter"
-                
-                if isinstance(layer, QgsVectorLayer):
-                    subset = layer.subsetString()
-                    if subset:
-                        has_filter = True
-                        status = f"Filtered ({layer.featureCount()} features)"
-                elif isinstance(layer, QgsRasterLayer):
-                    # Check if raster has mask in PROJECT_LAYERS
-                    if layer_props.get('filtering', {}).get('has_mask', False):
-                        has_filter = True
-                        status = "Masked"
-                
-                info = {
-                    'status': status,
-                    'has_filter': has_filter,
-                    'layer_type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster'
-                }
-                
-                layers_to_export.append((layer, info))
-            
-            # Update ExportingPage
-            export_page.set_export_layers(layers_to_export)
-            logger.debug(f"v5.0: ExportingPage updated with {len(layers_to_export)} layers")
-            
-        except Exception as e:
-            logger.warning(f"v5.0: Failed to sync ExportingPage: {e}")
-    
-    def _sync_native_raster_widgets_with_layer(self, layer):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.sync_with_layer(layer)
-
-    def _is_large_raster(self, layer) -> bool:
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            return self._raster_manager._is_large_raster(layer)
-        return False
-
-    def _show_large_raster_placeholder(self, layer):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._show_large_raster_placeholder(layer)
-
-    def _update_raster_histogram(self, layer):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager._update_histogram(layer)
-
-    def _connect_toolbox_bridge_signals(self):
-        """Note: Connect the ToolBoxIntegrationBridge signals to dockwidget handlers."""
-        if not self._toolbox_bridge:
-            return
-        
-        try:
-            # Filter requests
-            self._toolbox_bridge.vectorFilterRequested.connect(self._on_toolbox_vector_filter_requested)
-            self._toolbox_bridge.rasterFilterRequested.connect(self._on_toolbox_raster_filter_requested)
-            
-            # Undo/Redo/Reset
-            self._toolbox_bridge.undoRequested.connect(self._on_toolbox_undo_requested)
-            self._toolbox_bridge.redoRequested.connect(self._on_toolbox_redo_requested)
-            self._toolbox_bridge.resetAllFiltersRequested.connect(self._on_toolbox_reset_all_filters)
-            
-            # Export
-            self._toolbox_bridge.exportRequested.connect(self._on_toolbox_export_requested)
-            
-            # Config
-            self._toolbox_bridge.configChanged.connect(self._on_toolbox_config_changed)
-            
-            # Layer switch
-            self._toolbox_bridge.layerSwitched.connect(self._on_toolbox_layer_type_switched)
-            
-            logger.debug("Note: ToolBox bridge signals connected")
-            
-        except Exception as e:
-            logger.error(f"Failed to connect toolbox bridge signals: {e}")
-    
-    def _on_toolbox_vector_filter_requested(self, info: dict):
-        """v5.0 EPIC-6: Handle vector filter request with multi-target operation dispatch.
-        
-        Dispatches filtering operations based on target layer types:
-        - Vector targets: Use legacy filter pipeline (spatial filter)
-        - Raster targets: Use RasterFilterService for Clip/Mask/Zonal operations
-        
-        Args:
-            info: Dict with:
-                - source_layer: The source vector layer
-                - selection: Selection info dict
-                - targets: List of (layer_id, operation) tuples from FilteringPage
-                - raster_options: Dict with raster operation settings (EPIC-6)
-        """
-        logger.info(f"EPIC-6 Vector filter dispatch: {info}")
-        
-        source_layer = info.get('source_layer')
-        targets = info.get('targets', [])  # [(layer_id, operation), ...]
-        raster_options = info.get('raster_options', {})  # EPIC-6
-        
-        if not source_layer:
-            logger.warning("No source layer provided")
-            return
-        
-        # Separate targets by type
-        vector_targets = []
-        raster_targets = []
-        
-        for target_id, operation in targets:
-            target = QgsProject.instance().mapLayer(target_id)
-            if not target:
-                continue
-            
-            if isinstance(target, QgsVectorLayer):
-                vector_targets.append((target, operation))
-            elif isinstance(target, QgsRasterLayer):
-                raster_targets.append((target, operation))
-        
-        logger.debug(f"Dispatch: {len(vector_targets)} vector, {len(raster_targets)} raster targets")
-        
-        # === VECTOR TARGETS: Sync to legacy and use filter pipeline ===
-        if vector_targets:
-            self._dispatch_vector_filter(source_layer, vector_targets)
-        
-        # === RASTER TARGETS: Use RasterFilterService with options ===
-        if raster_targets:
-            self._dispatch_raster_operations(source_layer, raster_targets, raster_options)
-        
-        # Update FilteringPage status
-        self._update_filtering_page_status(targets)
-    
-    def _dispatch_vector_filter(self, source_layer, vector_targets: list):
-        """v5.0: Dispatch vector-to-vector filtering via legacy pipeline.
-        
-        Args:
-            source_layer: Source vector layer
-            vector_targets: List of (layer, operation) tuples
-        """
-        # Sync to legacy widget
-        if hasattr(self, 'checkableComboBoxLayer_filtering_layers_to_filter'):
-            try:
-                widget = self.checkableComboBoxLayer_filtering_layers_to_filter
-                target_ids = [layer.id() for layer, _ in vector_targets]
-                
-                for i in range(widget.count()):
-                    item_data = widget.itemData(i, Qt.UserRole)
-                    layer_id = item_data.get('layer_id') if isinstance(item_data, dict) else item_data
-                    
-                    if layer_id in target_ids:
-                        widget.setItemCheckState(i, Qt.Checked)
-                
-                logger.debug(f"Synced {len(target_ids)} vector targets to legacy widget")
-            except Exception as e:
-                logger.warning(f"Failed to sync vector targets: {e}")
-        
-        # Trigger legacy filter
-        self.launchingTask.emit('filter')
-    
-    def _split_filter_targets_by_type(self):
-        """Split checked layers_to_filter into vector and raster target lists.
-
-        v5.5: Separates raster targets from vector targets so that the filter
-        button can route each type to the appropriate execution backend.
-
-        Returns:
-            tuple: (vector_targets, raster_targets) where each is a list of
-                   (QgsMapLayer, operation_str) tuples.
-        """
-        from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
-
-        layers_to_filter = self.get_layers_to_filter()
-        project = QgsProject.instance()
-
-        vector_targets = []
-        raster_targets = []
-
-        for layer_id in layers_to_filter:
-            layer = project.mapLayer(layer_id)
-            if not layer or not layer.isValid():
-                continue
-            if isinstance(layer, QgsVectorLayer):
-                vector_targets.append((layer, 'spatial_predicate'))
-            elif isinstance(layer, QgsRasterLayer):
-                raster_targets.append((layer, 'Clip'))
-
-        return vector_targets, raster_targets
-
-    def _dispatch_raster_operations(self, source_layer, raster_targets: list, options: dict = None):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.dispatch_operations(source_layer, raster_targets, options)
-
-    def _update_filtering_page_status(self, targets: list):
-        """v5.0: Update FilteringPage target status after operations.
-        
-        Args:
-            targets: List of (layer_id, operation) tuples
-        """
-        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
-            return
-        
-        try:
-            toolset = self._dual_toolbox_container.get_toolset_toolbox()
-            if not toolset:
-                return
-            
-            filtering_page = toolset.get_filtering_page()
-            if not filtering_page:
-                return
-            
-            for layer_id, operation in targets:
-                layer = QgsProject.instance().mapLayer(layer_id)
-                if not layer:
-                    continue
-                
-                if isinstance(layer, QgsVectorLayer):
-                    subset = layer.subsetString()
-                    if subset:
-                        count = layer.featureCount()
-                        filtering_page.update_target_status(layer_id, f"{count} feat", "green")
-                    else:
-                        filtering_page.update_target_status(layer_id, "No filter", "gray")
-                elif isinstance(layer, QgsRasterLayer):
-                    filtering_page.update_target_status(layer_id, f"{operation} ✓", "green")
-                    
-        except Exception as e:
-            logger.warning(f"Failed to update filtering page status: {e}")
-    
-    def _on_toolbox_raster_filter_requested(self, info: dict):
-        """Note: Handle raster filter request from new QToolBox.
-        
-        Supports bidirectional filtering:
-        - Raster → Vector: Filter vector features by raster values
-        - Vector → Raster: Clip/Mask raster by vector geometries
-        
-        Args:
-            info: Dict with operation details:
-                - operation: 'raster_to_vector' or 'vector_to_raster'
-                - source_layer: Source layer
-                - target_layers: List of target layers
-                - raster_params: {band, min, max, predicate, sampling_method}
-                - vector_params: {operation, feature_ids}
-        """
-        logger.info(f"Note Raster filter requested: {info}")
-        
-        try:
-            from core.services.raster_filter_service import (
-                get_raster_filter_service,
-                RasterFilterRequest,
-                VectorFilterRequest,
-                RasterPredicate,
-                SamplingMethod,
-                RasterOperation
-            )
-            from qgis.core import QgsRasterLayer, QgsVectorLayer
-            
-            service = get_raster_filter_service()
-            operation = info.get('operation', 'raster_to_vector')
-            
-            if operation == 'raster_to_vector':
-                # Raster → Vector filtering
-                raster_layer = info.get('source_layer')
-                target_layers = info.get('target_layers', [])
-                params = info.get('raster_params', {})
-                
-                if not raster_layer or not isinstance(raster_layer, QgsRasterLayer):
-                    show_warning("FilterMate", "Please select a raster layer as source")
-                    return
-                
-                # Build request
-                predicate_map = {
-                    'within_range': RasterPredicate.WITHIN_RANGE,
-                    'outside_range': RasterPredicate.OUTSIDE_RANGE,
-                    'above_value': RasterPredicate.ABOVE_VALUE,
-                    'below_value': RasterPredicate.BELOW_VALUE,
-                    'equals_value': RasterPredicate.EQUALS_VALUE,
-                    'is_nodata': RasterPredicate.IS_NODATA,
-                    'is_not_nodata': RasterPredicate.IS_NOT_NODATA,
-                }
-                
-                sampling_map = {
-                    'centroid': SamplingMethod.CENTROID,
-                    'all_vertices': SamplingMethod.ALL_VERTICES,
-                    'zonal_mean': SamplingMethod.ZONAL_MEAN,
-                    'zonal_max': SamplingMethod.ZONAL_MAX,
-                    'zonal_min': SamplingMethod.ZONAL_MIN,
-                }
-                
-                # Filter each vector target
-                for target in target_layers:
-                    if not isinstance(target, QgsVectorLayer):
-                        continue
-                    
-                    request = RasterFilterRequest(
-                        raster_layer=raster_layer,
-                        vector_layer=target,
-                        band_index=params.get('band', 1),
-                        min_value=params.get('min', 0.0),
-                        max_value=params.get('max', 0.0),
-                        predicate=predicate_map.get(params.get('predicate', 'within_range'), RasterPredicate.WITHIN_RANGE),
-                        sampling_method=sampling_map.get(params.get('sampling_method', 'centroid'), SamplingMethod.CENTROID)
-                    )
-                    
-                    result = service.filter_vector_by_raster(request)
-                    
-                    if result.success:
-                        # Apply filter expression to layer
-                        target.setSubsetString(result.expression)
-                        show_success("FilterMate", f"Filtered {result.matching_count}/{result.total_features} features in {target.name()}")
-                    else:
-                        show_warning("FilterMate", f"Filter failed for {target.name()}: {result.error_message}")
-            
-            elif operation == 'vector_to_raster':
-                # Vector → Raster (Clip/Mask)
-                vector_layer = info.get('source_layer')
-                target_layers = info.get('target_layers', [])
-                params = info.get('vector_params', {})
-                
-                if not vector_layer or not isinstance(vector_layer, QgsVectorLayer):
-                    show_warning("FilterMate", "Please select a vector layer as source")
-                    return
-                
-                op_map = {
-                    'clip': RasterOperation.CLIP,
-                    'mask_outside': RasterOperation.MASK_OUTSIDE,
-                    'mask_inside': RasterOperation.MASK_INSIDE,
-                    'zonal_stats': RasterOperation.ZONAL_STATS,
-                }
-                
-                for target in target_layers:
-                    if not isinstance(target, QgsRasterLayer):
-                        continue
-                    
-                    op_name = params.get('operation', 'clip')
-                    request = VectorFilterRequest(
-                        vector_layer=vector_layer,
-                        raster_layer=target,
-                        operation=op_map.get(op_name, RasterOperation.CLIP),
-                        feature_ids=params.get('feature_ids'),
-                        use_selected_only=params.get('use_selected', True)
-                    )
-                    
-                    result = service.apply_vector_to_raster(request)
-                    
-                    if result.success:
-                        # Add output layer to project
-                        if result.output_layer:
-                            from qgis.core import QgsProject
-                            QgsProject.instance().addMapLayer(result.output_layer)
-                        show_success("FilterMate", f"{op_name.title()} completed for {target.name()}")
-                    else:
-                        show_warning("FilterMate", f"{op_name.title()} failed: {result.error_message}")
-            
-            else:
-                show_warning("FilterMate", f"Unknown operation: {operation}")
-                
-        except ImportError as e:
-            logger.error(f"Failed to import raster filter service: {e}")
-            show_warning("FilterMate", "Raster filtering service not available")
-        except Exception as e:
-            logger.error(f"Raster filter failed: {e}", exc_info=True)
-            show_warning("FilterMate", f"Raster filter error: {str(e)}")
-    
-    def _on_toolbox_undo_requested(self):
-        """Note: Handle undo request from new QToolBox."""
-        if hasattr(self, 'pushButton_action_undo_filter'):
-            self.pushButton_action_undo_filter.click()
-    
-    def _on_toolbox_redo_requested(self):
-        """Note: Handle redo request from new QToolBox."""
-        if hasattr(self, 'pushButton_action_redo_filter'):
-            self.pushButton_action_redo_filter.click()
-    
-    def _on_toolbox_reset_all_filters(self):
-        """Note: Handle reset all filters from new QToolBox."""
-        if hasattr(self, 'pushButton_action_unfilter'):
-            self.pushButton_action_unfilter.click()
-    
-    def _on_toolbox_export_requested(self, settings: dict):
-        """v5.0: Handle export request from new QToolBox.
-        
-        Syncs v5.0 ExportingPage selection to legacy checkableComboBoxLayer_exporting_layers,
-        then delegates to the existing export pipeline via launchingTask signal.
-        This preserves all existing export features (formats, styles, projections, etc.).
-        
-        Args:
-            settings: Export settings dict from ExportingPage.get_export_settings()
-        """
-        logger.info(f"v5.0 Export requested with settings: {settings}")
-        
-        # Sync v5.0 layer selection to legacy widget
-        if self._dual_toolbox_container:
-            toolset = self._dual_toolbox_container.get_toolset_toolbox()
-            if toolset:
-                export_page = toolset.get_exporting_page()
-                if export_page:
-                    layers_to_export = export_page.get_selected_export_layers()
-                    self._sync_v5_export_selection_to_legacy(layers_to_export)
-        
-        # Delegate to legacy export pipeline
-        self.launchingTask.emit('export')
-    
-    def _sync_v5_export_selection_to_legacy(self, layer_ids: list):
-        """v5.0: Sync ExportingPage layer selection to legacy checkableComboBoxLayer.
-        
-        Args:
-            layer_ids: List of layer IDs selected in v5.0 ExportingPage
-        """
-        try:
-            if not hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
-                logger.warning("v5.0: Legacy export widget not found")
-                return
-            
-            # Convert layer IDs to layer names
-            layer_names = []
-            for layer_id in layer_ids:
-                layer = QgsProject.instance().mapLayer(layer_id)
-                if layer:
-                    layer_names.append(layer.name())
-            
-            # Sync to legacy widget
-            self.checkableComboBoxLayer_exporting_layers.deselect_all()
-            if layer_names:
-                self.checkableComboBoxLayer_exporting_layers.setCheckedItems(layer_names)
-                logger.debug(f"v5.0→Legacy: Set export layers to {layer_names}")
-            
-        except Exception as e:
-            logger.warning(f"v5.0: Failed to sync export selection: {e}")
-    
-    def _export_raster_layer(self, layer: QgsRasterLayer, settings: dict):
-        """Phase 3.1: Delegated to RasterExploringManager."""
-        if self._raster_manager:
-            self._raster_manager.export_layer(layer, settings)
-
-    def _export_vector_layer(self, layer: QgsVectorLayer, settings: dict):
-        """Note: Export a single vector layer.
-        
-        Args:
-            layer: Vector layer to export
-            settings: Export settings
-        """
-        try:
-            from core.export import LayerExporter, ExportConfig
-            
-            format_str = settings.get('format', 'GeoPackage (.gpkg)')
-            output_dir = settings.get('output_dir', '')
-            vector_opts = settings.get('vector', {})
-            
-            # Map format string to driver
-            format_map = {
-                'GeoPackage (.gpkg)': 'GPKG',
-                'Shapefile (.shp)': 'ESRI Shapefile',
-                'GeoJSON (.geojson)': 'GeoJSON',
-                'KML (.kml)': 'KML',
-                'CSV (.csv)': 'CSV'
-            }
-            
-            ext_map = {
-                'GPKG': '.gpkg',
-                'ESRI Shapefile': '.shp',
-                'GeoJSON': '.geojson',
-                'KML': '.kml',
-                'CSV': '.csv'
-            }
-            
-            driver = format_map.get(format_str, 'GPKG')
-            ext = ext_map.get(driver, '.gpkg')
-            
-            # Build output path
-            filename = f"{layer.name()}{ext}"
-            output_path = os.path.join(output_dir, filename)
-            
-            # Create export config
-            config = ExportConfig(
-                layers=[layer.name()],
-                output_path=output_path,
-                datatype=driver,
-                save_styles=vector_opts.get('include_styles', False)
-            )
-            
-            # Export using existing LayerExporter
-            exporter = LayerExporter()
-            result = exporter.export_layer(layer, output_path, driver)
-            
-            from qgis.utils import iface
-            if result.success:
-                iface.messageBar().pushSuccess("FilterMate", f"Vector exported: {output_path}")
-            else:
-                iface.messageBar().pushCritical("FilterMate", f"Export failed: {result.error_message}")
-                
-        except ImportError as e:
-            logger.error(f"Failed to import layer exporter: {e}")
-        except Exception as e:
-            logger.exception(f"Vector export error: {e}")
-    
-    def _on_export_progress(self, progress: int):
-        """Handle export progress update."""
-        # TODO: Update progress bar if available
-        logger.debug(f"Export progress: {progress}%")
-    
-    def _on_toolbox_config_changed(self, key: str, value):
-        """Note: Handle config change from new QToolBox.
-        
-        Saves configuration changes to config.json when user modifies settings
-        in the ConfigurationPage.
-        
-        Args:
-            key: Config key or special command ('__save__', '__reset__')
-            value: New value for the setting
-        """
-        logger.debug(f"Dual QToolBox Config changed: {key} = {value}")
-        
-        if key == '__save__':
-            # Save all config - already handled by individual changes
-            from qgis.utils import iface
-            iface.messageBar().pushSuccess("FilterMate", self.tr("Configuration saved successfully"))
-            
-        elif key == '__reset__':
-            # Reset to defaults
-            from .config.config import reset_config_to_defaults
-            try:
-                reset_config_to_defaults()
-                # Reload config into UI
-                self._load_config_into_toolbox()
-                from qgis.utils import iface
-                iface.messageBar().pushInfo("FilterMate", self.tr("Configuration reset to defaults"))
-            except Exception as e:
-                logger.error(f"Failed to reset config: {e}")
-                from qgis.utils import iface
-                iface.messageBar().pushCritical("FilterMate", f"Reset failed: {e}")
-        else:
-            # Individual setting - save to config.json
-            success = save_config_value(key, value)
-            if not success:
-                logger.warning(f"Failed to save config: {key} = {value}")
-    
-    def _on_toolbox_layer_type_switched(self, layer_type: str):
-        """Note: Handle layer type switch (vector/raster) from new QToolBox."""
-        logger.debug(f"Dual QToolBox Layer type switched to: {layer_type}")
-    
-    def _load_config_into_toolbox(self):
-        """Load current configuration values into the TOOLSET QToolBox ConfigurationPage.
-        
-        Called on startup and after config reset to sync UI with config.json.
-        """
-        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
-            return
-        
-        try:
-            toolset_tb = self._dual_toolbox_container.get_toolset_toolbox()
-            if not toolset_tb:
-                return
-            
-            config_page = toolset_tb.get_page_by_name("configuration")
-            if not config_page:
-                return
-            
-            # Load all config values into UI widgets
-            config_keys = [
-                'auto_activate', 'remember_filters', 'auto_switch_exploring',
-                'show_advanced', 'experimental', 'default_backend',
-                'raster_sampling', 'raster_clip_op', 'use_pyramids', 'cache_histogram',
-                'ui_profile', 'theme'
-            ]
-            
-            for key in config_keys:
-                value = get_config_value(key)
-                if value is not None:
-                    config_page.set_config_value(key, value)
-            
-            logger.debug("ConfigurationPage loaded from config.json")
-            
-        except Exception as e:
-            logger.error(f"Failed to load config into toolbox: {e}")
-    
-    def _sync_toolbox_exploring_with_layer(self, layer):
-        """Note: Synchronize the new EXPLORING QToolBox with the current layer.
-        
-        Updates field combos and value lists when the current layer changes.
-        
-        Args:
-            layer: QgsVectorLayer or QgsRasterLayer to sync with
-        """
-        if not DUAL_TOOLBOX_ENABLED or not self._dual_toolbox_container:
-            return
-        
-        try:
-            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
-            if not exploring_tb:
-                return
-            
-            if isinstance(layer, QgsVectorLayer):
-                # Get the vector exploring page
-                vector_page = exploring_tb.get_page_by_name("vector")
-                if vector_page:
-                    vector_page.set_layer(layer)
-                    logger.debug(f"Note: Synced vector exploring page with layer '{layer.name()}'")
-                    
-                    # Connect signals from vector page to existing filter logic
-                    try:
-                        vector_page.filterRequested.disconnect(self._on_toolbox_vector_page_filter)
-                    except (TypeError, RuntimeError):
-                        pass
-                    vector_page.filterRequested.connect(self._on_toolbox_vector_page_filter)
-                    
-            elif isinstance(layer, QgsRasterLayer):
-                # Get the raster exploring page
-                raster_page = exploring_tb.get_page_by_name("raster")
-                if raster_page:
-                    raster_page.set_layer(layer)
-                    logger.debug(f"Note: Synced raster exploring page with layer '{layer.name()}'")
-                
-                # v5.2 FIX 2026-01-31: Don't call _sync_native_raster_widgets_with_layer here
-                # It will be called by _auto_switch_exploring_page to avoid double execution
-                # which causes QGIS freeze due to redundant stats/histogram computation
-                    
-        except Exception as e:
-            logger.error(f"Note: Failed to sync exploring with layer: {e}")
-    
-    def _on_toolbox_vector_page_filter(self):
-        """Note: Handle filter request from Vector Exploring Page.
-        
-        v5.0: Enhanced to sync with legacy system and use existing filter engine.
-        Instead of directly applying setSubsetString, we sync the selection to
-        the native exploring widgets and trigger the full filter pipeline.
-        """
-        if not self._dual_toolbox_container:
-            return
-        
-        try:
-            exploring_tb = self._dual_toolbox_container.get_exploring_toolbox()
-            if not exploring_tb:
-                return
-                
-            vector_page = exploring_tb.get_page_by_name("vector")
-            if not vector_page:
-                return
-            
-            # Get filter parameters from the v5.0 widget
-            filter_info = vector_page.get_current_filter()
-            
-            if filter_info['type'] == 'single' and filter_info['field'] and filter_info['value']:
-                field = filter_info['field']
-                value = filter_info['value']
-                
-                # v5.0: Sync to legacy widgets to use existing filter engine
-                # This ensures undo/redo, distant layers filtering, and other features work
-                self._sync_v5_selection_to_native_widgets(field, value)
-                
-                # Trigger filter using existing pipeline
-                self.launchingTask.emit('filter')
-                
-                # Update result indicator in v5.0 page
-                if self.current_layer:
-                    total = self.current_layer.featureCount()
-                    vector_page.update_result(total, total)
-            else:
-                show_warning("FilterMate", "Please select a field and value to filter")
-                
-        except Exception as e:
-            logger.error(f"Note: Error applying filter from vector page: {e}")
-            show_warning("FilterMate", f"Filter error: {str(e)}")
-    
-    def _sync_v5_selection_to_native_widgets(self, field: str, value: str):
-        """v5.0: Sync selection from VectorExploringPage to native legacy widgets.
-        
-        This allows the v5.0 interface to use the existing filter engine which
-        provides undo/redo, distant layers filtering, and other advanced features.
-        
-        Args:
-            field: Field name selected in v5.0 page
-            value: Value selected in v5.0 page
-        """
-        from qgis.core import QgsFeatureRequest
-        
-        try:
-            # Sync to mFieldExpressionWidget_exploring_single_selection
-            if hasattr(self, 'mFieldExpressionWidget_exploring_single_selection'):
-                self.mFieldExpressionWidget_exploring_single_selection.setField(field)
-                logger.debug(f"v5.0→Legacy: Set field to '{field}'")
-            
-            # Sync to mFeaturePickerWidget_exploring_single_selection
-            if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') and self.current_layer:
-                # Find feature matching the value
-                field_idx = self.current_layer.fields().indexOf(field)
-                if field_idx >= 0:
-                    # Build expression to find matching feature
-                    expr = f'"{field}" = \'{value}\''
-                    request = QgsFeatureRequest().setFilterExpression(expr).setLimit(1)
-                    
-                    for feat in self.current_layer.getFeatures(request):
-                        self.mFeaturePickerWidget_exploring_single_selection.setFeature(feat.id())
-                        logger.debug(f"v5.0→Legacy: Set feature ID to {feat.id()}")
-                        break
-            
-            # Update PROJECT_LAYERS with the selection
-            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS:
-                layer_props = self.PROJECT_LAYERS[self.current_layer.id()]
-                if 'exploring' in layer_props:
-                    layer_props['exploring']['single_selection_expression'] = field
-                    logger.debug(f"v5.0→Legacy: Updated PROJECT_LAYERS exploring expression")
-                    
-        except Exception as e:
-            logger.warning(f"v5.0: Failed to sync selection to native widgets: {e}")
-    
-    @property
-    def dual_toolbox(self):
-        """Note: Access to the DualToolBoxContainer (if enabled)."""
-        return self._dual_toolbox_container
-    
-    @property
-    def toolbox_bridge(self):
-        """Note: Access to the ToolBoxIntegrationBridge (if enabled)."""
-        return self._toolbox_bridge
 
     def _setup_main_splitter(self):
         """v4.0 S16: Setup splitter."""
@@ -2831,6 +846,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         try:
             self._apply_dockwidget_dimensions()
+            self._apply_widget_dimensions()
             self._apply_frame_dimensions()
             self._harmonize_checkable_pushbuttons()
             
@@ -2881,6 +897,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # v4.0.2: Apply minimum width to groupboxes to prevent overlap when splitter is resized
         self._apply_groupbox_minimum_widths()
+    
+    def _apply_widget_dimensions(self):
+        """
+        [DEPRECATED v4.0.3] Widget dimensions now managed by QSS.
+        
+        All widget heights (ComboBox, LineEdit, SpinBox, GroupBox) are defined in
+        resources/styles/default.qss with standardized 20px height.
+        
+        This function is kept for backward compatibility but does nothing.
+        QSS rules override any Python-side dimension settings.
+        
+        TODO v5.0: Remove this function entirely.
+        """
+        # Widget dimensions managed by QSS - no Python intervention needed
+        logger.debug("Widget dimensions managed by QSS (20px standard)")
+        pass
     
     def _apply_frame_dimensions(self):
         """
@@ -2993,19 +1025,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
             content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
-            main_margins = UIConfig.get_config('layout', 'margins_main') or 4
+            main_margins = UIConfig.get_config('layout', 'margins_main') or 2
             key_cfg = UIConfig.get_config('key_button') or {}
-            button_spacing = key_cfg.get('spacing', 4)
-            # Apply margins to main layouts (verticalLayout_8, verticalLayout_main)
+            button_spacing = key_cfg.get('spacing', 2)
+            # Apply reduced margins to main layouts (verticalLayout_8, verticalLayout_main)
             for name in ['verticalLayout_8', 'verticalLayout_main']:
-                if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(main_margins, main_margins, main_margins, main_margins)
-                    getattr(self, name).setSpacing(4)
-            # Apply minimal margins to exploring content layouts
+                if hasattr(self, name): 
+                    getattr(self, name).setContentsMargins(main_margins, 0, main_margins, 0)
+                    getattr(self, name).setSpacing(0)
+            # Apply zero margins to exploring content layouts
             for name in ['verticalLayout_main_content', 'gridLayout_main_header', 'gridLayout_main_actions']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(2, 2, 2, 2)
-                    getattr(self, name).setSpacing(4)
+                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
+                    getattr(self, name).setSpacing(2)
             # Configure column stretch for proper groupbox display
             if hasattr(self, 'gridLayout_main_actions'):
                 self.gridLayout_main_actions.setColumnStretch(0, 0)  # Keys: fixed
@@ -3013,13 +1045,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             # Apply minimal margins to groupbox content layouts
             for name in ['verticalLayout_exploring_tabs_content']:
                 if hasattr(self, name):
-                    getattr(self, name).setContentsMargins(4, 4, 4, 4)
-                    getattr(self, name).setSpacing(4)
+                    getattr(self, name).setContentsMargins(0, 0, 0, 0)
+                    getattr(self, name).setSpacing(2)
             # Apply spacing to exploring layouts
             for name in ['verticalLayout_exploring_single_selection', 'verticalLayout_exploring_multiple_selection', 'verticalLayout_exploring_custom_selection']:
                 if hasattr(self, name): getattr(self, name).setSpacing(layout_spacing)
             # Apply button spacing to key layouts
-            for name in ['verticalLayout_filtering_keys', 'verticalLayout_exporting_keys', 'verticalLayout_exploring_content', 'verticalLayout_raster_keys']:
+            for name in ['verticalLayout_filtering_keys', 'verticalLayout_exporting_keys', 'verticalLayout_exploring_content']:
                 if hasattr(self, name): getattr(self, name).setSpacing(button_spacing)
             # Apply content spacing
             for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
@@ -3064,7 +1096,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         Only QgsPropertyOverrideButton still needs Python sizing (22px fixed).
         All other QGIS widgets inherit 20px height from QSS rules.
         
-        TODO Note: Extract QgsPropertyOverrideButton sizing to separate function.
+        TODO v5.0: Extract QgsPropertyOverrideButton sizing to separate function.
         """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
@@ -3158,198 +1190,48 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not adjust row spacing: {e}")
 
     def _setup_backend_indicator(self):
-        """v4.0 S16: Two-row custom title bar: title+buttons on top, indicators below."""
-        title_bar = QtWidgets.QWidget(self)
-        title_bar.setObjectName("custom_title_bar")
-        vl = QtWidgets.QVBoxLayout(title_bar)
-        vl.setContentsMargins(0, 0, 0, 0); vl.setSpacing(0)
-
-        # Row 1: Title + float/close
-        row1 = QtWidgets.QWidget(title_bar)
-        hl = QtWidgets.QHBoxLayout(row1)
-        hl.setContentsMargins(6, 2, 2, 0); hl.setSpacing(3)
-        self.plugin_title_label = QtWidgets.QLabel("FilterMate", row1)
-        self.plugin_title_label.setObjectName("plugin_title_label")
-        self.plugin_title_label.setStyleSheet("QLabel#plugin_title_label{font-size:8pt;font-weight:600;color:#2c3e50;}")
-        hl.addWidget(self.plugin_title_label)
-        hl.addSpacerItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-        icon_size = QtCore.QSize(12, 12)
-        btn_style = "QPushButton{border:none;padding:2px;}QPushButton:hover{background-color:rgba(0,0,0,30);border-radius:3px;}"
-        btn_float = QtWidgets.QPushButton(row1)
-        btn_float.setFixedSize(18, 18); btn_float.setFlat(True)
-        btn_float.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_TitleBarNormalButton))
-        btn_float.setIconSize(icon_size); btn_float.setToolTip("Float/Dock")
-        btn_float.setStyleSheet(btn_style)
-        btn_float.clicked.connect(lambda: self.setFloating(not self.isFloating()))
-        hl.addWidget(btn_float)
-        btn_close = QtWidgets.QPushButton(row1)
-        btn_close.setFixedSize(18, 18); btn_close.setFlat(True)
-        btn_close.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_TitleBarCloseButton))
-        btn_close.setIconSize(icon_size); btn_close.setToolTip("Close")
-        btn_close.setStyleSheet(btn_style)
-        btn_close.clicked.connect(self.close)
-        hl.addWidget(btn_close)
-        vl.addWidget(row1)
-
-        # Row 2: Indicators (right-aligned)
-        row2 = QtWidgets.QWidget(title_bar)
-        hl2 = QtWidgets.QHBoxLayout(row2)
-        hl2.setContentsMargins(6, 0, 6, 2); hl2.setSpacing(4)
-        hl2.addSpacerItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-        bb = "color:white;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;"
-        self.favorites_indicator_label = self._create_indicator_label(row2, "label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked)
-        hl2.addWidget(self.favorites_indicator_label)
-        self.backend_indicator_label = self._create_indicator_label(row2, "label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked)
-        hl2.addWidget(self.backend_indicator_label)
-        vl.addWidget(row2)
-
-        # Apply
-        self.frame_header = title_bar
+        """v4.0 S16: Create header with indicators."""
+        self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
+        self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.frame_header.setFixedHeight(13)  # v4.0: Compact layout, closer to frame_exploring
+        hl = QtWidgets.QHBoxLayout(self.frame_header)
+        hl.setContentsMargins(2,0,2,0); hl.setSpacing(3)  # v4.0: Slight spacing increase for better visual
+        hl.addSpacerItem(QtWidgets.QSpacerItem(40,6,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
+        self.plugin_title_label = None
+        # v4.0: Softer "mousse" style with rounded corners
+        bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
+        # v4.0: Softer colors with better hover transitions
+        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f5b041;",bb+"background-color:#f39c12;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,32)
+        hl.addWidget(self.favorites_indicator_label)
+        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#5dade2;",bb+"background-color:#3498db;","Click to change backend",self._on_backend_indicator_clicked,38)
+        hl.addWidget(self.backend_indicator_label)
         self.forced_backends = {}
-        self.setTitleBarWidget(title_bar)
-        from qgis.PyQt.QtGui import QIcon
-        self.setWindowIcon(QIcon())
-
-        # v5.0: Setup global progress bar
-        self._setup_global_progress_bar()
-
-    def _setup_global_progress_bar(self):
-        """v5.0: Setup a global progress bar for long operations."""
-        self._global_progress = QtWidgets.QProgressBar(self.dockWidgetContents)
-        self._global_progress.setObjectName("globalProgressBar")
-        self._global_progress.setMinimum(0)
-        self._global_progress.setMaximum(100)
-        self._global_progress.setValue(0)
-        self._global_progress.setTextVisible(True)
-        self._global_progress.setFormat("%p%")
-        self._global_progress.setFixedHeight(16)
-        self._global_progress.setVisible(False)
-        
-        # Style
-        self._global_progress.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #ccc;
-                border-radius: 4px;
-                background: #f0f0f0;
-                text-align: center;
-                font-size: 9px;
-            }
-            QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #3498db, stop:1 #2980b9);
-                border-radius: 3px;
-            }
-        """)
-        
-        # Insert at top of exploring content
-        if hasattr(self, 'verticalLayout_main_content'):
-            self.verticalLayout_main_content.insertWidget(0, self._global_progress)
-        elif hasattr(self, 'verticalLayout_8'):
-            self.verticalLayout_8.insertWidget(0, self._global_progress)
-        
-        logger.debug("Global progress bar initialized")
+        if hasattr(self,'verticalLayout_8'): self.verticalLayout_8.insertWidget(0,self.frame_header)
     
-    def show_progress(self, value: int, message: str = "", operation: str = ""):
-        """Show the global progress bar with value and optional message.
-        
-        Args:
-            value: Progress value (0-100), -1 to hide
-            message: Optional message to show in the progress bar
-            operation: Optional operation name for logging
-        """
-        if not hasattr(self, '_global_progress') or not self._global_progress:
-            return
-        
-        if value < 0:
-            # Hide progress bar
-            self._global_progress.setVisible(False)
-            self._global_progress.setValue(0)
-            if operation:
-                logger.debug(f"Operation completed: {operation}")
-        else:
-            # Show progress bar with value
-            self._global_progress.setVisible(True)
-            self._global_progress.setValue(min(100, max(0, value)))
-            
-            if message:
-                self._global_progress.setFormat(f"{message} - %p%")
-            else:
-                self._global_progress.setFormat("%p%")
-            
-            if operation and value == 0:
-                logger.debug(f"Operation started: {operation}")
-    
-    def pulse_progress(self, message: str = "Processing..."):
-        """Show an indeterminate progress bar (pulse/marquee style).
-        
-        Args:
-            message: Message to show
-        """
-        if not hasattr(self, '_global_progress') or not self._global_progress:
-            return
-        
-        self._global_progress.setVisible(True)
-        self._global_progress.setMinimum(0)
-        self._global_progress.setMaximum(0)  # Indeterminate mode
-        self._global_progress.setFormat(message)
-    
-    def hide_progress(self):
-        """Hide the global progress bar and reset to determinate mode."""
-        if not hasattr(self, '_global_progress') or not self._global_progress:
-            return
-        
-        self._global_progress.setVisible(False)
-        self._global_progress.setMinimum(0)
-        self._global_progress.setMaximum(100)
-        self._global_progress.setValue(0)
-        self._global_progress.setFormat("%p%")
-    
-    def _create_indicator_label(self, parent, name, text, style, hover_style, tooltip, click_handler):
-        """v4.0 S16: Create indicator button with soft "mousse" style.
-
-        Uses QPushButton instead of QLabel so Qt recognizes it as interactive
-        inside a custom title bar widget (setTitleBarWidget).
-        """
-        btn = QtWidgets.QPushButton(parent)
-        btn.setObjectName(name); btn.setText(text); btn.setFlat(True)
-        btn.setStyleSheet(f"QPushButton#{name}{{{style}}}QPushButton#{name}:hover{{{hover_style}}}")
-        btn.setFixedHeight(16)
-        btn.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Fixed)
-        btn.setCursor(Qt.PointingHandCursor); btn.setToolTip(tooltip)
-        btn.clicked.connect(lambda checked=False: click_handler(None))
-        logger.debug(f"Created indicator {name}")
-        return btn
+    def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
+        """v4.0 S16: Create indicator label with soft "mousse" style."""
+        lbl = ClickableLabel(self.frame_header)
+        lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # v4.0: Fixed height for proper text display with padding
+        lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
+        # CRITICAL: Enable the widget to receive mouse events
+        lbl.setEnabled(True)
+        lbl.setAttribute(Qt.WA_Hover, True)  # Enable hover events
+        lbl.set_click_handler(click_handler)
+        logger.debug(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
+        return lbl
     
     def _on_backend_indicator_clicked(self, event):
-        """v4.0 Sprint 19: → BackendController (direct, matching favorites pattern)."""
+        """v4.0 Sprint 19: → BackendController."""
         logger.debug("_on_backend_indicator_clicked called")
-        try:
-            ctrl = self._controller_integration._backend_controller if self._controller_integration else None
-            logger.debug(f"  _controller_integration={self._controller_integration}, backend_ctrl={ctrl}")
-            if ctrl:
-                from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(0, ctrl.handle_indicator_clicked)
-                return
-        except Exception as e:
-            logger.warning(f"Backend controller access failed: {e}")
-        # Fallback: show simple backend menu directly
-        self._show_fallback_backend_menu()
-
-    def _show_fallback_backend_menu(self):
-        """Fallback backend menu when controller is unavailable."""
-        from qgis.PyQt.QtWidgets import QMenu
-        from qgis.PyQt.QtGui import QCursor
-        layer = getattr(self, 'current_layer', None)
-        menu = QMenu(self)
-        if not layer:
-            menu.addAction("No layer selected").setEnabled(False)
+        
+        if self._controller_integration and self._controller_integration.backend_controller:
+            # Use QTimer to defer menu display after mouse event completes
+            # This prevents issues with QMenu.exec_() during mousePressEvent
+            from qgis.PyQt.QtCore import QTimer
+            QTimer.singleShot(0, self._controller_integration.delegate_handle_backend_click)
         else:
-            menu.addAction(f"Layer: {layer.name()}").setEnabled(False)
-            menu.addSeparator()
-            for btype, bname in [('ogr', 'OGR'), ('spatialite', 'Spatialite'), ('postgresql', 'PostgreSQL')]:
-                action = menu.addAction(f"  {bname}")
-                action.setData(btype)
-        menu.exec_(QCursor.pos())
+            logger.warning("Backend controller unavailable")
 
     def _on_favorite_indicator_clicked(self, event):
         """v4.0 S16: → FavoritesController."""
@@ -3397,11 +1279,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(self.tr("★ {0} Favorites saved\nClick to apply or manage").format(cnt))
-            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:white;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#f39c12;}QPushButton#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip(self.tr("★ No favorites saved\nClick to add current filter"))
-            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:#95a5a6;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#ecf0f1;}QPushButton#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+        self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
         """Sprint 18: → BackendController via _backend_ctrl property."""
@@ -3689,7 +1572,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: → ActionBarManager."""
         if self._action_bar_manager: self._action_bar_manager.set_position(position); self._action_bar_manager.apply_position()
 
-    # Note: ActionBar wrapper methods removed - use self._action_bar_manager directly
+    # v5.0: ActionBar wrapper methods removed - use self._action_bar_manager directly
     # Removed: _adjust_header_for_side_position, _restore_header_from_wrapper, _clear_action_bar_layout,
     # _create_horizontal_action_layout, _create_vertical_action_layout, _apply_action_bar_size_constraints,
     # _reposition_action_bar_in_main_layout, _create_horizontal_wrapper_for_side_action_bar,
@@ -3731,7 +1614,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("single_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
+            self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_single_selection.fieldChanged.connect(on_single_field_changed)
@@ -3744,7 +1627,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("multiple_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
+            self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_multiple_selection.fieldChanged.connect(on_multiple_field_changed)
@@ -3757,7 +1640,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._schedule_expression_change("custom_selection", field_name)
         
         try:
-            self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()  # Blanket: closure locale, pas de ref au slot précédent
+            self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.mFieldExpressionWidget_exploring_custom_selection.fieldChanged.connect(on_custom_field_changed)
@@ -3883,11 +1766,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if hasattr(picker, 'setFilterExpression'):
                         picker.setFilterExpression("")
                     
-                    # Reconnect signal (disconnect first to prevent accumulation)
-                    try:
-                        picker.featureChanged.disconnect(self.exploring_features_changed)
-                    except (TypeError, RuntimeError):
-                        pass
+                    # Reconnect signal
                     picker.featureChanged.connect(self.exploring_features_changed)
                     
                     # Force visual update
@@ -4041,241 +1920,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_filtering_tab_widgets()
-        # v5.4: Add raster value filter section to the filtering page
-        try:
-            self._setup_raster_filtering_section()
-        except Exception as e:
-            logger.error(f"_setup_raster_filtering_section failed: {e}", exc_info=True)
-
-    def _setup_raster_filtering_section(self):
-        """v5.4: Create and inject the Raster Value Filter section into the Filtering page.
-
-        Adds 5 new widget lines (L1-L5) after the existing vector filtering widgets,
-        separated by a horizontal line. Follows the same Keys+Values pattern.
-
-        v5.5 FIX: Added icons, tooltips, and fixed spacers (Expanding→Fixed) to
-        align with the vector filtering keys layout.
-
-        Widgets created:
-          L1: Raster Source Layer + Band selector
-          L2: Vector Layers to Filter (checkable combobox)
-          L3: Combine Operators (source + other)
-          L4: Raster Predicates (checkable combobox)
-          L5: Sampling Method
-        """
-        from qgis.PyQt import QtWidgets, QtCore, QtGui
-        from qgis.gui import QgsMapLayerComboBox
-        # QGIS 3.34+: Use Qgis.LayerFilter enum flags instead of deprecated QgsMapLayerProxyModel int flags
-        try:
-            from qgis.core import Qgis
-            _LayerFilter = Qgis.LayerFilter
-            _LayerFilters = Qgis.LayerFilters  # QFlags wrapper to avoid deprecated setFilters(int)
-        except (ImportError, AttributeError):
-            try:
-                from qgis.gui import QgsMapLayerProxyModel as _LayerFilter
-            except ImportError:
-                from qgis.core import QgsMapLayerProxyModel as _LayerFilter
-            _LayerFilters = None
-
-        # --- Locate insertion targets ---
-        keys_layout = self.verticalLayout_filtering_keys
-        values_layout = self.verticalLayout_filtering_values
-
-        # v5.5 FIX: Remove the trailing expanding spacer from keys_layout
-        # The base .ui file adds an Expanding spacer at the end of the keys column.
-        # Items added after it would be pushed beyond the visible area.
-        last_idx = keys_layout.count() - 1
-        if last_idx >= 0:
-            item = keys_layout.itemAt(last_idx)
-            if item and item.spacerItem():
-                keys_layout.removeItem(item)
-
-        # --- Load icons ---
-        icons_dir = os.path.join(self.plugin_dir, "icons") if hasattr(self, 'plugin_dir') else ""
-        def _load_icon(filename):
-            path = os.path.join(icons_dir, filename)
-            if os.path.exists(path):
-                try:
-                    from .ui.icons import get_themed_icon
-                    return get_themed_icon(path)
-                except Exception:
-                    return QtGui.QIcon(path)
-            return QtGui.QIcon()
-
-        # --- Helper: create a key pushbutton (checkable, flat, 32x32) ---
-        def _make_key_button(name: str, icon_file: str = "", tooltip: str = "") -> QtWidgets.QPushButton:
-            btn = QtWidgets.QPushButton(self.widget_filtering_keys)
-            btn.setObjectName(name)
-            sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-            btn.setSizePolicy(sp)
-            btn.setMinimumSize(QtCore.QSize(32, 32))
-            btn.setMaximumSize(QtCore.QSize(32, 32))
-            font = QtGui.QFont("Segoe UI", 10, QtGui.QFont.Bold)
-            btn.setFont(font)
-            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-            btn.setFocusPolicy(QtCore.Qt.ClickFocus)
-            btn.setText("")
-            btn.setIconSize(QtCore.QSize(16, 16))
-            btn.setCheckable(True)
-            btn.setFlat(True)
-            if icon_file:
-                icon = _load_icon(icon_file)
-                if not icon.isNull():
-                    btn.setIcon(icon)
-                    btn.setProperty('icon_name', icon_file)
-            if tooltip:
-                btn.setToolTip(tooltip)
-            return btn
-
-        # --- Separator ---
-        separator = QtWidgets.QFrame(self.FILTERING)
-        separator.setFrameShape(QtWidgets.QFrame.HLine)
-        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
-        separator.setObjectName("line_raster_filter_separator")
-        values_layout.addWidget(separator)
-
-        # Keys spacer before raster section
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 8, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
-
-        # ===== L1: Raster Source Layer + Band =====
-        self.pushButton_checkable_filtering_raster_source = _make_key_button(
-            "pushButton_checkable_filtering_raster_source",
-            icon_file="raster.png",
-            tooltip="Raster Source Layer\n\nSelect the raster layer and band\nfor raster value filtering.")
-        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_source, 0, QtCore.Qt.AlignHCenter)
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-
-        l1_layout = QtWidgets.QHBoxLayout()
-        l1_layout.setSpacing(4)
-        l1_layout.setObjectName("horizontalLayout_filtering_raster_source")
-
-        self.comboBox_filtering_raster_source_layer = QgsMapLayerComboBox(self.FILTERING)
-        self.comboBox_filtering_raster_source_layer.setFilters(
-            _LayerFilters(_LayerFilter.RasterLayer) if _LayerFilters else _LayerFilter.RasterLayer)
-        self.comboBox_filtering_raster_source_layer.setShowCrs(True)
-        sp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sp.setHorizontalStretch(1)
-        self.comboBox_filtering_raster_source_layer.setSizePolicy(sp)
-        font = QtGui.QFont("Segoe UI Semibold", 10, QtGui.QFont.Bold)
-        self.comboBox_filtering_raster_source_layer.setFont(font)
-        self.comboBox_filtering_raster_source_layer.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_raster_source_layer.setMaxVisibleItems(20)
-        self.comboBox_filtering_raster_source_layer.setIconSize(QtCore.QSize(36, 20))
-        self.comboBox_filtering_raster_source_layer.setObjectName("comboBox_filtering_raster_source_layer")
-        l1_layout.addWidget(self.comboBox_filtering_raster_source_layer)
-
-        self.comboBox_filtering_raster_band = QtWidgets.QComboBox(self.FILTERING)
-        sp_band = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-        self.comboBox_filtering_raster_band.setSizePolicy(sp_band)
-        self.comboBox_filtering_raster_band.setMinimumSize(QtCore.QSize(80, 0))
-        font_band = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
-        self.comboBox_filtering_raster_band.setFont(font_band)
-        self.comboBox_filtering_raster_band.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_raster_band.setObjectName("comboBox_filtering_raster_band")
-        l1_layout.addWidget(self.comboBox_filtering_raster_band)
-
-        values_layout.addLayout(l1_layout)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
-
-        # ===== L2: Vector Layers to Filter =====
-        self.pushButton_checkable_filtering_raster_layers_to_filter = _make_key_button(
-            "pushButton_checkable_filtering_raster_layers_to_filter",
-            icon_file="layers.png",
-            tooltip="Target Layers\n\nSelect vector layers to filter\nbased on raster values.")
-        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_layers_to_filter, 0, QtCore.Qt.AlignHCenter)
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-
-        # The QgsCheckableComboBoxLayer was already created in _create_custom_widgets_early()
-        # Just add it to the values layout
-        values_layout.addWidget(self.checkableComboBoxLayer_filtering_raster_layers_to_filter)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
-
-        # ===== L3: Combine Operators =====
-        self.pushButton_checkable_filtering_raster_combine_operator = _make_key_button(
-            "pushButton_checkable_filtering_raster_combine_operator",
-            icon_file="filter_multi.png",
-            tooltip="Combine Operators\n\nCombine raster filter with existing filters\nusing AND, AND NOT, or OR.")
-        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_combine_operator, 0, QtCore.Qt.AlignHCenter)
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-
-        l3_layout = QtWidgets.QHBoxLayout()
-        l3_layout.setObjectName("horizontalLayout_filtering_raster_combine")
-
-        self.comboBox_filtering_raster_source_combine_operator = QtWidgets.QComboBox(self.FILTERING)
-        sp_combo = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        self.comboBox_filtering_raster_source_combine_operator.setSizePolicy(sp_combo)
-        font_combo = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
-        self.comboBox_filtering_raster_source_combine_operator.setFont(font_combo)
-        self.comboBox_filtering_raster_source_combine_operator.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_raster_source_combine_operator.setMaxVisibleItems(20)
-        self.comboBox_filtering_raster_source_combine_operator.addItems(["AND", "AND NOT", "OR"])
-        self.comboBox_filtering_raster_source_combine_operator.setObjectName("comboBox_filtering_raster_source_combine_operator")
-        l3_layout.addWidget(self.comboBox_filtering_raster_source_combine_operator)
-
-        self.comboBox_filtering_raster_other_combine_operator = QtWidgets.QComboBox(self.FILTERING)
-        self.comboBox_filtering_raster_other_combine_operator.setSizePolicy(sp_combo)
-        font_combo2 = QtGui.QFont("Segoe UI Semibold", 10, QtGui.QFont.Bold)
-        self.comboBox_filtering_raster_other_combine_operator.setFont(font_combo2)
-        self.comboBox_filtering_raster_other_combine_operator.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_raster_other_combine_operator.addItems(["AND", "AND NOT", "OR"])
-        self.comboBox_filtering_raster_other_combine_operator.setObjectName("comboBox_filtering_raster_other_combine_operator")
-        l3_layout.addWidget(self.comboBox_filtering_raster_other_combine_operator)
-
-        values_layout.addLayout(l3_layout)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
-
-        # ===== L4: Raster Predicates =====
-        self.pushButton_checkable_filtering_raster_predicates = _make_key_button(
-            "pushButton_checkable_filtering_raster_predicates",
-            icon_file="geo_predicates.png",
-            tooltip="Raster Predicates\n\nFilter condition for raster values:\nWithin Range, Above/Below, NoData, etc.")
-        keys_layout.addWidget(self.pushButton_checkable_filtering_raster_predicates, 0, QtCore.Qt.AlignHCenter)
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-
-        from qgis.gui import QgsCheckableComboBox
-        self.comboBox_filtering_raster_predicates = QgsCheckableComboBox(self.FILTERING)
-        sp_pred = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sp_pred.setHorizontalStretch(1)
-        self.comboBox_filtering_raster_predicates.setSizePolicy(sp_pred)
-        font_pred = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
-        self.comboBox_filtering_raster_predicates.setFont(font_pred)
-        self.comboBox_filtering_raster_predicates.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_raster_predicates.setMaxVisibleItems(20)
-        self.comboBox_filtering_raster_predicates.setIconSize(QtCore.QSize(36, 20))
-        self.comboBox_filtering_raster_predicates.addItems([
-            "Within Range", "Outside Range", "Above Value",
-            "Below Value", "Equals Value", "Is NoData", "Is Not NoData"
-        ])
-        self.comboBox_filtering_raster_predicates.setObjectName("comboBox_filtering_raster_predicates")
-        values_layout.addWidget(self.comboBox_filtering_raster_predicates)
-        values_layout.addItem(QtWidgets.QSpacerItem(20, 4, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed))
-
-        # ===== L5: Sampling Method =====
-        self.pushButton_checkable_filtering_sampling_method = _make_key_button(
-            "pushButton_checkable_filtering_sampling_method",
-            icon_file="centroid.png",
-            tooltip="Sampling Method\n\nHow raster values are sampled at features:\nCentroid, Vertices, Zonal statistics.")
-        keys_layout.addWidget(self.pushButton_checkable_filtering_sampling_method, 0, QtCore.Qt.AlignHCenter)
-
-        self.comboBox_filtering_sampling_method = QtWidgets.QComboBox(self.FILTERING)
-        sp_samp = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sp_samp.setHorizontalStretch(1)
-        self.comboBox_filtering_sampling_method.setSizePolicy(sp_samp)
-        font_samp = QtGui.QFont("Segoe UI Semibold", 8, QtGui.QFont.Bold)
-        self.comboBox_filtering_sampling_method.setFont(font_samp)
-        self.comboBox_filtering_sampling_method.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.comboBox_filtering_sampling_method.setMaxVisibleItems(20)
-        self.comboBox_filtering_sampling_method.addItems([
-            "Centroid", "All Vertices", "Zonal Mean",
-            "Zonal Max", "Zonal Min", "Zonal Majority"
-        ])
-        self.comboBox_filtering_sampling_method.setObjectName("comboBox_filtering_sampling_method")
-        values_layout.addWidget(self.comboBox_filtering_sampling_method)
-
-        # Final spacer
-        keys_layout.addItem(QtWidgets.QSpacerItem(20, 0, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))
-
-        logger.info("v5.5: Raster Value Filter section added to Filtering page (5 lines, with icons)")
 
     def _setup_exporting_tab_widgets(self):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
@@ -4348,41 +1992,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning("⚠️ _controller_integration is None - using legacy code paths only")
         
         if self.current_layer and not self.current_layer_selection_connection:
-            self._ensure_layer_signals_connected(self.current_layer)
+            try: self.current_layer.selectionChanged.connect(self.on_layer_selection_changed); self.current_layer_selection_connection = True
+            except Exception:  # Signal may already be connected - expected
+                pass
         self.widgetsInitialized.emit(); self._setup_keyboard_shortcuts()
         if self._pending_layers_update:
             self._pending_layers_update = False; pl, pr, weak_self = self.PROJECT_LAYERS, self.PROJECT, weakref.ref(self)
             QTimer.singleShot(100, lambda: weak_self() and weak_self().get_project_layers_from_app(pl, pr))
-
-    def ensure_controller_integration_setup(self):
-        """FIX 2026-02-10 BUG10: Re-setup ControllerIntegration after teardown.
-        
-        When the dockwidget is closed, closeEvent() calls teardown() on the
-        ControllerIntegration, disconnecting all signals (including projectLayersReady)
-        and clearing controller references. On re-open, _reinitialize_existing() must
-        call this method to re-create controllers and reconnect signals so that
-        comboboxes are populated when projectLayersReady fires.
-        """
-        if not self._controller_integration:
-            logger.warning("ensure_controller_integration_setup: No ControllerIntegration instance")
-            return False
-        
-        if self._controller_integration._is_setup:
-            logger.debug("ensure_controller_integration_setup: Already set up (idempotent)")
-            return True
-        
-        try:
-            logger.info("Re-setting up ControllerIntegration after teardown...")
-            success = self._controller_integration.setup()
-            if success:
-                self._controller_integration.sync_from_dockwidget()
-                logger.info("✓ ControllerIntegration re-setup complete")
-            else:
-                logger.warning("⚠️ ControllerIntegration re-setup returned False")
-            return success
-        except Exception as e:
-            logger.error(f"❌ ControllerIntegration re-setup failed: {e}", exc_info=True)
-            return False
 
     def _connect_initial_widget_signals(self):
         """
@@ -4411,15 +2027,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if cache_key in self._signal_connection_states:
                 logger.debug(f"Clearing stale cache for {cache_key} (was: {self._signal_connection_states[cache_key]})")
                 del self._signal_connection_states[cache_key]
-            # v5.2 FIX: Also clear in signal_manager to avoid desync
-            if hasattr(self, '_signal_manager') and self._signal_manager:
-                if cache_key in self._signal_manager._signal_connection_states:
-                    del self._signal_manager._signal_connection_states[cache_key]
             
             # Connect comboBox_filtering_current_layer.layerChanged signal
             # This is CRITICAL for exploring widgets to update when current layer changes
-            result = self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
-            logger.info(f"✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal (result={result})")
+            self.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
+            logger.debug("✓ Connected FILTERING.CURRENT_LAYER.layerChanged signal via manageSignal")
         except Exception as e:
             logger.warning(f"Could not connect CURRENT_LAYER signal: {e}")
         
@@ -4442,21 +2054,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.warning(f"Could not connect EXPORTING signals at startup: {e}")
         
-        # v5.11: Setup raster histogram widget if not already done
-        # Phase 3.1: Histogram is now managed by RasterExploringManager
-        try:
-            if self._raster_manager and (not hasattr(self._raster_manager, '_histogram') or self._raster_manager._histogram is None):
-                logger.debug("Setting up raster histogram widget at startup...")
-                self._setup_raster_histogram_widget()
-                if hasattr(self, 'mGroupBox_raster_histogram'):
-                    try:
-                        self.mGroupBox_raster_histogram.toggled.disconnect(self._on_histogram_groupbox_toggled)
-                    except TypeError:
-                        pass
-                    self.mGroupBox_raster_histogram.toggled.connect(self._on_histogram_groupbox_toggled)
-        except Exception as e:
-            logger.warning(f"Could not setup raster histogram widget: {e}")
-        
         # FIX 2026-01-14: Connect LAYER_TREE_VIEW only if AUTO_CURRENT_LAYER is enabled
         # This is also handled by filtering_auto_current_layer_changed() but we need to
         # restore the state at startup based on saved project settings
@@ -4468,8 +2065,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if cache_key in self._signal_connection_states:
                     del self._signal_connection_states[cache_key]
                 
-                result = self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
-                logger.debug(f"✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled, result={result})")
+                self.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect', 'currentLayerChanged')
+                logger.debug("✓ Connected QGIS.LAYER_TREE_VIEW.currentLayerChanged signal (AUTO_CURRENT_LAYER enabled)")
             else:
                 logger.debug("QGIS.LAYER_TREE_VIEW signal not connected (AUTO_CURRENT_LAYER disabled)")
         except Exception as e:
@@ -4608,10 +2205,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             else:
                                 widget.setExpression(expr_value)
                                 logger.debug(f"    ✓ Set {expr_key} expression to '{expr_value}'")
-            
-            # v5.6: Update vector statistics display
-            self._update_vector_statistics_display(layer)
-            logger.info(f"✓ Vector stats updated for layer {layer.name()}")
             
             logger.info(f"✓ _force_update_exploring_widgets completed for layer {layer.name()}")
             
@@ -4855,7 +2448,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'GeometryType.UnknownGeometry': QgsLayerItem.iconTable,
             'GeometryType.Null': QgsLayerItem.iconTable,
             'GeometryType.Unknown': QgsLayerItem.iconDefault,
-            'GeometryType.Raster': QgsLayerItem.iconRaster,  # v5.1: Raster support
             # Short format 
             'Line': QgsLayerItem.iconLine,
             'Point': QgsLayerItem.iconPoint,
@@ -4863,7 +2455,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'Unknown': QgsLayerItem.iconTable,
             'Null': QgsLayerItem.iconTable,
             'NoGeometry': QgsLayerItem.iconTable,
-            'Raster': QgsLayerItem.iconRaster,  # v5.1: Raster support
             # New format from infrastructure/utils geometry_type_to_string
             'LineString': QgsLayerItem.iconLine,
             'MultiPoint': QgsLayerItem.iconPoint,
@@ -4970,13 +2561,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
                 target_layer = layer or self.current_layer
-                # FIX 2026-02-09: Additional fallback when both layer and current_layer are None
-                if target_layer is None and hasattr(self, 'iface') and self.iface:
-                    target_layer = self.iface.activeLayer()
-                if target_layer is None and self.PROJECT_LAYERS:
-                    from qgis.core import QgsProject
-                    first_id = list(self.PROJECT_LAYERS.keys())[0]
-                    target_layer = QgsProject.instance().mapLayer(first_id)
                 if target_layer:
                     result = self._populate_filtering_layers_direct(target_layer)
                     logger.info(f"🔍   Direct fallback returned: {result}")
@@ -5111,6 +2695,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         else:
             # FALLBACK: Use direct methods (simplified logic, no PostgreSQL/remote handling)
             logger.warning("⚠️ Controllers not available - using fallback direct methods")
+            
             try:
                 success = self._populate_export_combobox_direct()
                 if success:
@@ -5119,6 +2704,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     logger.warning("⚠️ Fallback direct method returned False")
             except Exception as e:
                 logger.error(f"❌ Fallback direct method failed: {e}", exc_info=True)
+            
             try:
                 layer = self.current_layer
                 if layer:
@@ -5129,17 +2715,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.warning("⚠️ Fallback direct method returned False")
             except Exception as e:
                 logger.error(f"❌ Fallback filtering layers failed: {e}", exc_info=True)
-
-        # Synchronise l'état des widgets dépendants du bouton checkable après chargement des layers
-        self.filtering_layers_to_filter_state_changed()
-        
-        # v5.4 FIX 2026-02-01: Update exploring pages availability when layers change
-        # This ensures Vector/Raster pages are enabled/disabled based on layer types in project
-        try:
-            self._update_exploring_pages_availability()
-            logger.info("✅ Updated exploring pages availability after layers ready")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to update exploring pages availability: {e}")
     
     def _populate_export_combobox_direct(self) -> bool:
         """v4.0.6: Direct population of export combobox without controller dependency.
@@ -5147,13 +2722,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This is a fallback method that populates the combobox directly,
         bypassing the controller integration which may not be initialized.
         
-        v5.1: Support both vector and raster layers.
-        
         Returns:
             True if population succeeded, False otherwise
         """
         try:
-            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
@@ -5192,65 +2765,50 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             layers_widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
             logger.info(f"🔍 _populate_export_combobox_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
-            layers_widget.blockSignals(True)
             layers_widget.clear()
             item_index = 0
-
+            
             for key in list(self.PROJECT_LAYERS.keys()):
                 if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
                     continue
-
+                
                 layer_info = self.PROJECT_LAYERS[key]["infos"]
                 required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
                 if any(k not in layer_info or layer_info[k] is None for k in required_keys):
                     continue
-
+                
                 layer_id = layer_info["layer_id"]
                 layer_name = layer_info["layer_name"]
                 layer_crs_authid = layer_info["layer_crs_authid"]
                 geom_type = layer_info["layer_geometry_type"]
                 layer_icon = self.icon_per_geometry_type(geom_type)
-
-                # Validate layer - v5.1: Support both vector and raster
+                
+                # Validate layer
                 layer_obj = project.mapLayer(layer_id)
-                if not layer_obj:
-                    continue
-
-                is_vector = isinstance(layer_obj, QgsVectorLayer)
-                is_raster = isinstance(layer_obj, QgsRasterLayer)
-
-                if (is_vector or is_raster) and is_layer_source_available(layer_obj, require_psycopg2=False):
-                    # v5.1: Update geometry type for raster layers
-                    if is_raster:
-                        geom_type = "GeometryType.Raster"
-                        layer_icon = self.icon_per_geometry_type(geom_type)
-
+                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
                     display_name = f"{layer_name} [{layer_crs_authid}]"
                     item_data = {"layer_id": key, "layer_geometry_type": geom_type}
                     layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
                     item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
                     item_index += 1
-
-            layers_widget.blockSignals(False)
+            
             logger.info(f"✅ _populate_export_combobox_direct: Added {item_index} layers to combobox")
-
+            
             # Populate datatype/format combobox
             try:
                 from osgeo import ogr
                 datatype_widget = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                datatype_widget.blockSignals(True)
                 datatype_widget.clear()
                 ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
                 datatype_widget.addItems(ogr_driver_list)
                 logger.info(f"_populate_export_combobox_direct: Added {len(ogr_driver_list)} export formats")
-
+                
                 if datatype_to_export:
                     idx = datatype_widget.findText(datatype_to_export)
                     datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
                 else:
                     datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
-                datatype_widget.blockSignals(False)
             except ImportError:
                 logger.warning("_populate_export_combobox_direct: OGR not available")
             
@@ -5263,8 +2821,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _populate_filtering_layers_direct(self, layer) -> bool:
         """v4.0.6: Direct population of filtering layers combobox without controller dependency.
         
-        v5.1: Support both vector and raster layers as filtering targets.
-        
         Args:
             layer: Source layer for which to populate target layers
             
@@ -5272,7 +2828,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             True if population succeeded, False otherwise
         """
         try:
-            from qgis.core import QgsVectorLayer, QgsRasterLayer, QgsProject
+            from qgis.core import QgsVectorLayer, QgsProject
             from qgis.PyQt.QtCore import Qt
             
             # Check preconditions
@@ -5283,9 +2839,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not self.PROJECT_LAYERS:
                 logger.warning("❌ _populate_filtering_layers_direct: PROJECT_LAYERS empty")
                 return False
-            # v5.1: Accept both vector and raster layers as source
-            if not layer or not (isinstance(layer, QgsVectorLayer) or isinstance(layer, QgsRasterLayer)):
-                logger.warning("❌ _populate_filtering_layers_direct: invalid layer (must be vector or raster)")
+            if not layer or not isinstance(layer, QgsVectorLayer):
+                logger.warning("❌ _populate_filtering_layers_direct: invalid layer")
                 return False
             if layer.id() not in self.PROJECT_LAYERS:
                 logger.warning(f"❌ _populate_filtering_layers_direct: layer {layer.name()} not in PROJECT_LAYERS")
@@ -5342,26 +2897,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 geom_type = layer_info["layer_geometry_type"]
                 layer_icon = self.icon_per_geometry_type(geom_type)
                 
-                # Validate layer - v5.1: Support both vector and raster
+                # Validate layer
                 layer_obj = project.mapLayer(layer_id)
-                if not layer_obj:
+                if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
                     continue
-                    
-                is_vector = isinstance(layer_obj, QgsVectorLayer)
-                is_raster = isinstance(layer_obj, QgsRasterLayer)
-                
-                if not is_vector and not is_raster:
-                    continue
-                # v4.2: Skip non-spatial tables (tables without geometry) - only for vectors
-                if is_vector and not layer_obj.isSpatial():
+                # v4.2: Skip non-spatial tables (tables without geometry)
+                if not layer_obj.isSpatial():
                     continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
                     continue
-                
-                # v5.1: Update geometry type for raster layers
-                if is_raster:
-                    geom_type = "GeometryType.Raster"
-                    layer_icon = self.icon_per_geometry_type(geom_type)
                 
                 # Add to combobox
                 display_name = f"{layer_name} [{layer_crs}]"
@@ -5388,16 +2932,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def _apply_stylesheet(self):
         """
-        Apply stylesheet to dockwidget using StyleLoader.
-
-        This is the legacy fallback method when ThemeManager is not available.
-
-        FIX 2026-02-02: Apply stylesheet to QDockWidget (self) instead of dockWidgetContents.
-        QSS selectors like #dockWidgetContents QComboBox require dockWidgetContents to be
-        a CHILD of the widget where stylesheet is applied, not the widget itself.
+        DISABLED 2026-01-21: Testing without stylesheet to isolate display issue.
+        If expression builder displays correctly without this, the CSS is the problem.
         """
-        logger.info("_apply_stylesheet: Applying stylesheet to QDockWidget (self)")
-        StyleLoader.set_theme_from_config(self, self.CONFIG_DATA)
+        logger.info("Stylesheet application DISABLED for testing")
+        # StyleLoader.set_theme_from_config(self.dockWidgetContents, self.CONFIG_DATA)
 
     def _configure_pushbuttons(self, pushButton_config, icons_sizes, font):
         """Delegate to ConfigurationManager."""
@@ -5423,42 +2962,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             Uses manager classes if available, falls back to legacy methods.
             Installs child dialog filter to prevent style bleeding.
         """
-        theme_applied = False
         if self._theme_manager:
-            try:
-                self._theme_manager.setup()
-                theme_applied = self._theme_manager._initialized
-            except Exception as e:
-                logger.warning(f"ThemeManager.setup() failed: {e}")
-
-        if not theme_applied:
-            logger.info("Falling back to legacy stylesheet application")
+            self._theme_manager.setup()
+        else:
             self._apply_auto_configuration()
             self._apply_stylesheet()
             self._setup_theme_watcher()
+            # FIX 2026-01-21: Install child dialog filter for legacy path
             self._install_legacy_child_dialog_filter()
         
         if self._icon_manager:
             self._icon_manager.setup()
         elif ICON_THEME_AVAILABLE:
             IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
-
+        
         if self._button_styler:
             self._button_styler.setup()
-
-        # FIX 2026-02-09: Reload icons AFTER all styling operations complete.
-        # ThemeManager.apply() and ButtonStyler.setup() can interfere with
-        # programmatically set icons (size policy changes, re-polishing, etc.).
-        # Reloading icons last ensures they are always visible.
-        try:
-            self._load_all_pushbutton_icons()
-            self._load_raster_tool_icons()
-            if self._icon_manager:
-                self._icon_manager.apply()
-            logger.info("manage_ui_style: Icons reloaded after styling")
-        except Exception as e:
-            logger.warning(f"manage_ui_style: Icon reload failed: {e}")
-
     
     def _install_legacy_child_dialog_filter(self):
         """
@@ -5561,13 +3080,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
-                try:
-                    self.manageSignal([grp, w], 'connect')
-                except TypeError:
-                    pass  # Signal already connected - expected
-                except Exception as e:
-                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
-                    logger.warning(f"connect_widgets_signals: Failed to connect [{grp}][{w}]: {e}")
+                try: self.manageSignal([grp, w], 'connect')
+                except Exception:  # Signal may already be connected - expected
+                    pass
 
     def disconnect_widgets_signals(self):
         """Disconnect all widget signals from their handlers.
@@ -5582,18 +3097,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self.widgets: return
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
-                try:
-                    self.manageSignal([grp, w], 'disconnect')
-                except TypeError:
-                    pass  # Signal already disconnected - expected
-                except Exception as e:
-                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
-                    logger.warning(f"disconnect_widgets_signals: Failed to disconnect [{grp}][{w}]: {e}")
-        # FIX 2026-02-10 BUG9: Reset flag so connect_widgets_signals() is called
-        # after subsequent task completions. Without this, _signals_connected stays
-        # True after the first add_layers task, causing get_project_layers_from_app()
-        # to skip reconnection on all subsequent operations.
-        self._signals_connected = False
+                try: self.manageSignal([grp, w], 'disconnect')
+                except Exception:  # Signal may already be disconnected - expected
+                    pass
 
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache.
@@ -5625,10 +3131,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 # FIX 2026-01-17 v4: Disconnect ALL receivers to ensure clean state
                 try:
-                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
+                    widget.clicked.disconnect()
                 except TypeError:
                     pass  # No receivers connected, which is fine
-
+                
                 # FIX 2026-01-17 v4: Connect using a closure that captures task_name
                 # This avoids relying on potentially stale lambdas from widgets dict
                 def make_handler(task):
@@ -5684,11 +3190,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 # Disconnect all existing receivers
                 try:
-                    widget.clicked.disconnect()  # Blanket: closure locale (make_handler), pas de ref au slot précédent
+                    widget.clicked.disconnect()
                     logger.debug(f"  Disconnected all receivers from {btn_name}.clicked")
                 except TypeError:
                     pass  # No receivers connected, which is fine
-
+                
                 # FIX 2026-01-22: Connect clicked signal to dialog handler
                 # The lambda gets the widget's checked state and calls the dialog handler
                 # which will call project_property_changed with custom_functions containing ON_CHANGE
@@ -5805,21 +3311,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # FIX 2026-01-15: Connect IDENTIFY and ZOOM buttons FIRST
         # These must be connected directly, NOT via changeSignalState which can break them
         try:
-            self.pushButton_exploring_identify.clicked.disconnect(self.exploring_identify_clicked)
+            self.pushButton_exploring_identify.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_identify.clicked.connect(self.exploring_identify_clicked)
         logger.debug("✓ Connected pushButton_exploring_identify.clicked DIRECTLY")
-
+        
         try:
-            self.pushButton_exploring_zoom.clicked.disconnect(self.exploring_zoom_clicked)
+            self.pushButton_exploring_zoom.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_zoom.clicked.connect(self.exploring_zoom_clicked)
         logger.debug("✓ Connected pushButton_exploring_zoom.clicked DIRECTLY")
         
         try:
-            self.pushButton_exploring_reset_layer_properties.clicked.disconnect()  # Blanket: lambda, pas de ref au slot précédent
+            self.pushButton_exploring_reset_layer_properties.clicked.disconnect()
         except (TypeError, RuntimeError):
             pass
         self.pushButton_exploring_reset_layer_properties.clicked.connect(
@@ -5830,7 +3336,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_SELECTING: Activate selection tool on canvas + sync features
         btn_selecting = self.pushButton_checkable_exploring_selecting
         try:
-            btn_selecting.toggled.disconnect()  # Blanket: closure locale (_on_selecting_toggled), pas de ref au slot précédent
+            btn_selecting.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass  # No connection to disconnect
         
@@ -5870,10 +3376,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_TRACKING: Enable auto-zoom on selection change
         btn_tracking = self.pushButton_checkable_exploring_tracking
         try:
-            btn_tracking.toggled.disconnect()  # Blanket: closure locale (_on_tracking_toggled), pas de ref au slot précédent
+            btn_tracking.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass
-
+        
         # FIX v2: Sync initial state from button to PROJECT_LAYERS
         if self.current_layer and self.widgets_initialized:
             layer_id = self.current_layer.id()
@@ -5905,10 +3411,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # IS_LINKING: Synchronize single/multiple selection expressions
         btn_linking = self.pushButton_checkable_exploring_linking_widgets
         try:
-            btn_linking.toggled.disconnect()  # Blanket: closure locale (_on_linking_toggled), pas de ref au slot précédent
+            btn_linking.toggled.disconnect()
         except (TypeError, RuntimeError):
             pass
-
+        
         # FIX v2: Sync initial state from button to PROJECT_LAYERS
         if self.current_layer and self.widgets_initialized:
             layer_id = self.current_layer.id()
@@ -5944,9 +3450,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def manage_interactions(self):
         """v4.0 Sprint 8: Optimized - initialize widget interactions and default values."""
         logger.info("🚀 manage_interactions CALLED - Starting widget configuration")
-        
-        # v5.3 FIX 2026-01-31: Import QgsRasterLayer for startup toolbox sync
-        from qgis.core import QgsRasterLayer
         
         self.coordinateReferenceSystem = QgsCoordinateReferenceSystem()
         
@@ -5995,24 +3498,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # UX Enhancement: Setup conditional widget states based on pushbutton toggles
         self._setup_conditional_widget_states()
 
-        # v5.3 FIX 2026-01-31: Sync toolBox_exploring page with initial layer type at startup
-        # This ensures the exploring toolbox shows the correct page (Vector/Raster) 
-        # based on the active layer when the plugin opens
-        if self.init_layer:
-            try:
-                self._auto_switch_exploring_page(self.init_layer)
-                logger.info(f"✓ Startup: Exploring toolbox synced to '{type(self.init_layer).__name__}'")
-            except Exception as e:
-                logger.warning(f"Could not sync exploring toolbox at startup: {e}")
-        
-        # v5.4 FIX 2026-02-01: Update exploring pages availability based on layer types in project
-        # This disables Vector/Raster pages when no layers of that type exist
-        try:
-            self._update_exploring_pages_availability()
-            logger.info("✓ Startup: Exploring pages availability updated")
-        except Exception as e:
-            logger.warning(f"Could not update exploring pages availability at startup: {e}")
-
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
             # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
@@ -6023,11 +3508,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.exploring_groupbox_init()
             self.current_layer_changed(self.init_layer)
             self.filtering_auto_current_layer_changed()
-        elif self.init_layer and isinstance(self.init_layer, QgsRasterLayer):
-            # v5.3 FIX 2026-01-31: Also call current_layer_changed for raster layers
-            # This ensures raster-specific widgets are properly initialized at startup
-            self.current_layer_changed(self.init_layer)
-            logger.info(f"✓ Startup: Raster layer '{self.init_layer.name()}' initialized")
     
     def _setup_conditional_widget_states(self):
         """
@@ -6067,24 +3547,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             'pushButton_checkable_filtering_buffer_type': [
                 'comboBox_filtering_buffer_type',
                 'mQgsSpinBox_filtering_buffer_segments'
-            ],
-            # v5.4: Raster Value Filter section
-            'pushButton_checkable_filtering_raster_source': [
-                'comboBox_filtering_raster_source_layer',
-                'comboBox_filtering_raster_band'
-            ],
-            'pushButton_checkable_filtering_raster_layers_to_filter': [
-                'checkableComboBoxLayer_filtering_raster_layers_to_filter'
-            ],
-            'pushButton_checkable_filtering_raster_combine_operator': [
-                'comboBox_filtering_raster_source_combine_operator',
-                'comboBox_filtering_raster_other_combine_operator'
-            ],
-            'pushButton_checkable_filtering_raster_predicates': [
-                'comboBox_filtering_raster_predicates'
-            ],
-            'pushButton_checkable_filtering_sampling_method': [
-                'comboBox_filtering_sampling_method'
             ],
             
             # EXPORTING Section
@@ -6198,9 +3660,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 btn.setEnabled(checked)
                 # Force uncheck when disabling to maintain consistency
                 if not checked and btn.isChecked():
-                    btn.blockSignals(True)
                     btn.setChecked(False)
-                    btn.blockSignals(False)
             
             logger.debug(f"Buffer buttons {'enabled' if checked else 'disabled'} (geometric_predicates={checked})")
         
@@ -6211,117 +3671,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         _on_predicates_toggled(initial_state)
         
         logger.info(f"✓ Buffer buttons dependency configured ({len(buffer_buttons)} buttons)")
-
-        # v5.4: Setup raster source cascade dependency and Exploring↔Filtering sync
-        self._setup_raster_filter_dependencies()
-
-    def _setup_raster_filter_dependencies(self):
-        """v5.4: Setup cascade dependency for raster filtering section.
-
-        - L2-L5 buttons disabled unless L1 (raster_source) is checked.
-        - Bidirectional sync between Exploring Raster and Filtering Raster widgets.
-        """
-        if not hasattr(self, 'pushButton_checkable_filtering_raster_source'):
-            logger.warning("_setup_raster_filter_dependencies: raster_source button not found")
-            return
-
-        master_btn = self.pushButton_checkable_filtering_raster_source
-
-        # Collect dependent buttons (L2-L5)
-        dependent_button_names = [
-            'pushButton_checkable_filtering_raster_layers_to_filter',
-            'pushButton_checkable_filtering_raster_combine_operator',
-            'pushButton_checkable_filtering_raster_predicates',
-            'pushButton_checkable_filtering_sampling_method'
-        ]
-        dependent_buttons = []
-        for name in dependent_button_names:
-            if hasattr(self, name):
-                dependent_buttons.append(getattr(self, name))
-
-        def _on_raster_source_toggled(checked):
-            for btn in dependent_buttons:
-                btn.setEnabled(checked)
-                if not checked and btn.isChecked():
-                    btn.blockSignals(True)
-                    btn.setChecked(False)
-                    btn.blockSignals(False)
-            logger.debug(f"Raster filter buttons {'enabled' if checked else 'disabled'}")
-
-        master_btn.toggled.connect(_on_raster_source_toggled)
-        _on_raster_source_toggled(master_btn.isChecked())
-        logger.info(f"✓ Raster filter cascade dependency configured ({len(dependent_buttons)} buttons)")
-
-        # --- Bidirectional sync: Exploring Raster ↔ Filtering Raster ---
-        self._setup_raster_exploring_filtering_sync()
-
-    def _setup_raster_exploring_filtering_sync(self):
-        """v5.4: Bidirectional sync between Exploring Raster and Filtering Raster widgets.
-
-        - comboBox_raster_source_layer ↔ comboBox_filtering_raster_source_layer
-        - comboBox_raster_band ↔ comboBox_filtering_raster_band
-        """
-        # Raster layer sync: Exploring → Filtering (direct connect, no lambda)
-        if hasattr(self, 'comboBox_raster_source_layer') and hasattr(self, 'comboBox_filtering_raster_source_layer'):
-            self.comboBox_raster_source_layer.layerChanged.connect(self._sync_raster_layer_to_filtering)
-            self.comboBox_filtering_raster_source_layer.layerChanged.connect(self._sync_raster_layer_to_exploring)
-            logger.debug("Raster layer sync connected (Exploring <-> Filtering)")
-
-        # Band sync: Exploring → Filtering (direct connect, no lambda)
-        if hasattr(self, 'comboBox_raster_band') and hasattr(self, 'comboBox_filtering_raster_band'):
-            self.comboBox_raster_band.currentIndexChanged.connect(self._sync_raster_band_to_filtering)
-            self.comboBox_filtering_raster_band.currentIndexChanged.connect(self._sync_raster_band_to_exploring)
-            logger.debug("✓ Raster band sync connected (Exploring ↔ Filtering)")
-
-        # Raster layer change in Filtering → populate band selector
-        if hasattr(self, 'comboBox_filtering_raster_source_layer'):
-            self.comboBox_filtering_raster_source_layer.layerChanged.connect(
-                self._on_filtering_raster_layer_changed)
-
-    def _sync_raster_layer_to_filtering(self, layer):
-        """Sync raster layer from Exploring to Filtering (avoid signal loop)."""
-        target = self.comboBox_filtering_raster_source_layer
-        if target.currentLayer() != layer:
-            target.blockSignals(True)
-            target.setLayer(layer)
-            target.blockSignals(False)
-
-    def _sync_raster_layer_to_exploring(self, layer):
-        """Sync raster layer from Filtering to Exploring (avoid signal loop)."""
-        target = self.comboBox_raster_source_layer
-        if target.currentLayer() != layer:
-            target.blockSignals(True)
-            target.setLayer(layer)
-            target.blockSignals(False)
-
-    def _sync_raster_band_to_filtering(self, index):
-        """Sync band index from Exploring to Filtering (avoid signal loop)."""
-        target = self.comboBox_filtering_raster_band
-        if target.currentIndex() != index and 0 <= index < target.count():
-            target.blockSignals(True)
-            target.setCurrentIndex(index)
-            target.blockSignals(False)
-
-    def _sync_raster_band_to_exploring(self, index):
-        """Sync band index from Filtering to Exploring (avoid signal loop)."""
-        target = self.comboBox_raster_band
-        if target.currentIndex() != index and 0 <= index < target.count():
-            target.blockSignals(True)
-            target.setCurrentIndex(index)
-            target.blockSignals(False)
-
-    def _on_filtering_raster_layer_changed(self, layer):
-        """Populate band selector when raster source layer changes in Filtering."""
-        from qgis.core import QgsRasterLayer
-        self.comboBox_filtering_raster_band.blockSignals(True)
-        self.comboBox_filtering_raster_band.clear()
-        if layer and isinstance(layer, QgsRasterLayer) and layer.isValid():
-            for i in range(1, layer.bandCount() + 1):
-                band_name = layer.bandName(i) or f"Band {i}"
-                self.comboBox_filtering_raster_band.addItem(band_name)
-            logger.debug(f"Filtering raster band selector updated: {layer.bandCount()} bands")
-        self.comboBox_filtering_raster_band.blockSignals(False)
-
+    
     def _toggle_associated_widgets(self, enabled, widgets):
         """
         Enable or disable a list of widgets based on pushbutton toggle state.
@@ -6384,20 +3734,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for gb, _ in gbs:
                 try:
                     gb.blockSignals(True)
-                    try:
-                        gb.toggled.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
-                        gb.collapsedStateChanged.disconnect()  # Blanket: connexion via functools.partial, pas de ref au slot précédent
+                    try: 
+                        gb.toggled.disconnect()
+                        gb.collapsedStateChanged.disconnect()
                     except TypeError:  # Signals not connected yet - expected on first setup
                         pass
                 finally:
                     gb.blockSignals(False)  # Always unblock even if disconnect fails
             
-            # Now connect new signals (use functools.partial instead of lambdas
-            # so connections can be individually disconnected if needed)
-            from functools import partial
-            for gb, name in gbs:
-                gb.toggled.connect(partial(self._on_groupbox_clicked, name))
-                gb.collapsedStateChanged.connect(partial(self._on_groupbox_collapse_changed, name))
+            # Now connect new signals
+            for gb, name in gbs: 
+                gb.toggled.connect(lambda c, n=name: self._on_groupbox_clicked(n, c))
+                gb.collapsedStateChanged.connect(lambda col, n=name: self._on_groupbox_collapse_changed(n, col))
                 
             logger.debug("_connect_groupbox_signals_directly: Signals connected successfully")
         except Exception as e: 
@@ -6491,87 +3839,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             QTimer.singleShot(0, self._ensure_key_widgets_visible)
     
     def _ensure_key_widgets_visible(self):
-        """FIX 2026-02-09: Ensure ALL key widgets, action frame, and dynamic widgets are visible.
+        """FIX 2026-01-19: Ensure key widgets remain visible after groupbox changes.
         
-        Forces visibility on key containers, the action buttons frame, and 
-        dynamic widgets. Also verifies that dynamic widgets are actually in 
-        their target layouts — if not, re-inserts them.
-        Called from showEvent and after groupbox changes.
+        When QgsCollapsibleGroupBox collapse/expand, the layout can get corrupted
+        causing widget_exploring_keys to disappear. This method forces visibility.
         """
         try:
-            # Ensure all key widget containers are visible
-            for wname in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
-                if hasattr(self, wname):
-                    w = getattr(self, wname)
-                    if w and not w.isVisible():
-                        logger.warning(f"FIX-2026-02-09: {wname} was hidden - restoring visibility")
-                        w.setVisible(True)
-                        w.raise_()
-                        w.updateGeometry()
-            
-            # Ensure frame_actions is visible
-            if hasattr(self, 'frame_actions'):
-                fa = self.frame_actions
-                if fa and not fa.isVisible():
-                    logger.warning("FIX-2026-02-09: frame_actions was hidden - restoring visibility")
-                    fa.setVisible(True)
-                    fa.updateGeometry()
-            
-            # Ensure dynamic widgets are visible AND in their layouts
-            self._ensure_dynamic_widgets_layout()
-            
-            # Force parent frames to recalculate layout
-            for fname in ['frame_exploring', 'FILTERING', 'EXPORTING']:
-                if hasattr(self, fname):
-                    f = getattr(self, fname)
-                    if f:
-                        f.updateGeometry()
-                        f.update()
+            # Ensure exploring key widgets are visible
+            if hasattr(self, 'widget_exploring_keys') and self.widget_exploring_keys:
+                if not self.widget_exploring_keys.isVisible():
+                    logger.warning("FIX-2026-01-19: widget_exploring_keys was hidden - restoring visibility")
+                self.widget_exploring_keys.setVisible(True)
+                self.widget_exploring_keys.raise_()  # Bring to front
+                self.widget_exploring_keys.updateGeometry()
+                
+            # Force the parent frame to recalculate layout
+            if hasattr(self, 'frame_exploring') and self.frame_exploring:
+                self.frame_exploring.updateGeometry()
+                self.frame_exploring.update()
                 
         except Exception as e:
             logger.debug(f"_ensure_key_widgets_visible: {e}")
-
-    def _ensure_dynamic_widgets_layout(self):
-        """FIX 2026-02-09c: Verify dynamic widgets are in their target layouts.
-        
-        After manage_ui_style() applies themes/stylesheets, dynamically-inserted
-        widgets can be hidden or removed from layouts. This method checks layout
-        membership and re-inserts widgets if needed, then forces visibility.
-        """
-        try:
-            # 1. Exploring: multiple selection feature picker
-            if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection'):
-                w = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
-                layout = getattr(self, 'horizontalLayout_exploring_multiple_feature_picker', None)
-                if layout is not None and layout.indexOf(w) < 0:
-                    logger.warning("FIX: Re-inserting exploring feature picker into layout")
-                    layout.insertWidget(0, w, 1)
-                w.show()
-            
-            # 2. Filtering: layers to filter container widget
-            container = getattr(self, 'widget_filtering_distant_layers', None)
-            target_layout = getattr(self, 'verticalLayout_filtering_values', None)
-            if container is not None and target_layout is not None:
-                if target_layout.indexOf(container) < 0:
-                    logger.warning("FIX: Re-inserting filtering layers container at position 2")
-                    target_layout.insertWidget(2, container)
-                container.show()
-            if hasattr(self, 'checkableComboBoxLayer_filtering_layers_to_filter'):
-                self.checkableComboBoxLayer_filtering_layers_to_filter.show()
-            if hasattr(self, 'checkBox_filtering_use_centroids_distant_layers'):
-                self.checkBox_filtering_use_centroids_distant_layers.show()
-            
-            # 3. Exporting: layers to export combobox
-            if hasattr(self, 'checkableComboBoxLayer_exporting_layers'):
-                w = self.checkableComboBoxLayer_exporting_layers
-                target_layout = getattr(self, 'verticalLayout_exporting_values', None)
-                if target_layout is not None and target_layout.indexOf(w) < 0:
-                    logger.warning("FIX: Re-inserting exporting layers widget at position 0")
-                    target_layout.insertWidget(0, w)
-                w.show()
-            
-        except Exception as e:
-            logger.debug(f"_ensure_dynamic_widgets_layout: {e}")
 
     def _on_groupbox_clicked(self, groupbox, state):
         """v4.0 S18: Handle groupbox toggle for exclusive behavior.
@@ -7268,64 +4556,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         except Exception as e:
                             logger.debug(f"  → Could not get QGIS selection: {e}")
                 
-                # Strategy 4 (FIX 2026-01-31): Try to get feature from picker's internal model
-                # QgsFeaturePickerWidget uses QgsFeaturePickerModel internally. When feature() returns 
-                # invalid, we can try to extract the feature from the model via currentIndex.
-                # This handles the case where user selected in dropdown but featureChanged signal
-                # wasn't properly emitted or _last_single_selection_fid wasn't saved.
-                try:
-                    model = picker.model()
-                    current_index = picker.currentIndex()
-                    logger.info(f"   Strategy 4: picker.currentIndex()={current_index}, model={type(model).__name__ if model else 'None'}")
-                    if model and current_index >= 0:
-                        # QgsFeaturePickerModel stores feature in FeatureRole (Qt.UserRole + 1)
-                        from qgis.PyQt.QtCore import Qt
-                        model_index = model.index(current_index, 0)
-                        if model_index.isValid():
-                            # Try different roles to extract feature data
-                            # QgsFeaturePickerModelBase::FeatureRole = Qt::UserRole + 1
-                            feature_role = Qt.UserRole + 1
-                            feature_data = model.data(model_index, feature_role)
-                            logger.info(f"   Strategy 4: feature_data from FeatureRole={feature_data}")
-                            
-                            # Try IdentifierValueRole = Qt::UserRole + 2 (contains FID or identifier)
-                            id_role = Qt.UserRole + 2
-                            id_data = model.data(model_index, id_role)
-                            logger.info(f"   Strategy 4: id_data from IdentifierValueRole={id_data}")
-                            
-                            # If we got a QgsFeature directly
-                            if feature_data and hasattr(feature_data, 'isValid') and feature_data.isValid():
-                                fid = feature_data.id()
-                                reloaded = self.current_layer.getFeature(fid)
-                                if reloaded.isValid():
-                                    logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature {fid} from model FeatureRole")
-                                    self._last_single_selection_fid = fid
-                                    self._last_single_selection_layer_id = self.current_layer.id()
-                                    return [reloaded], ""
-                            
-                            # If we got an identifier (FID or PK value)
-                            if id_data is not None:
-                                if isinstance(id_data, int):
-                                    # Likely a FID
-                                    reloaded = self.current_layer.getFeature(id_data)
-                                    if reloaded.isValid():
-                                        logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature from IdentifierValueRole FID={id_data}")
-                                        self._last_single_selection_fid = id_data
-                                        self._last_single_selection_layer_id = self.current_layer.id()
-                                        return [reloaded], ""
-                                elif isinstance(id_data, (list, tuple)) and len(id_data) > 0:
-                                    # Could be a compound key
-                                    pk_value = id_data[0]
-                                    if isinstance(pk_value, int):
-                                        reloaded = self.current_layer.getFeature(pk_value)
-                                        if reloaded.isValid():
-                                            logger.info(f"  ✓ Strategy 4 SUCCESS: Got feature from compound key FID={pk_value}")
-                                            self._last_single_selection_fid = pk_value
-                                            self._last_single_selection_layer_id = self.current_layer.id()
-                                            return [reloaded], ""
-                except Exception as e:
-                    logger.debug(f"  → Strategy 4 (model extraction) failed: {e}")
-                
                 logger.debug(f"  → No feature in single_selection picker")
                 return [], ''
                     
@@ -7578,16 +4808,27 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _ensure_selection_changed_connected(self):
         """
         FIX 2026-01-15 v9: Ensure the selectionChanged signal is connected to on_layer_selection_changed.
-
+        
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
-
-        Delegates to _ensure_layer_signals_connected() for safe disconnect-then-connect.
         """
+        logger.debug(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
+        
         if not self.current_layer:
-            logger.warning("_ensure_selection_changed_connected: No current layer")
+            logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
             return
-        self._ensure_layer_signals_connected(self.current_layer)
+        
+        try:
+            # Check if signal needs to be connected
+            if not self.current_layer_selection_connection:
+                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                self.current_layer_selection_connection = True
+                logger.debug(f"✅ _ensure_selection_changed_connected: Connected selectionChanged signal for layer '{self.current_layer.name()}'")
+            else:
+                logger.debug(f"ℹ️ _ensure_selection_changed_connected: Signal already connected for layer '{self.current_layer.name()}'")
+        except (TypeError, RuntimeError) as e:
+            # Signal might already be connected, or layer deleted
+            logger.warning(f"⚠️ _ensure_selection_changed_connected error: {e}")
 
     def on_layer_selection_changed(self, selected, deselected, clearAndSelect):
         """
@@ -7597,14 +4838,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         The signal can be disconnected during layer changes and not always reconnected,
         causing tracking to only work for the first feature change.
         """
-        logger.info(f"on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
-
-        # Note: self-healing connect removed - _ensure_layer_signals_connected() is the single entry point
-        # The flag is set to True to keep compatibility with code that reads it
+        # FIX v10: DEBUG - Confirm signal is triggered
+        logger.info(f"🔔 on_layer_selection_changed TRIGGERED: selected={len(selected)}, deselected={len(deselected)}, clearAndSelect={clearAndSelect}")
+        
+        # FIX v5: Ensure signal stays connected (self-healing)
         if self.current_layer and not self.current_layer_selection_connection:
-            self.current_layer_selection_connection = True
-
-        # Check delegation
+            try:
+                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                self.current_layer_selection_connection = True
+                logger.debug("on_layer_selection_changed: Re-connected selectionChanged signal (self-healing)")
+            except (TypeError, RuntimeError):
+                pass
+        
+        # FIX v10: DEBUG - Check delegation
         if self._controller_integration:
             logger.info("🔀 Delegating to ExploringController.handle_layer_selection_changed")
             if self._controller_integration.delegate_handle_layer_selection_changed(selected, deselected, clearAndSelect):
@@ -8093,41 +5339,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         return self.widgets["EXPORTING"]["PROJECTION_TO_EXPORT"]["WIDGET"].crs().authid() if self.widgets_initialized and self.has_loaded_layers else None
     
     def _validate_and_prepare_layer(self, layer):
-        """Validate and prepare layer for change. Returns: (should_continue, layer, layer_props)
-        
-        Note: Supports both vector and raster layers for unified exploring with auto-switch.
-        """
-        if self._plugin_busy or not self.widgets_initialized: return (False, None, None)
-        
-        # Note: Support both Vector and Raster layers for Dual QToolBox
-        is_vector = isinstance(layer, QgsVectorLayer)
-        is_raster = isinstance(layer, QgsRasterLayer)
-        
-        # Note: Handle raster layers - continue with raster-specific handling
-        if is_raster:
-            try: _ = layer.id()
-            except RuntimeError: return (False, None, None)
-            
-            # Store as current layer for raster operations
-            self.current_layer = layer
-            
-            # Note: If dual toolbox enabled, set current layer on container
-            # v5.2 FIX 2026-01-31: Don't call _sync_toolbox_exploring_with_layer here
-            # It will be called by _auto_switch_exploring_page to avoid double sync
-            if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-                try:
-                    self._dual_toolbox_container.set_current_layer(layer)
-                    logger.debug(f"Note: Set raster layer '{layer.name()}' on DualToolBox")
-                except Exception as e:
-                    logger.warning(f"Note: Failed to set raster layer on DualToolBox: {e}")
-            
-            # Note: Return raster layer for further processing (auto-switch will happen)
-            # Note: layer_props is None for raster layers as they don't use PROJECT_LAYERS
-            return (True, layer, None)
-        
-        # Vector layer handling (legacy flow)
-        if not self.PROJECT_LAYERS: return (False, None, None)
-        if layer is None or not is_vector: return (False, None, None)
+        """Validate and prepare layer for change. Returns: (should_continue, layer, layer_props)"""
+        if self._plugin_busy or not self.PROJECT_LAYERS or not self.widgets_initialized: return (False, None, None)
+        if layer is None or not isinstance(layer, QgsVectorLayer): return (False, None, None)
         try: _ = layer.id()
         except RuntimeError: return (False, None, None)
         try:
@@ -8149,13 +5363,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return (False, None, None)
         
         self.currentLayerChanged.emit()
-        
-        # Note: Update Dual QToolBox with new current layer (vector)
-        # v5.2 FIX 2026-01-31: Don't call _sync_toolbox_exploring_with_layer here
-        # It will be called by _auto_switch_exploring_page to avoid double sync
-        if DUAL_TOOLBOX_ENABLED and self._dual_toolbox_container:
-            self._dual_toolbox_container.set_current_layer(layer)
-        
         return (True, layer, self.PROJECT_LAYERS[self.current_layer.id()])
     
     def _reset_layer_expressions(self, layer_props):
@@ -8312,80 +5519,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.filtering_geometric_predicates_state_changed()
     
     def _reload_exploration_widgets(self, layer, layer_props):
-        """v4.0 S18: → ExploringController with fallback.
-        
-        v5.2 FIX 2026-01-31: For large layers (>10k features), defers widget loading
-        to prevent QGIS freeze during layer change.
-        """
+        """v4.0 S18: → ExploringController with fallback."""
         logger.info(f"_reload_exploration_widgets called for layer: {layer.name() if layer else 'None'}")
-        
-        # v5.2 FIX: Check layer size to decide if we should defer
-        is_large_layer = False
-        if layer and isinstance(layer, QgsVectorLayer):
-            try:
-                feature_count = layer.featureCount()
-                # Threshold: 10,000 features
-                LARGE_LAYER_THRESHOLD = 10_000
-                is_large_layer = feature_count > LARGE_LAYER_THRESHOLD
-                if is_large_layer:
-                    logger.info(f"v5.2: Large vector layer detected ({feature_count:,} features > {LARGE_LAYER_THRESHOLD:,})")
-            except Exception:
-                pass
-        
         if self._exploring_ctrl:
             logger.debug("Delegating to ExploringController")
-            try:
-                if is_large_layer:
-                    self._deferred_reload_exploration_widgets(layer, layer_props)
-                else:
-                    self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
-            except Exception as e:
-                # FIX 2026-02-09: Fallback to direct widget update when controller fails
-                logger.warning(f"ExploringController._reload_exploration_widgets failed: {e}, using fallback")
-                if is_large_layer:
-                    self._deferred_reload_exploration_widgets(layer, layer_props)
-                else:
-                    self._fallback_reload_exploration_widgets(layer, layer_props)
+            self._exploring_ctrl._reload_exploration_widgets(layer, layer_props)
         else:
             logger.warning("ExploringController NOT available - using fallback")
-            if is_large_layer:
-                self._deferred_reload_exploration_widgets(layer, layer_props)
-            else:
-                self._fallback_reload_exploration_widgets(layer, layer_props)
-    
-    def _deferred_reload_exploration_widgets(self, layer, layer_props):
-        """v5.2 FIX 2026-01-31: Defer exploration widget loading for large layers.
-        
-        Uses QTimer to allow UI to remain responsive while widgets are loaded.
-        """
-        from qgis.PyQt.QtCore import QTimer
-        import weakref
-        
-        weak_self = weakref.ref(self)
-        captured_layer_id = layer.id() if layer else None
-        captured_layer_props = layer_props.copy() if layer_props else {}
-        
-        def deferred_load():
-            self_ref = weak_self()
-            if not self_ref:
-                return
-            try:
-                from qgis.core import QgsProject
-                fresh_layer = QgsProject.instance().mapLayer(captured_layer_id) if captured_layer_id else None
-                if fresh_layer and isinstance(fresh_layer, QgsVectorLayer):
-                    # Get fresh layer_props
-                    fresh_props = self_ref.PROJECT_LAYERS.get(captured_layer_id, captured_layer_props)
-                    if self_ref._exploring_ctrl:
-                        self_ref._exploring_ctrl._reload_exploration_widgets(fresh_layer, fresh_props)
-                    else:
-                        self_ref._fallback_reload_exploration_widgets(fresh_layer, fresh_props)
-                    logger.info(f"v5.2: Deferred exploration widgets loaded for {fresh_layer.name()}")
-            except Exception as e:
-                logger.warning(f"v5.2: Deferred exploration load failed: {e}")
-        
-        # Defer by 150ms to allow UI to update
-        QTimer.singleShot(150, deferred_load)
-        logger.debug(f"v5.2: Exploration widgets loading deferred for large layer")
+            # Fallback: Update exploring widgets layer when controller unavailable
+            self._fallback_reload_exploration_widgets(layer, layer_props)
     
     def _fallback_reload_exploration_widgets(self, layer, layer_props):
         """FIX 2026-01-14: Fallback to update exploring widgets when controller unavailable."""
@@ -8447,18 +5589,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         logger.info(f"✨ FALLBACK: Upgraded custom_selection to '{best_field}'")
             
             # Update single selection widget (QgsFeaturePickerWidget)
-            # v5.2 FIX 2026-01-31: Use setFetchLimit to prevent loading all features at once
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget:
                     logger.debug(f"Updating SINGLE_SELECTION_FEATURES: old_layer={widget.layer().name() if widget.layer() else 'None'} → new_layer={layer.name()}")
                     widget.setLayer(None)  # Force refresh
-                    
-                    # v5.2 FIX: Set fetch limit BEFORE setting layer to limit initial load
-                    # This prevents QGIS freeze on large layers
-                    if hasattr(widget, 'setFetchLimit'):
-                        widget.setFetchLimit(100)  # Only fetch 100 features initially
-                    
                     widget.setLayer(layer)
                     widget.setDisplayExpression(single_expr)
                     widget.setFetchGeometry(True)
@@ -8581,9 +5716,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception:
                 pass
         
-        # Connect selectionChanged for tracking (delegate to single entry point)
+        # Connect selectionChanged for tracking
         if self.current_layer:
-            self._ensure_layer_signals_connected(self.current_layer)
+            try:
+                self.current_layer.selectionChanged.connect(self.on_layer_selection_changed)
+                self.current_layer_selection_connection = True
+            except Exception:
+                pass
         
         # Restore exploring groupbox state
         if layer_props and "current_exploring_groupbox" in layer_props.get("exploring", {}):
@@ -8666,7 +5805,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except (ImportError, RuntimeError, AttributeError):
             return True  # Assume deleted if we can't check
 
-    def current_layer_changed(self, layer, manual_change: bool = False) -> None:
+    def current_layer_changed(self, layer: QgsVectorLayer, manual_change: bool = False) -> None:
         """Handle current layer change event from QGIS or user interaction.
 
         Updates all UI components when the active layer changes:
@@ -8675,10 +5814,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         - Synchronizes filtering/exporting widgets
         - Reloads exploration widgets (feature picker, combobox)
         - Reconnects layer-specific signals
-        - Note: Auto-switches between vector/raster exploring pages
 
         Args:
-            layer: The new current layer (QgsVectorLayer or QgsRasterLayer).
+            layer: The new current QgsVectorLayer.
             manual_change: True if user manually selected layer from combobox.
                           Bypasses protection windows when True.
 
@@ -8686,7 +5824,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             - Ignores layer changes during active filtering (_filtering_in_progress)
             - Defers changes if plugin is busy (_plugin_busy)
             - Handles deleted C++ objects gracefully
-            - Note: Supports both vector and raster layers with auto-switch
         """
         import traceback
         logger.info(f"=== current_layer_changed ENTRY === layer: {layer.name() if layer else 'None'}, manual: {manual_change}")
@@ -8702,12 +5839,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Restored from v2.9.26 - was lost during hexagonal migration
         if getattr(self, '_filtering_in_progress', False):
             logger.debug("v4.0.5: 🛡️ current_layer_changed BLOCKED - filtering in progress")
-            # FIX v5.2 2026-01-31: Still switch toolbox page to show correct layer type
-            if layer is not None:
-                try:
-                    self._auto_switch_exploring_page(layer)
-                except Exception as e:
-                    logger.warning(f"Failed to auto-switch during filtering: {e}")
             return
         
         # CRITICAL FIX (2026-01-14): Delegate to controller with manual_change flag
@@ -8719,27 +5850,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # Manual change bypasses protection - continue with update
                     logger.info("⚠️ Controller blocked but continuing anyway (manual user change)")
                 else:
-                    # FIX v5.2 2026-01-31: ALWAYS switch toolbox page even when controller blocks
-                    # The UI should reflect the user's selection even if sync is blocked
-                    # This ensures the exploring toolbox shows Vector/Raster page correctly
-                    if layer is not None:
-                        try:
-                            self._auto_switch_exploring_page(layer)
-                            logger.info(f"🔄 Auto-switched exploring page for '{layer.name()}' (controller blocked sync)")
-                        except Exception as e:
-                            logger.warning(f"Failed to auto-switch exploring page: {e}")
                     # Automatic change blocked by controller - STOP here
                     logger.info("⚠️ Controller blocked automatic layer change (protection active) - STOPPING")
                     return
-        
-        # v5.2 FIX 2026-01-31: ALWAYS switch exploring page BEFORE validation
-        # This ensures UI reflects layer type even if validation fails later
-        if layer is not None:
-            try:
-                self._auto_switch_exploring_page(layer)
-            except Exception as e:
-                logger.warning(f"Failed to auto-switch exploring page (pre-validation): {e}")
-        
         layer = self._ensure_valid_current_layer(layer)
         if layer is None:
             logger.debug("current_layer_changed: Layer is None after validation")
@@ -8756,55 +5869,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._reset_selection_tracking_for_layer(layer)
         try:
             should_continue, validated_layer, layer_props = self._validate_and_prepare_layer(layer)
-            
-            # v5.2 FIX 2026-01-31: ALWAYS switch exploring page based on layer type
-            # Even if validation fails, UI should reflect the user's layer selection
-            # This ensures toolBox_exploring shows Vector/Raster page correctly
-            if layer is not None:
-                try:
-                    self._auto_switch_exploring_page(layer)
-                    logger.info(f"✓ Step 0: Exploring page auto-switched for '{layer.name()}'")
-                except Exception as e:
-                    logger.warning(f"Failed to auto-switch exploring page: {e}")
-            
-            if not should_continue:
-                logger.debug("current_layer_changed: Validation failed, returning after auto-switch")
-                return
-            
-            # v5.3 FIX 2026-01-31: Track this layer as last used of its type
-            # This enables manual toolbox switching to remember last vector/raster
-            self._update_last_layer_by_type(validated_layer)
-            
-            # v5.0: Detect layer type for conditional processing
-            is_raster = isinstance(validated_layer, QgsRasterLayer)
-            is_vector = isinstance(validated_layer, QgsVectorLayer)
-            
-            # v5.0: Only reset expressions and disconnect signals for vector layers
-            if is_vector and layer_props:
-                self._reset_layer_expressions(layer_props)
-                widgets = self._disconnect_layer_signals()
-                logger.info("✓ Step 1: Layer validated and expressions reset")
-            else:
-                widgets = []  # No signals to reconnect for raster
-                logger.info(f"✓ Step 1: Raster layer validated (skipping vector-specific init)")
+            if not should_continue: return
+            self._reset_layer_expressions(layer_props); widgets = self._disconnect_layer_signals()
+            logger.info("✓ Step 1: Layer validated and expressions reset")
             
             # FIX 2026-01-14: Pass manual_change flag to widget synchronization
-            # v5.0: Only synchronize widgets for vector layers
-            if is_vector and layer_props:
-                self._synchronize_layer_widgets(validated_layer, layer_props, manual_change=manual_change)
-                logger.info("✓ Step 2: Layer widgets synchronized")
-            else:
-                logger.info("✓ Step 2: Raster layer (skipping vector widget sync)")
+            self._synchronize_layer_widgets(validated_layer, layer_props, manual_change=manual_change)
+            logger.info("✓ Step 2: Layer widgets synchronized")
             
-            # v5.2 FIX: Auto-switch already done in Step 0 (before validation check)
-            # This ensures UI always reflects layer type, even if validation fails
-            
-            # v5.0: Only reload exploration widgets for vector layers
-            if is_vector and layer_props:
-                self._reload_exploration_widgets(validated_layer, layer_props)
-                logger.info("✓ Step 3: Exploration widgets reloaded")
-            else:
-                logger.info("✓ Step 3: Raster layer (raster widgets synced in auto-switch)")
+            self._reload_exploration_widgets(validated_layer, layer_props)
+            logger.info("✓ Step 3: Exploration widgets reloaded")
             
             # Force visual update of exploration widgets
             if "EXPLORING" in self.widgets:
@@ -8817,28 +5891,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             pass
                 logger.debug("Exploring widgets visually refreshed")
             
-            # v5.0: Initialize exploring groupbox for vector layers only
-            # Raster layers don't use exploring groupbox (use dedicated raster widgets)
-            if self.current_layer and is_vector:
+            # CRITICAL: Initialize exploring groupbox for ALL layers, not just existing ones
+            # This ensures widgets are updated even when switching to a new layer
+            if self.current_layer:
                 # Ensure layer is in PROJECT_LAYERS before initializing
                 if self.current_layer.id() not in self.PROJECT_LAYERS:
                     logger.debug(f"Layer {self.current_layer.name()} not in PROJECT_LAYERS yet - will be added")
                 self.exploring_groupbox_init()
                 logger.info("✓ Step 4: Exploring groupbox initialized")
-            elif is_raster:
-                logger.info("✓ Step 4: Raster layer (using raster exploring widgets)")
             
             self._update_exploring_buttons_state()
-            # v5.4: Update raster tool buttons state
-            self._update_raster_tool_buttons_state()
             logger.info("✓ Step 5: Exploring buttons state updated")
             
-            # v5.0: Only reconnect signals for vector layers
-            if is_vector and layer_props:
-                self._reconnect_layer_signals(widgets, layer_props)
-                logger.debug("✓ Step 6: Layer signals reconnected")
-            else:
-                logger.debug("✓ Step 6: Raster layer (no vector signals to reconnect)")
+            self._reconnect_layer_signals(widgets, layer_props)
+            logger.debug("✓ Step 6: Layer signals reconnected")
             
             logger.info(f"=== current_layer_changed SUCCESS === layer: {validated_layer.name()}")
         except Exception as e:
@@ -9165,13 +6231,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
         is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
         
-        # FIX 2026-02-09d: Use container widget instead of removed hlayout
-        container = getattr(self, 'widget_filtering_distant_layers', None)
-        if container is not None:
-            for child in container.findChildren(QtWidgets.QWidget):
-                child.setEnabled(is_checked)
+        # v4.0.3: Disable entire row layout (includes all widgets in the row)
+        self._set_layout_widgets_enabled('horizontalLayout_filtering_distant_layers', is_checked)
         
-        # Also set individual widgets directly
+        # Also set individual widgets that may not be in the layout
         self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"].setEnabled(is_checked)
         self.widgets["FILTERING"]["USE_CENTROIDS_DISTANT_LAYERS"]["WIDGET"].setEnabled(is_checked)
         
@@ -9366,9 +6429,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             return
         
         layout = getattr(self, layout_name)
-        if layout is None:
-            return
-        
         for i in range(layout.count()):
             item = layout.itemAt(i)
             if item and item.widget():
@@ -9442,7 +6502,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         v3.1 Sprint 12: Simplified - handle auto current layer toggle.
         v4.0.5: When checked, synchronizes comboBox_filtering_current_layer with iface.activeLayer()
-        v5.0: Supports both vector and raster layers for unified exploring.
         FIX 2026-01-14: Clear signal cache to ensure connection/disconnection works properly.
         """
         if not self._is_ui_ready(): return
@@ -9451,12 +6510,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
         self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
         
-        # v5.0: When enabling auto sync, immediately sync current layer with active layer
-        # Supports both vector and raster layers
+        # v4.0.5: When enabling auto sync, immediately sync current layer with active layer
         if state and hasattr(self, 'comboBox_filtering_current_layer'):
             active_layer = self.iface.activeLayer()
-            if active_layer and isinstance(active_layer, (QgsVectorLayer, QgsRasterLayer)):
-                logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()} (type: {'raster' if isinstance(active_layer, QgsRasterLayer) else 'vector'})")
+            if active_layer and isinstance(active_layer, QgsVectorLayer):
+                logger.debug(f"Auto-sync enabled: Setting current layer to {active_layer.name()}")
                 self.comboBox_filtering_current_layer.setLayer(active_layer)
         
         # FIX 2026-01-14: Clear signal cache before connect/disconnect to avoid stale state
@@ -9569,18 +6627,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # FIX 2026-01-14: Force reconnect exploring button signals (IS_SELECTING, IS_TRACKING, IS_LINKING)
                 self.force_reconnect_exploring_signals()
                 layer = self._determine_active_layer()
-                # FIX 2026-02-09: Set current_layer BEFORE emitting projectLayersReady
-                if layer and self.current_layer is None:
-                    self.current_layer = layer
                 self._activate_layer_ui()
-                # FIX 2026-02-10: Reset _plugin_busy BEFORE calling _refresh_layer_specific_widgets
-                # so that current_layer_changed runs synchronously instead of being deferred
-                # via QTimer(150ms). _updating_layers still prevents reentrance from
-                # get_project_layers_from_app itself.
-                self._plugin_busy = False
                 if layer: self._refresh_layer_specific_widgets(layer)
                 # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
-                logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers), current_layer={self.current_layer.name() if self.current_layer else 'None'}")
+                logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers)")
                 self.projectLayersReady.emit()
                 return
             if self.current_layer and self.current_layer.isValid():
@@ -9593,15 +6643,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.disconnect_widgets_signals()
             self._signals_connected = False
             self.set_widgets_enabled_state(False)
-            # v5.4 FIX 2026-02-01: Update exploring pages availability when all layers removed
-            try:
-                self._update_exploring_pages_availability()
-            except Exception as e:
-                logger.warning(f"Could not update exploring pages availability: {e}")
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
                 # v4.0: Soft "mousse" style for waiting state
-                self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#7f8c8d;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#f4f6f6;}")
+                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
         finally:
             self._updating_layers, self._plugin_busy = False, False
 
@@ -9724,17 +6769,21 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # v4.0: Soft "mousse" style with smoother colors
         base_style = f"""
-            QPushButton#label_backend_indicator {{
+            QLabel#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
-                font-size: 7pt;
+                font-size: 8pt;
                 font-weight: 500;
-                padding: 1px 4px;
-                border-radius: 8px;
+                padding: 2px 8px;
+                border-radius: 10px;
                 border: none;
+            }}
+            QLabel#label_backend_indicator:hover {{
+                filter: brightness(1.1);
             }}
         """
         self.backend_indicator_label.setStyleSheet(base_style)
+        self.backend_indicator_label.adjustSize()
     
     def getProjectLayersEvent(self, event):
         if self.widgets_initialized: self.gettingProjectLayers.emit()
@@ -9763,18 +6812,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try: self._disconnect_feature_picker_layer_deletion() if hasattr(self, '_disconnect_feature_picker_layer_deletion') else None
         except Exception:  # May already be disconnected - expected
             pass
-        try:
-            if hasattr(self, 'comboBox_filtering_current_layer'):
-                self.comboBox_filtering_current_layer.blockSignals(True)
-                self.comboBox_filtering_current_layer.setLayer(None)
-                self.comboBox_filtering_current_layer.blockSignals(False)
+        try: self.comboBox_filtering_current_layer.setLayer(None) if hasattr(self, 'comboBox_filtering_current_layer') else None
         except RuntimeError:  # Widget may already be deleted - expected during shutdown
             pass
-        try:
-            if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection'):
-                self.mFeaturePickerWidget_exploring_single_selection.blockSignals(True)
-                self.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
-                self.mFeaturePickerWidget_exploring_single_selection.blockSignals(False)
+        try: self.mFeaturePickerWidget_exploring_single_selection.setLayer(None) if hasattr(self, 'mFeaturePickerWidget_exploring_single_selection') else None
         except RuntimeError:  # Widget may already be deleted - expected during shutdown
             pass
         try: self._exploring_cache.invalidate_all() if hasattr(self, '_exploring_cache') else None
@@ -9786,10 +6827,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try: self._controller_integration.teardown() if self._controller_integration else None
         except Exception:  # Controller may already be torn down - expected
             pass
-        try: self._raster_manager.teardown() if hasattr(self, '_raster_manager') and self._raster_manager else None
-        except Exception:  # Manager may already be torn down - expected
-            pass
-
+        
         self.closingPlugin.emit()
         event.accept()
 
@@ -9957,22 +6995,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
         self.setLayerVariableEvent(self.current_layer, [("filtering", "layers_to_filter")])
-
-        # v5.5: Route raster targets to RasterFilterService before emitting filter task
-        if task_name == 'filter':
-            from qgis.core import QgsVectorLayer
-            if isinstance(self.current_layer, QgsVectorLayer):
-                vector_targets, raster_targets = self._split_filter_targets_by_type()
-                if raster_targets:
-                    logger.info(f"v5.5: Dispatching {len(raster_targets)} raster target(s) via RasterFilterService")
-                    self._dispatch_raster_operations(self.current_layer, raster_targets)
-                if not vector_targets:
-                    logger.info("v5.5: Only raster targets - skipping FilterEngineTask")
-                    return
-                # Update layers_to_filter with vector-only IDs for FilterEngineTask
-                vector_only_ids = [layer.id() for layer, _ in vector_targets]
-                self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = vector_only_ids
-
         self.launchingTask.emit(task_name)
     
     def _setup_truncation_tooltips(self):
@@ -10091,7 +7113,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_reload_layers_shortcut(self):
         """Handle F5 shortcut to reload layers."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#3498db;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#e8f4fc;}")
+            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):
