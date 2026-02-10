@@ -32,7 +32,7 @@ from qgis.core import (
     Qgis
 )
 
-from infrastructure.logging import get_logger
+from ...infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
