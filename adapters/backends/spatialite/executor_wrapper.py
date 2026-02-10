@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple, Callable
 from ....core.ports.filter_executor_port import (
     FilterExecutorPort,
     FilterExecutionResult,
-    FilterStatus,
 )
 from .backend import SpatialiteBackend
 from .filter_executor import (
@@ -26,22 +25,22 @@ logger = logging.getLogger('FilterMate')
 class SpatialiteFilterExecutor(FilterExecutorPort):
     """
     FilterExecutorPort implementation for Spatialite/GeoPackage.
-    
+
     Wraps existing SpatialiteBackend functionality to provide
     a clean interface for core/ without breaking existing code.
     """
-    
+
     def __init__(self):
         """Initialize the Spatialite executor."""
         self._backend: Optional[SpatialiteBackend] = None
-    
+
     def _get_backend(self) -> SpatialiteBackend:
         """Lazy initialization of backend."""
         if self._backend is None:
             from .backend import create_spatialite_backend
             self._backend = create_spatialite_backend()
         return self._backend
-    
+
     def execute_filter(
         self,
         source_layer_info: Dict[str, Any],
@@ -56,19 +55,19 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
     ) -> FilterExecutionResult:
         """
         Execute a filter operation using Spatialite.
-        
+
         Delegates to existing SpatialiteBackend.execute() method.
         """
         import time
         start_time = time.time()
-        
+
         try:
             backend = self._get_backend()
-            
+
             # Check for cancellation
             if is_canceled_callback and is_canceled_callback():
                 return FilterExecutionResult.cancelled()
-            
+
             # Build filter parameters compatible with existing backend
             filter_params = {
                 'expression': expression,
@@ -78,16 +77,16 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
                 'use_centroids': use_centroids,
                 'combine_operator': combine_operator,
             }
-            
+
             # Execute via existing backend
             result = backend.execute(
                 source_layer_info=source_layer_info,
                 target_layer_infos=target_layers_info,
                 **filter_params
             )
-            
+
             execution_time = (time.time() - start_time) * 1000
-            
+
             if result.success:
                 return FilterExecutionResult.success(
                     feature_ids=result.feature_ids or [],
@@ -100,11 +99,11 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
                     error=result.error_message or "Unknown error",
                     backend='spatialite'
                 )
-                
+
         except Exception as e:
             logger.error(f"[Spatialite] Spatialite filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='spatialite')
-    
+
     def prepare_source_geometry(
         self,
         layer_info: Dict[str, Any],
@@ -117,20 +116,20 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
             layer = layer_info.get('layer')
             if not layer:
                 return None, "No layer provided"
-            
+
             result = prepare_spatialite_source_geom(
                 layer=layer,
                 feature_ids=feature_ids,
                 buffer_value=buffer_value,
                 use_centroids=use_centroids
             )
-            
+
             return result, None
-            
+
         except Exception as e:
             logger.error(f"[Spatialite] Spatialite geometry preparation failed: {e}")
             return None, str(e)
-    
+
     def apply_subset_string(
         self,
         layer: Any,
@@ -142,23 +141,23 @@ class SpatialiteFilterExecutor(FilterExecutorPort):
         except Exception as e:
             logger.error(f"[Spatialite] Failed to apply Spatialite subset: {e}")
             return False
-    
+
     def cleanup_resources(self) -> None:
         """Clean up temporary tables."""
         try:
             cleanup_session_temp_tables()
-            logger.debug(f"[Spatialite] Spatialite temp tables cleaned up")
+            logger.debug("[Spatialite] Spatialite temp tables cleaned up")
         except Exception as e:
             logger.warning(f"[Spatialite] Spatialite cleanup failed: {e}")
-    
+
     @property
     def backend_name(self) -> str:
         return "spatialite"
-    
+
     @property
     def supports_spatial_index(self) -> bool:
         return True  # R-tree support
-    
+
     @property
     def supports_materialized_views(self) -> bool:
         return False  # Uses temp tables instead

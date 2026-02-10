@@ -7,8 +7,8 @@ This module provides centralized UI configuration for FilterMate,
 including responsive sizing, spacing, and theme settings.
 """
 
-from typing import Any, Dict, Optional
-from enum import Enum
+from typing import Any, Dict, Optional  # noqa: F401
+from enum import Enum  # noqa: F401
 
 
 class DisplayProfile(Enum):
@@ -22,16 +22,16 @@ class DisplayProfile(Enum):
 class UIConfig:
     """
     Centralized UI configuration manager.
-    
+
     Provides static methods to get/set UI configuration values
     for responsive sizing, spacing, and layout management.
     """
-    
+
     # Current active profile - Use Enum for proper comparisons
     # v4.0.1 FIX #3: Restored COMPACT as default (NORMAL was causing -12% usable space on laptops)
     # AppInitializer._initialize_ui_profile() will upgrade to NORMAL for large screens (≥2560x1440)
     _active_profile: DisplayProfile = DisplayProfile.COMPACT
-    
+
     # Default configuration values by profile
     # MIGRATED FROM before_migration/modules/ui_config.py - Full configuration restored
     _PROFILE_CONFIGS: Dict[str, Dict[str, Any]] = {
@@ -261,10 +261,10 @@ class UIConfig:
                 'base_width': 34,
                 'padding': 1,
                 'border_radius': 5,
-            },            'groupbox': {
+            }, 'groupbox': {
                 'min_width': 200,  # Prevent overlap when splitter is resized (compact mode)
                 'content_margins': {'top': 4, 'right': 6, 'bottom': 4, 'left': 6},
-            },            'combobox': {
+            }, 'combobox': {
                 'height': 20,
                 'min_height': 20,
                 'max_height': 20,
@@ -729,12 +729,12 @@ class UIConfig:
             },
         },
     }
-    
+
     @classmethod
     def set_profile(cls, profile) -> None:
         """
         Set the active display profile.
-        
+
         Args:
             profile: DisplayProfile enum value or string name (NORMAL, COMPACT, EXPANDED)
         """
@@ -749,58 +749,58 @@ class UIConfig:
             cls._active_profile = DisplayProfile.NORMAL
         else:
             cls._active_profile = DisplayProfile.NORMAL
-    
+
     @classmethod
     def get_profile(cls) -> DisplayProfile:
         """
         Get the current active display profile as Enum.
-        
+
         Returns:
             DisplayProfile: Active profile enum
         """
         return cls._active_profile
-    
+
     @classmethod
     def get_active_profile(cls) -> DisplayProfile:
         """
         Get the current active profile.
-        
+
         Returns:
             DisplayProfile: Active profile enum
         """
         return cls._active_profile
-    
+
     @classmethod
     def get_profile_name(cls) -> str:
         """
         Get the human-readable name of the current active profile.
-        
+
         Returns:
             str: Active profile name (e.g., 'normal', 'compact', 'expanded')
         """
         if isinstance(cls._active_profile, DisplayProfile):
             return cls._active_profile.value
         return str(cls._active_profile)
-    
+
     @classmethod
     def get_config(cls, *keys) -> Any:
         """
         Get configuration value for the active profile.
-        
+
         Args:
             *keys: Nested keys to access (e.g., 'splitter', 'handle_width')
                    Can also be used as (component, key) for backward compatibility
-        
+
         Returns:
             Configuration value or None if not found
         """
         # Get profile value string for dict lookup
         profile_name = cls._active_profile.value if isinstance(cls._active_profile, DisplayProfile) else cls._active_profile
         profile_config = cls._PROFILE_CONFIGS.get(profile_name, {})
-        
+
         if not keys:
             return profile_config
-        
+
         # Navigate through nested keys
         value = profile_config
         for key in keys:
@@ -808,17 +808,17 @@ class UIConfig:
                 value = value[key]
             else:
                 return None
-        
+
         return value
-    
+
     @classmethod
     def get_button_height(cls, button_type: str = "button") -> int:
         """
         Get button height for current profile.
-        
+
         Args:
             button_type: 'button', 'action_button', 'tool_button', or 'key_button'
-        
+
         Returns:
             Height in pixels
         """
@@ -826,15 +826,15 @@ class UIConfig:
         if config and isinstance(config, dict):
             return config.get('height', 28)
         return 28
-    
+
     @classmethod
     def get_icon_size(cls, button_type: str = "button") -> int:
         """
         Get icon size for current profile.
-        
+
         Args:
             button_type: 'button', 'action_button', 'tool_button', or 'key_button'
-        
+
         Returns:
             Icon size in pixels
         """
@@ -844,15 +844,15 @@ class UIConfig:
         # Fallback based on button type
         fallbacks = {'action_button': 20, 'tool_button': 22, 'key_button': 16, 'button': 18}
         return fallbacks.get(button_type, 18)
-    
+
     @classmethod
     def get_padding_string(cls, component: str) -> str:
         """
         Get CSS padding string for a component.
-        
+
         Args:
             component: Component name ('button', 'action_button', etc.)
-        
+
         Returns:
             str: CSS padding value (e.g., '4px 8px')
         """
@@ -865,22 +865,22 @@ class UIConfig:
             'frame': '6px',
         }
         return paddings.get(component, '4px')
-    
+
     @classmethod
     def detect_profile_from_screen(cls) -> str:
         """
         Auto-detect best profile based on screen resolution.
-        
+
         Returns:
             str: Recommended profile name
         """
         try:
-            from qgis.PyQt.QtWidgets import QApplication
+            from qgis.PyQt.QtWidgets import QApplication  # noqa: F401
             screen = QApplication.primaryScreen()
             if screen:
                 geometry = screen.geometry()
                 height = geometry.height()
-                
+
                 if height < 800:
                     return DisplayProfile.COMPACT
                 elif height > 1200:
@@ -889,12 +889,12 @@ class UIConfig:
                     return DisplayProfile.NORMAL
         except Exception:
             pass
-        
+
         return DisplayProfile.NORMAL
 
 
 # Import ui_elements for centralized spacer/layout references
-from .ui_elements import (
+from .ui_elements import (  # noqa: F401
     SPACERS,
     LAYOUTS,
     ALL_SPACERS,

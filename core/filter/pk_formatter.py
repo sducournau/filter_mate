@@ -32,22 +32,22 @@ def is_pk_numeric(
 ) -> bool:
     """
     Check if the primary key field is numeric.
-    
+
     CRITICAL FIX v2.8.5: UUID fields and other text-based PKs must be quoted in SQL.
     CRITICAL FIX v4.0.9: Value-based detection for PostgreSQL via OGR layers.
-    
+
     Args:
         layer: QgsVectorLayer to check
         pk_field: Primary key field name
         sample_values: Optional sample PK values for value-based detection
-        
+
     Returns:
         bool: True if PK is numeric (int, bigint, etc.), False if text (UUID, varchar, etc.)
     """
     if not layer or not pk_field:
         # Default to numeric for safety (most common case)
         return True
-    
+
     # FIX v4.0.9: VALUE-BASED detection first (most reliable for OGR layers)
     if sample_values:
         try:
@@ -59,10 +59,10 @@ def is_pk_numeric(
             if all_numeric:
                 logger.debug(f"PK '{pk_field}' detected as numeric from VALUES")
                 return True
-            
+
             # Check if string values look like integers
             all_look_numeric = all(
-                isinstance(v, (int, float)) or 
+                isinstance(v, (int, float)) or
                 (isinstance(v, str) and v.lstrip('-').isdigit())
                 for v in sample_values[:10]
             )
@@ -71,7 +71,7 @@ def is_pk_numeric(
                 return True
         except Exception as e:
             logger.debug(f"Value-based PK detection failed: {e}")
-    
+
     # SCHEMA-BASED detection
     try:
         field_idx = layer.fields().indexOf(pk_field)
@@ -82,14 +82,14 @@ def is_pk_numeric(
             return is_numeric
     except Exception as e:
         logger.debug(f"Could not determine PK type from schema: {e}")
-    
+
     # FALLBACK: Check common numeric PK names
     pk_lower = pk_field.lower()
     common_numeric_names = ('id', 'fid', 'gid', 'pk', 'ogc_fid', 'objectid', 'oid', 'rowid')
     if pk_lower in common_numeric_names:
         logger.debug(f"PK '{pk_field}' assumed numeric based on common name")
         return True
-    
+
     return True
 
 
@@ -101,26 +101,26 @@ def format_pk_values_for_sql(
 ) -> str:
     """
     Format primary key values for SQL IN clause.
-    
+
     CRITICAL FIX v2.8.5: UUID fields must be quoted with single quotes in SQL.
     CRITICAL FIX v4.0.9: Improved value-based detection for PostgreSQL via OGR.
-    
+
     Examples:
         - Numeric: IN (1, 2, 3)
         - UUID/Text: IN ('7b2e1a3e-b812-4d51-bf33-7f0cd0271ef3', ...)
-    
+
     Args:
         values: List of primary key values
         is_numeric: Whether PK is numeric (optional, auto-detected if None)
         layer: QgsVectorLayer to check PK type (optional, for auto-detection)
         pk_field: Primary key field name (optional, for auto-detection)
-        
+
     Returns:
         str: Comma-separated values formatted for SQL IN clause
     """
     if not values:
         return ''
-    
+
     # Auto-detect if not specified
     if is_numeric is None:
         if layer and pk_field:
@@ -138,7 +138,7 @@ def format_pk_values_for_sql(
                 logger.debug(f"PK type detected from values: {'numeric' if is_numeric else 'text'}")
             except Exception:
                 is_numeric = True  # Default to numeric
-    
+
     if is_numeric:
         # Numeric: convert to int if possible to strip any decimal or quote issues
         formatted = []

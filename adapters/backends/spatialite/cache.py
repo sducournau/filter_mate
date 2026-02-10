@@ -405,7 +405,7 @@ class SpatialiteCache:
 
     def _make_result_key(self, layer_id: str, expression: str) -> str:
         """Create cache key for result."""
-        expr_hash = hashlib.md5(expression.encode()).hexdigest()[:12]
+        expr_hash = hashlib.md5(expression.encode(), usedforsecurity=False).hexdigest()[:12]
         return f"{layer_id}:{expr_hash}"
 
     def _evict_oldest_result(self) -> bool:

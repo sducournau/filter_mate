@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple, Callable
 from ....core.ports.filter_executor_port import (
     FilterExecutorPort,
     FilterExecutionResult,
-    FilterStatus,
 )
 
 logger = logging.getLogger('FilterMate')
@@ -20,16 +19,16 @@ logger = logging.getLogger('FilterMate')
 class OGRFilterExecutor(FilterExecutorPort):
     """
     FilterExecutorPort implementation for OGR (Shapefiles, etc.).
-    
+
     Wraps existing OGR backend functionality to provide
     a clean interface for core/ without breaking existing code.
     OGR is the universal fallback backend.
     """
-    
+
     def __init__(self):
         """Initialize the OGR executor."""
         self._backend = None
-    
+
     def _get_backend(self):
         """Lazy initialization of backend."""
         if self._backend is None:
@@ -39,7 +38,7 @@ class OGRFilterExecutor(FilterExecutorPort):
             except Exception as e:
                 logger.warning(f"[OGR] Could not initialize OGR backend: {e}")
         return self._backend
-    
+
     def execute_filter(
         self,
         source_layer_info: Dict[str, Any],
@@ -57,7 +56,7 @@ class OGRFilterExecutor(FilterExecutorPort):
         """
         import time
         start_time = time.time()
-        
+
         try:
             backend = self._get_backend()
             if not backend:
@@ -65,11 +64,11 @@ class OGRFilterExecutor(FilterExecutorPort):
                     "OGR backend not initialized",
                     backend='ogr'
                 )
-            
+
             # Check for cancellation
             if is_canceled_callback and is_canceled_callback():
                 return FilterExecutionResult.cancelled()
-            
+
             # Build filter parameters
             filter_params = {
                 'expression': expression,
@@ -79,16 +78,16 @@ class OGRFilterExecutor(FilterExecutorPort):
                 'use_centroids': use_centroids,
                 'combine_operator': combine_operator,
             }
-            
+
             # Execute via existing backend
             result = backend.execute(
                 source_layer_info=source_layer_info,
                 target_layer_infos=target_layers_info,
                 **filter_params
             )
-            
+
             execution_time = (time.time() - start_time) * 1000
-            
+
             if result.success:
                 return FilterExecutionResult.success(
                     feature_ids=result.feature_ids or [],
@@ -101,11 +100,11 @@ class OGRFilterExecutor(FilterExecutorPort):
                     error=result.error_message or "Unknown error",
                     backend='ogr'
                 )
-                
+
         except Exception as e:
             logger.error(f"[OGR] OGR filter execution failed: {e}")
             return FilterExecutionResult.failed(str(e), backend='ogr')
-    
+
     def prepare_source_geometry(
         self,
         layer_info: Dict[str, Any],
@@ -116,24 +115,24 @@ class OGRFilterExecutor(FilterExecutorPort):
         """Prepare source geometry using existing function."""
         try:
             from .filter_executor import prepare_ogr_source_geom
-            
+
             layer = layer_info.get('layer')
             if not layer:
                 return None, "No layer provided"
-            
+
             result = prepare_ogr_source_geom(
                 layer=layer,
                 feature_ids=feature_ids,
                 buffer_value=buffer_value,
                 use_centroids=use_centroids
             )
-            
+
             return result, None
-            
+
         except Exception as e:
             logger.error(f"[OGR] OGR geometry preparation failed: {e}")
             return None, str(e)
-    
+
     def apply_subset_string(
         self,
         layer: Any,
@@ -146,24 +145,24 @@ class OGRFilterExecutor(FilterExecutorPort):
         except Exception as e:
             logger.error(f"[OGR] Failed to apply OGR subset: {e}")
             return False
-    
+
     def cleanup_resources(self) -> None:
         """Clean up temporary memory layers."""
         try:
             from .filter_executor import cleanup_ogr_temp_layers
             cleanup_ogr_temp_layers()
-            logger.debug(f"[OGR] OGR temp layers cleaned up")
+            logger.debug("[OGR] OGR temp layers cleaned up")
         except Exception as e:
             logger.warning(f"[OGR] OGR cleanup failed: {e}")
-    
+
     @property
     def backend_name(self) -> str:
         return "ogr"
-    
+
     @property
     def supports_spatial_index(self) -> bool:
         return False  # No native spatial index
-    
+
     @property
     def supports_materialized_views(self) -> bool:
         return False

@@ -12,7 +12,7 @@ Used primarily for buffer operations that can produce GeometryCollections
 when dissolving features, which causes errors when adding to typed layers
 (e.g., GeoPackage MultiPolygon layers).
 
-Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type 
+Error fixed: "Impossible d'ajouter l'objet avec une géométrie de type
 GeometryCollection à une couche de type MultiPolygon"
 
 Author: FilterMate Team
@@ -20,7 +20,6 @@ Created: January 2026 (EPIC-1 Phase E2)
 """
 
 import logging
-from typing import Optional
 
 from qgis.core import (
     QgsFeature,
@@ -45,16 +44,16 @@ logger = logging.getLogger('FilterMate.Core.Geometry.Converter')
 def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVectorLayer:
     """
     Convert GeometryCollection geometries in a layer to MultiPolygon.
-    
+
     STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
     access violations when handling GeometryCollections.
-    
+
     CRITICAL FIX for GeoPackage/OGR layers:
     When qgis:buffer processes features with DISSOLVE=True, the result
     can contain GeometryCollection type instead of MultiPolygon.
     This causes errors when the buffer layer is used for spatial operations
     on typed layers (e.g., GeoPackage MultiPolygon layers).
-    
+
     Process:
     1. Check if layer contains GeometryCollection features
     2. If not found: return original layer unchanged
@@ -62,10 +61,10 @@ def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVec
     4. Convert each GeometryCollection to MultiPolygon
     5. Extract polygon parts if direct conversion fails
     6. Return layer with all geometries as MultiPolygon
-    
+
     Args:
         layer: QgsVectorLayer from buffer operation (may contain GeometryCollections)
-        
+
     Returns:
         QgsVectorLayer: Layer with geometries converted to MultiPolygon
             Returns original layer if no conversion needed or on error
@@ -80,19 +79,19 @@ def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVec
                 if 'GeometryCollection' in geom_type:
                     has_geometry_collection = True
                     break
-        
+
         if not has_geometry_collection:
             logger.debug("No GeometryCollection found in buffer result - no conversion needed")
             return layer
-        
+
         logger.info(
             "🔄 GeometryCollection detected in buffer result - converting to MultiPolygon"
         )
-        
+
         # Create new memory layer with MultiPolygon type
         crs = layer.crs()
         fields = layer.fields()
-        
+
         # Create MultiPolygon memory layer
         converted_layer = QgsMemoryProviderUtils.createMemoryLayer(
             f"{layer.name()}_converted",
@@ -100,23 +99,23 @@ def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVec
             QgsWkbTypes.MultiPolygon,
             crs
         )
-        
+
         if not converted_layer or not converted_layer.isValid():
             logger.error("Failed to create converted memory layer")
             return layer
-        
+
         converted_dp = converted_layer.dataProvider()
         converted_features = []
         conversion_count = 0
-        
+
         for feature in layer.getFeatures():
             geom = feature.geometry()
             if not validate_geometry(geom):
                 continue
-            
+
             geom_type = get_geometry_type_name(geom)
             new_geom = geom
-            
+
             if 'GeometryCollection' in geom_type:
                 # STABILITY FIX: Use safe wrapper for conversion
                 converted = safe_convert_to_multi_polygon(geom)
@@ -146,19 +145,19 @@ def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVec
                             "GeometryCollection contained no polygon parts - skipping feature"
                         )
                         continue
-            
+
             elif 'Polygon' in geom_type and 'Multi' not in geom_type:
                 # Convert single Polygon to MultiPolygon for consistency
                 poly_data = safe_as_polygon(geom)
                 if poly_data:
                     new_geom = QgsGeometry.fromMultiPolygonXY([poly_data])
-            
+
             # Create new feature with converted geometry
             new_feature = QgsFeature(fields)
             new_feature.setGeometry(new_geom)
             new_feature.setAttributes(feature.attributes())
             converted_features.append(new_feature)
-        
+
         # Add converted features
         if converted_features:
             success, _ = converted_dp.addFeatures(converted_features)
@@ -174,7 +173,7 @@ def convert_geometry_collection_to_multipolygon(layer: QgsVectorLayer) -> QgsVec
         else:
             logger.warning("No features to convert")
             return layer
-            
+
     except Exception as e:
         logger.error(f"Error converting GeometryCollection: {str(e)}")
         import traceback

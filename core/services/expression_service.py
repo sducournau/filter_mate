@@ -17,7 +17,7 @@ from ..domain.filter_expression import ProviderType, SpatialPredicate
 class ValidationResult:
     """
     Result of expression validation.
-    
+
     Attributes:
         is_valid: Whether expression is syntactically valid
         error_message: Error description if invalid
@@ -36,8 +36,8 @@ class ValidationResult:
 
     @classmethod
     def invalid(
-        cls, 
-        message: str, 
+        cls,
+        message: str,
         position: Optional[int] = None
     ) -> 'ValidationResult':
         """Create an invalid result."""
@@ -56,7 +56,7 @@ class ValidationResult:
 class ParsedExpression:
     """
     Parsed expression with extracted components.
-    
+
     Attributes:
         original: Original expression string
         fields: Set of field names referenced
@@ -109,17 +109,17 @@ class ExpressionService:
 
     Example:
         service = ExpressionService()
-        
+
         # Validate expression
         result = service.validate("\"name\" = 'test'")
         if result.is_valid:
             # Parse for analysis
             parsed = service.parse("\"name\" = 'test'")
-          
-            
+
+
             # Convert to SQL
             sql = service.to_sql("intersects($geometry, @g)", ProviderType.POSTGRESQL)
-          
+
     """
 
     # Patterns for expression parsing
@@ -356,7 +356,7 @@ class ExpressionService:
     ) -> int:
         """
         Estimate expression complexity on a scale of 1-10.
-        
+
         Higher complexity suggests:
         - Longer execution time
         - May benefit from materialized views
@@ -414,18 +414,18 @@ class ExpressionService:
     def _to_postgis(self, expression: str, geometry_column: str) -> str:
         """
         Convert to PostGIS SQL.
-        
+
         Handles:
         - $geometry -> column reference
         - QGIS functions -> PostGIS equivalents
         - IF -> CASE WHEN conversion
         - Type casting for numeric/text operations
         - SQL keyword normalization
-        
+
         Consolidated from legacy filter_task.py qgis_expression_to_postgis()
         """
         sql = expression
-        
+
         if not sql:
             return sql
 
@@ -484,7 +484,7 @@ class ExpressionService:
         # 8. Handle boolean literals
         sql = re.sub(r'\bTRUE\b', 'TRUE', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bFALSE\b', 'FALSE', sql, flags=re.IGNORECASE)
-        
+
         # 9. Clean up extra spaces
         sql = re.sub(r'\s+', ' ', sql).strip()
 
@@ -493,22 +493,22 @@ class ExpressionService:
     def _to_spatialite(self, expression: str, geometry_column: str) -> str:
         """
         Convert to Spatialite SQL.
-        
+
         Handles:
         - $geometry -> column reference
         - QGIS functions -> Spatialite equivalents
         - PostgreSQL :: type casting -> CAST() function
         - ILIKE -> LOWER(field) LIKE LOWER(pattern)
         - SQL keyword normalization
-        
+
         Consolidated from legacy filter_task.py qgis_expression_to_spatialite()
-        
+
         Note:
             Spatialite spatial functions are ~90% compatible with PostGIS.
             Main differences: type casting syntax, no ILIKE, some function names.
         """
         sql = expression
-        
+
         if not sql:
             return sql
 
@@ -531,7 +531,7 @@ class ExpressionService:
         sql = re.sub(r'\bthen\b', ' THEN ', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\belse\b', ' ELSE ', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bend\b', ' END ', sql, flags=re.IGNORECASE)
-        
+
         # 4. Handle ILIKE - Spatialite doesn't have ILIKE, use LOWER() with LIKE
         # IMPORTANT: Process ILIKE before LIKE to avoid double-replacement
         # "field" ILIKE 'pattern' -> LOWER("field") LIKE LOWER('pattern')
@@ -547,7 +547,7 @@ class ExpressionService:
             sql,
             flags=re.IGNORECASE
         )
-        
+
         # 5. Normalize LIKE and NOT
         sql = re.sub(r'\bnot\b', ' NOT ', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\blike\b', ' LIKE ', sql, flags=re.IGNORECASE)
@@ -569,7 +569,7 @@ class ExpressionService:
         # 8. Spatialite boolean handling (uses 0/1 instead of TRUE/FALSE)
         sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.IGNORECASE)
-        
+
         # 9. Clean up extra spaces
         sql = re.sub(r'\s+', ' ', sql).strip()
 
@@ -578,10 +578,10 @@ class ExpressionService:
     def extract_fields(self, expression: str) -> Set[str]:
         """
         Extract field names from expression.
-        
+
         Args:
             expression: QGIS expression string
-            
+
         Returns:
             Set of field names
         """
@@ -590,10 +590,10 @@ class ExpressionService:
     def is_spatial(self, expression: str) -> bool:
         """
         Check if expression contains spatial predicates or geometry references.
-        
+
         Args:
             expression: QGIS expression string
-            
+
         Returns:
             True if expression is spatial
         """
@@ -605,10 +605,10 @@ class ExpressionService:
     def get_spatial_predicates(self, expression: str) -> List[SpatialPredicate]:
         """
         Get list of spatial predicates in expression.
-        
+
         Args:
             expression: QGIS expression string
-            
+
         Returns:
             List of SpatialPredicate enums found
         """
@@ -647,7 +647,7 @@ class ExpressionService:
 
         # Wrap $geometry references in buffer
         pattern = r'(\$geometry|\$geom)'
-        
+
         if provider == ProviderType.POSTGRESQL:
             # PostGIS uses ST_Buffer(geom, distance, segments)
             replacement = f'{buffer_fn}(\\1, {buffer_value})'
@@ -663,26 +663,26 @@ class ExpressionService:
     def normalize(self, expression: str) -> str:
         """
         Normalize expression for consistent comparison.
-        
+
         - Strips whitespace
         - Normalizes operator case
         - Removes extra spaces
-        
+
         Args:
             expression: QGIS expression string
-            
+
         Returns:
             Normalized expression
         """
         result = expression.strip()
-        
+
         # Normalize whitespace
         result = re.sub(r'\s+', ' ', result)
-        
+
         # Normalize operators to uppercase
         for op in ['AND', 'OR', 'NOT', 'IN', 'LIKE', 'ILIKE', 'BETWEEN', 'IS', 'NULL']:
             result = re.sub(rf'\b{op}\b', op, result, flags=re.IGNORECASE)
-        
+
         return result
 
     def combine_expressions(
@@ -692,11 +692,11 @@ class ExpressionService:
     ) -> str:
         """
         Combine multiple expressions with an operator.
-        
+
         Args:
             expressions: List of expression strings
             operator: Operator to use ('AND' or 'OR')
-            
+
         Returns:
             Combined expression string
         """
@@ -704,7 +704,7 @@ class ExpressionService:
             return ""
         if len(expressions) == 1:
             return expressions[0]
-        
+
         # Wrap each expression in parentheses for safety
         wrapped = [f"({expr})" for expr in expressions if expr.strip()]
         return f" {operator.upper()} ".join(wrapped)
@@ -712,10 +712,10 @@ class ExpressionService:
     def negate(self, expression: str) -> str:
         """
         Negate an expression.
-        
+
         Args:
             expression: Expression to negate
-            
+
         Returns:
             Negated expression
         """
@@ -728,21 +728,21 @@ class ExpressionService:
     ) -> List[str]:
         """
         Detect potential type mismatches in PostgreSQL expressions.
-        
-        FIX v4.8.2 (2026-01-25): Smart detection for VARCHAR fields 
+
+        FIX v4.8.2 (2026-01-25): Smart detection for VARCHAR fields
         used in numeric comparisons.
-        
+
         This prevents the error:
         "ERROR: operator does not exist: character varying < integer"
-        
+
         Args:
             expression: SQL expression to analyze
             field_types: Optional dict mapping field names to types
                         e.g., {'importance': 'varchar', 'fid': 'integer'}
-        
+
         Returns:
             List of warning messages for detected type mismatches
-            
+
         Example:
             >>> service = ExpressionService()
             >>> warnings = service.detect_type_mismatches(
@@ -753,77 +753,77 @@ class ExpressionService:
             'Field "importance" (VARCHAR) used in numeric comparison. Consider: "importance"::integer < 4'
         """
         warnings = []
-        
+
         if not expression or not field_types:
             return warnings
-        
+
         # Pattern: "field_name" <operator> <number>
         # Matches: "importance" < 4, "age" >= 18, "count" = 0
         numeric_comparison_pattern = re.compile(
             r'"([^"]+)"\s*(<|>|<=|>=|=|!=|<>)\s*(\d+(?:\.\d+)?)',
             re.IGNORECASE
         )
-        
+
         for match in numeric_comparison_pattern.finditer(expression):
             field_name = match.group(1)
             operator = match.group(2)
             value = match.group(3)
-            
+
             # Check if field exists in field_types dict
             field_type = field_types.get(field_name.lower(), '').lower()
-            
+
             # Check for VARCHAR/TEXT fields used in numeric comparisons
             if field_type in ('varchar', 'character varying', 'text', 'char'):
                 # Check if the field already has ::integer or ::numeric cast
                 # Look backwards from the match to check for existing cast
                 start_pos = max(0, match.start() - 20)
                 context_before = expression[start_pos:match.start()]
-                
+
                 if '::integer' not in context_before and '::numeric' not in context_before:
                     warnings.append(
                         f'Field "{field_name}" (VARCHAR) used in numeric comparison '
                         f'with operator "{operator}". This may cause PostgreSQL error. '
                         f'Consider: "{field_name}"::integer {operator} {value}'
                     )
-        
+
         # Pattern: "field_name" LIKE/ILIKE '%pattern%'
         # Check for numeric fields used in string comparisons
         string_comparison_pattern = re.compile(
             r'"([^"]+)"\s+(LIKE|ILIKE|NOT\s+LIKE|NOT\s+ILIKE)\s+',
             re.IGNORECASE
         )
-        
+
         for match in string_comparison_pattern.finditer(expression):
             field_name = match.group(1)
             operator = match.group(2)
-            
+
             field_type = field_types.get(field_name.lower(), '').lower()
-            
+
             # Check for INTEGER/NUMERIC fields used in LIKE/ILIKE
             if field_type in ('integer', 'smallint', 'bigint', 'numeric', 'decimal', 'real', 'double precision'):
                 # Check if the field already has ::text cast
                 context_before = expression[max(0, match.start() - 20):match.start()]
-                
+
                 if '::text' not in context_before:
                     warnings.append(
                         f'Field "{field_name}" ({field_type.upper()}) used in string comparison '
                         f'with {operator}. Consider: "{field_name}"::text {operator} ...'
                     )
-        
+
         return warnings
 
 
 def sanitize_subset_string(subset_string: str, logger=None) -> str:
     """
     Remove non-boolean display expressions and fix type casting issues in subset string.
-    
+
     CONSOLIDATED v4.1: Delegates to core.filter.expression_sanitizer for DRY compliance.
     Wrapper maintained for backward compatibility with logger parameter.
-    
+
     Args:
         subset_string: The original subset string
         logger: Optional logger for diagnostics (deprecated, ignored)
-        
+
     Returns:
         Sanitized subset string with non-boolean expressions removed
     """

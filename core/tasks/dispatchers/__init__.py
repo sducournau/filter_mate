@@ -8,6 +8,6 @@ Provides:
 - ActionDispatcher: Routes task actions to appropriate handlers
 """
 
-from .action_dispatcher import ActionDispatcher, ActionResult, ActionHandler
+from .action_dispatcher import ActionDispatcher, ActionResult, ActionHandler  # noqa: F401
 
 __all__ = ['ActionDispatcher', 'ActionResult', 'ActionHandler']

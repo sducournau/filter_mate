@@ -28,7 +28,7 @@ Migration History:
 """
 
 # Progressive filter exports
-from .progressive_filter import (
+from .progressive_filter import (  # noqa: F401
     FilterStrategy as ProgressiveFilterStrategy,
     FilterResult as ProgressiveFilterResult,
     LayerProperties,
@@ -39,7 +39,7 @@ from .progressive_filter import (
 )
 
 # Multi-step filter exports
-from .multi_step_filter import (
+from .multi_step_filter import (  # noqa: F401
     FilterStepType,
     FilterStrategy as MultiStepFilterStrategy,
     FilterStepResult,

@@ -22,7 +22,7 @@ import logging
 import os
 import sqlite3
 import time
-from typing import Optional, Tuple, Callable, Any, Union
+from typing import Callable, Any, Union
 from contextlib import contextmanager
 
 # QGIS imports
@@ -84,24 +84,24 @@ MESSAGE_TASKS_CATEGORIES = {
 def spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
     """
     Connect to a Spatialite database with proper timeout to avoid locking issues.
-    
+
     Enables WAL (Write-Ahead Logging) mode for better concurrent access.
     WAL mode allows multiple readers and one writer simultaneously.
-    
+
     Args:
         db_path: Path to the SQLite/Spatialite database file
         timeout: Timeout in seconds for database lock (default 60 seconds)
-    
+
     Returns:
         sqlite3.Connection: Database connection with Spatialite extension loaded
-    
+
     Raises:
         sqlite3.OperationalError: If connection fails or Spatialite extension unavailable
     """
     try:
         # Connect with timeout to handle concurrent access
         conn = sqlite3.connect(db_path, timeout=timeout, isolation_level=None)
-        
+
         # Enable WAL mode for better concurrency
         try:
             conn.execute('PRAGMA journal_mode=WAL')
@@ -109,9 +109,9 @@ def spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
             conn.execute('PRAGMA busy_timeout=60000')  # 60 second busy timeout
         except sqlite3.OperationalError as e:
             logger.warning(f"Could not configure PRAGMA settings for {db_path}: {e}")
-        
+
         conn.enable_load_extension(True)
-        
+
         # Try to load Spatialite extension (multiple paths for compatibility)
         try:
             conn.load_extension('mod_spatialite')
@@ -124,9 +124,9 @@ def spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
                 except (OSError, sqlite3.OperationalError) as e:
                     logger.error(f"Could not load Spatialite extension: {e}")
                     raise
-        
+
         return conn
-    
+
     except Exception as e:
         logger.error(f"Failed to connect to Spatialite database {db_path}: {e}")
         raise
@@ -135,26 +135,26 @@ def spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
 def sqlite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
     """
     Connect to a SQLite database (without Spatialite extension).
-    
+
     Use this for databases that don't require spatial functions,
     such as FilterMate's configuration database.
-    
+
     Enables WAL (Write-Ahead Logging) mode for better concurrent access.
-    
+
     Args:
         db_path: Path to the SQLite database file
         timeout: Timeout in seconds for database lock (default 60 seconds)
-    
+
     Returns:
         sqlite3.Connection: Database connection
-    
+
     Raises:
         sqlite3.OperationalError: If connection fails
     """
     try:
         # Connect with timeout to handle concurrent access
         conn = sqlite3.connect(db_path, timeout=timeout, isolation_level=None)
-        
+
         # Enable WAL mode for better concurrency
         try:
             conn.execute('PRAGMA journal_mode=WAL')
@@ -162,9 +162,9 @@ def sqlite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
             conn.execute('PRAGMA busy_timeout=60000')  # 60 second busy timeout
         except sqlite3.OperationalError as e:
             logger.warning(f"Could not configure PRAGMA settings for {db_path}: {e}")
-        
+
         return conn
-    
+
     except Exception as e:
         logger.error(f"Failed to connect to SQLite database {db_path}: {e}")
         raise
@@ -174,16 +174,16 @@ def sqlite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
 def safe_spatialite_connect(db_path: str, timeout: float = SQLITE_TIMEOUT):
     """
     Context manager for Spatialite connections with automatic cleanup.
-    
+
     Usage:
         with safe_spatialite_connect(db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(sql)
-    
+
     Args:
         db_path: Path to the database
         timeout: Connection timeout
-    
+
     Yields:
         sqlite3.Connection: Database connection
     """
@@ -212,14 +212,14 @@ def sqlite_execute_with_retry(
 ):
     """
     Execute SQLite query with automatic retry on database lock.
-    
+
     This function handles SQLite's database lock errors by retrying with
     exponential backoff. Useful for concurrent access scenarios.
-    
+
     Supports two modes:
     1. Direct mode: sqlite_execute_with_retry(conn, sql, params)
     2. Callable mode: sqlite_execute_with_retry(callable_func, operation_name="...")
-    
+
     Args:
         conn_or_callable: sqlite3.Connection object OR a callable that performs the operation
         sql: SQL query to execute (only for direct mode)
@@ -227,23 +227,23 @@ def sqlite_execute_with_retry(
         max_retries: Maximum number of retry attempts
         retry_delay: Initial delay between retries (seconds)
         operation_name: Human-readable name for logging (only for callable mode)
-    
+
     Returns:
         cursor: Result cursor if successful (direct mode)
         Any: Return value from callable (callable mode)
-    
+
     Raises:
         sqlite3.OperationalError: If max retries exceeded
     """
     # Detect mode: callable or direct
     is_callable_mode = callable(conn_or_callable) and sql is None
-    
+
     retry_count = 0
     current_delay = retry_delay
     start_time = time.time()
-    
+
     op_name = operation_name or "SQLite operation"
-    
+
     while retry_count < max_retries:
         try:
             if is_callable_mode:
@@ -257,20 +257,20 @@ def sqlite_execute_with_retry(
                 else:
                     cursor.execute(sql)
                 return cursor
-        
+
         except sqlite3.OperationalError as e:
             if "database is locked" in str(e):
                 retry_count += 1
                 elapsed = time.time() - start_time
-                
+
                 if elapsed > SQLITE_MAX_RETRY_TIME:
                     logger.error(f"{op_name}: SQLite retry timeout exceeded ({SQLITE_MAX_RETRY_TIME}s)")
                     raise
-                
+
                 if retry_count >= max_retries:
                     logger.error(f"{op_name}: SQLite max retries ({max_retries}) exceeded")
                     raise
-                
+
                 logger.debug(
                     f"{op_name}: Database locked, retry {retry_count}/{max_retries} "
                     f"after {current_delay:.2f}s delay"
@@ -279,7 +279,7 @@ def sqlite_execute_with_retry(
                 current_delay *= 2  # Exponential backoff
             else:
                 raise
-    
+
     raise sqlite3.OperationalError(f"{op_name}: Max retries ({max_retries}) exceeded")
 
 
@@ -290,7 +290,7 @@ def sqlite_execute_with_retry(
 def ensure_db_directory_exists(db_path: str) -> None:
     """
     Ensure the directory for a database file exists.
-    
+
     Args:
         db_path: Path to the database file
     """
@@ -311,31 +311,31 @@ def ensure_db_directory_exists(db_path: str) -> None:
 def get_best_metric_crs(layer_crs) -> str:
     """
     Determine the best metric CRS for a layer.
-    
+
     For geographic CRS (lat/lon), returns an appropriate metric projection.
     For projected CRS, returns the same CRS if it's already metric.
-    
+
     Args:
         layer_crs: QgsCoordinateReferenceSystem or EPSG code string
-    
+
     Returns:
         str: EPSG code of the best metric CRS (e.g., "EPSG:3857")
     """
     if not QGIS_AVAILABLE:
         return "EPSG:3857"  # Default Web Mercator
-    
+
     # Convert to QgsCoordinateReferenceSystem if needed
     if isinstance(layer_crs, str):
         layer_crs = QgsCoordinateReferenceSystem(layer_crs)
-    
+
     # If already metric, return as-is
     if layer_crs.mapUnits() in (QgsUnitTypes.DistanceMeters, QgsUnitTypes.DistanceKilometers):
         return layer_crs.authid()
-    
+
     # For geographic CRS, use Web Mercator as default
     if layer_crs.isGeographic():
         return "EPSG:3857"
-    
+
     # Fallback
     return layer_crs.authid()
 
@@ -343,28 +343,28 @@ def get_best_metric_crs(layer_crs) -> str:
 def should_reproject_layer(layer, target_crs_auth_id: str = None) -> bool:
     """
     Check if a layer needs reprojection for metric operations.
-    
+
     Args:
         layer: QgsVectorLayer
         target_crs_auth_id: Target CRS auth ID (e.g., "EPSG:3857")
-    
+
     Returns:
         bool: True if reprojection is needed
     """
     if not QGIS_AVAILABLE:
         return False
-    
+
     try:
         layer_crs = layer.crs()
-        
+
         # If target CRS specified, check if different
         if target_crs_auth_id:
             target_crs = QgsCoordinateReferenceSystem(target_crs_auth_id)
             return layer_crs != target_crs
-        
+
         # Otherwise check if geographic (needs projection for metric operations)
         return layer_crs.isGeographic()
-    
+
     except Exception:
         return False
 
@@ -372,16 +372,16 @@ def should_reproject_layer(layer, target_crs_auth_id: str = None) -> bool:
 def needs_metric_conversion(layer) -> bool:
     """
     Check if layer units need conversion to meters.
-    
+
     Args:
         layer: QgsVectorLayer
-    
+
     Returns:
         bool: True if conversion needed
     """
     if not QGIS_AVAILABLE:
         return False
-    
+
     try:
         units = layer.crs().mapUnits()
         return units not in (QgsUnitTypes.DistanceMeters, QgsUnitTypes.DistanceKilometers)
@@ -398,15 +398,15 @@ __all__ = [
     'spatialite_connect',
     'safe_spatialite_connect',
     'sqlite_execute_with_retry',
-    
+
     # File system
     'ensure_db_directory_exists',
-    
+
     # CRS utilities
     'get_best_metric_crs',
     'should_reproject_layer',
     'needs_metric_conversion',
-    
+
     # Constants
     'SQLITE_TIMEOUT',
     'SQLITE_MAX_RETRIES',

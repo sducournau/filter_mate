@@ -23,6 +23,16 @@ except ImportError:
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
 
+try:
+    from ...infrastructure.utils import is_layer_source_available
+except ImportError:
+    def is_layer_source_available(layer, **kwargs):
+        """Fallback: check isValid()."""
+        try:
+            return layer.isValid()
+        except Exception:
+            return False
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +55,7 @@ class LayerValidationResult:
     layer_id: Optional[str] = None
     layer_name: Optional[str] = None
     error_message: str = ""
-    
+
     @property
     def is_valid(self) -> bool:
         return self.status == LayerValidationStatus.VALID
@@ -82,7 +92,7 @@ class LayerSyncState:
 class LayerService(QObject):
     """
     Service for layer management operations.
-    
+
     Provides:
     - Layer validation (source, type, availability)
     - Layer information extraction
@@ -90,7 +100,7 @@ class LayerService(QObject):
     - Primary key detection
     - Field expression management
     - Multi-step filter detection
-    
+
     Emits:
     - layer_validated: When a layer is validated
     - layer_info_updated: When layer info is extracted
@@ -98,37 +108,37 @@ class LayerService(QObject):
     - layer_sync_completed: When sync operation completes
     - validation_failed: When validation fails
     """
-    
+
     # Signals
     layer_validated = pyqtSignal(str, bool)  # layer_id, is_valid
     layer_info_updated = pyqtSignal(str, object)  # layer_id, LayerInfo
     layer_sync_started = pyqtSignal(str)  # layer_id
     layer_sync_completed = pyqtSignal(str)  # layer_id
     validation_failed = pyqtSignal(str, str)  # layer_id, reason
-    
+
     def __init__(self, parent: Optional[QObject] = None):
         """
         Initialize LayerService.
-        
+
         Args:
             parent: Optional parent QObject
         """
         super().__init__(parent)
-        
+
         # Cache for layer info
         self._layer_info_cache: Dict[str, LayerInfo] = {}
-        
+
         # Protection window tracking
         self._filter_completed_time: float = 0
         self._saved_layer_id_before_filter: Optional[str] = None
-        
+
         # Protection window duration (matches dockwidget)
         self.POST_FILTER_PROTECTION_WINDOW = 1.5  # v4.1.3: Reduced from 5.0s for faster user interaction
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Layer Validation
     # ─────────────────────────────────────────────────────────────────
-    
+
     def validate_layer(
         self,
         layer: Optional["QgsVectorLayer"],
@@ -137,7 +147,7 @@ class LayerService(QObject):
     ) -> LayerValidationResult:
         """
         Validate a layer for FilterMate operations.
-        
+
         Checks:
         1. Plugin not busy
         2. Layer is not None
@@ -145,12 +155,12 @@ class LayerService(QObject):
         4. Layer C++ object is valid
         5. Layer source is available
         6. Layer exists in PROJECT_LAYERS
-        
+
         Args:
             layer: Layer to validate
             project_layers: PROJECT_LAYERS dict
             plugin_busy: Whether plugin is busy
-            
+
         Returns:
             LayerValidationResult with status and details
         """
@@ -160,14 +170,14 @@ class LayerService(QObject):
                 status=LayerValidationStatus.PLUGIN_BUSY,
                 error_message="Plugin is busy with critical operations"
             )
-        
+
         # Check None
         if layer is None:
             return LayerValidationResult(
                 status=LayerValidationStatus.INVALID,
                 error_message="Layer is None"
             )
-        
+
         # Check vector layer type
         try:
             from qgis.core import QgsVectorLayer
@@ -178,7 +188,7 @@ class LayerService(QObject):
                 )
         except ImportError:
             pass  # Skip type check if QGIS not available
-        
+
         # Check C++ object validity
         try:
             layer_id = layer.id()
@@ -188,7 +198,7 @@ class LayerService(QObject):
                 status=LayerValidationStatus.DELETED,
                 error_message="Layer C++ object was deleted"
             )
-        
+
         # Check source availability
         if not self._is_layer_source_available(layer):
             return LayerValidationResult(
@@ -198,7 +208,7 @@ class LayerService(QObject):
                 layer_name=layer_name,
                 error_message=f"Layer '{layer_name}' source is unavailable"
             )
-        
+
         # Check PROJECT_LAYERS membership
         if project_layers is not None and layer_id not in project_layers:
             return LayerValidationResult(
@@ -208,24 +218,24 @@ class LayerService(QObject):
                 layer_name=layer_name,
                 error_message=f"Layer '{layer_name}' not in PROJECT_LAYERS"
             )
-        
+
         # All checks passed
         self.layer_validated.emit(layer_id, True)
-        
+
         return LayerValidationResult(
             status=LayerValidationStatus.VALID,
             layer=layer,
             layer_id=layer_id,
             layer_name=layer_name
         )
-    
+
     def _is_layer_source_available(self, layer: "QgsVectorLayer") -> bool:
         """
         Check if layer source is available.
-        
+
         Args:
             layer: Layer to check
-            
+
         Returns:
             bool: True if source is available
         """
@@ -238,11 +248,11 @@ class LayerService(QObject):
                 return layer.isValid()
             except Exception:
                 return False
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Layer Information
     # ─────────────────────────────────────────────────────────────────
-    
+
     def get_layer_info(
         self,
         layer: "QgsVectorLayer",
@@ -250,31 +260,31 @@ class LayerService(QObject):
     ) -> Optional[LayerInfo]:
         """
         Extract information about a layer.
-        
+
         Args:
             layer: Layer to get info for
             use_cache: Whether to use cached info
-            
+
         Returns:
             LayerInfo object or None
         """
         if layer is None:
             return None
-        
+
         try:
             layer_id = layer.id()
         except RuntimeError:
             return None
-        
+
         # Check cache
         if use_cache and layer_id in self._layer_info_cache:
             return self._layer_info_cache[layer_id]
-        
+
         try:
             from qgis.core import QgsWkbTypes
-            
+
             geometry_type = QgsWkbTypes.displayString(layer.wkbType())
-            
+
             info = LayerInfo(
                 layer_id=layer_id,
                 name=layer.name(),
@@ -287,22 +297,22 @@ class LayerService(QObject):
                 fields=[f.name() for f in layer.fields()],
                 primary_key=self._detect_primary_key(layer)
             )
-            
+
             # Cache result
             self._layer_info_cache[layer_id] = info
-            
+
             self.layer_info_updated.emit(layer_id, info)
-            
+
             return info
-            
+
         except Exception as e:
             logger.error(f"Error getting layer info: {e}")
             return None
-    
+
     def clear_cache(self, layer_id: Optional[str] = None) -> None:
         """
         Clear layer info cache.
-        
+
         Args:
             layer_id: Specific layer to clear, or None for all
         """
@@ -310,24 +320,24 @@ class LayerService(QObject):
             self._layer_info_cache.pop(layer_id, None)
         else:
             self._layer_info_cache.clear()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Primary Key Detection
     # ─────────────────────────────────────────────────────────────────
-    
+
     # Common primary key field names (exact match, case-insensitive)
     PK_EXACT_NAMES = ['id', 'fid', 'pk', 'gid', 'ogc_fid', 'objectid', 'oid', 'rowid']
-    
+
     # UUID field patterns (contains, case-insensitive)
     UUID_PATTERNS = ['uuid', 'guid']
-    
+
     # ID field patterns (contains, case-insensitive) - for numeric fields
     ID_PATTERNS = ['_id', 'id_', 'identifier', 'feature_id', 'object_id']
-    
+
     def _detect_primary_key(self, layer: "QgsVectorLayer") -> Optional[str]:
         """
         Detect the primary key field for a layer.
-        
+
         Improved priority for OGR layers (v4.0.7):
         1. Provider-defined primary key (trusted)
         2. Exact match PK names: id, fid, pk, gid, ogc_fid, objectid, oid, rowid
@@ -335,34 +345,34 @@ class LayerService(QObject):
         4. Numeric fields with ID patterns (_id, id_, identifier, etc.)
         5. First numeric integer field (Int, LongLong, Int64)
         6. First field as fallback (avoid text fields when possible)
-        
+
         Args:
             layer: Layer to detect PK for
-            
+
         Returns:
             Primary key field name or None
         """
         if layer is None:
             return None
-        
+
         try:
             from qgis.PyQt.QtCore import QVariant
-            
+
             fields = layer.fields()
             if not fields:
                 return None
-            
+
             # 1. Try to get from provider (always trust declared PK)
             pk_indexes = layer.primaryKeyAttributes()
             if pk_indexes:
                 return fields[pk_indexes[0]].name()
-            
+
             # 2. Look for exact match PK names (case-insensitive)
             for field in fields:
                 if field.name().lower() in self.PK_EXACT_NAMES:
                     logger.debug(f"Found exact PK name: {field.name()}")
                     return field.name()
-            
+
             # 3. Look for UUID fields (highest priority for unique identification)
             for field in fields:
                 field_name_lower = field.name().lower()
@@ -370,7 +380,7 @@ class LayerService(QObject):
                     if pattern in field_name_lower:
                         logger.debug(f"Found UUID field: {field.name()}")
                         return field.name()
-            
+
             # 4. Look for numeric fields with ID patterns
             numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong)
             for field in fields:
@@ -379,21 +389,21 @@ class LayerService(QObject):
                     if pattern in field_name_lower and field.type() in numeric_types:
                         logger.debug(f"Found numeric ID field: {field.name()}")
                         return field.name()
-            
+
             # 5. First numeric integer field (reliable for unique identification)
             for field in fields:
                 if field.type() in numeric_types:
                     logger.debug(f"Using first numeric field: {field.name()}")
                     return field.name()
-            
+
             # 6. First field as fallback (avoid if possible - text fields are less suitable)
             logger.debug(f"Falling back to first field: {fields[0].name()}")
             return fields[0].name()
-            
+
         except Exception as e:
             logger.debug(f"Error detecting primary key: {e}")
             return None
-    
+
     def get_primary_key(
         self,
         layer: "QgsVectorLayer",
@@ -401,13 +411,13 @@ class LayerService(QObject):
     ) -> Optional[str]:
         """
         Get primary key for a layer.
-        
+
         First checks layer_props, then auto-detects.
-        
+
         Args:
             layer: Layer to get PK for
             layer_props: Optional cached properties
-            
+
         Returns:
             Primary key field name
         """
@@ -417,14 +427,14 @@ class LayerService(QObject):
             pk = infos.get('primary_key_name')
             if pk:
                 return pk
-        
+
         # Auto-detect
         return self._detect_primary_key(layer)
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Layer Sync State
     # ─────────────────────────────────────────────────────────────────
-    
+
     def get_sync_state(
         self,
         layer: "QgsVectorLayer",
@@ -433,22 +443,22 @@ class LayerService(QObject):
     ) -> Optional[LayerSyncState]:
         """
         Get synchronization state for a layer.
-        
+
         Args:
             layer: Layer to get state for
             layer_props: Optional cached properties
             forced_backends: Optional forced backends dict
-            
+
         Returns:
             LayerSyncState object
         """
         if layer is None:
             return None
-        
+
         try:
             layer_id = layer.id()
             subset = layer.subsetString() or ""
-            
+
             state = LayerSyncState(
                 layer_id=layer_id,
                 layer_name=layer.name(),
@@ -458,17 +468,17 @@ class LayerService(QObject):
                 is_multi_step_filter=self._detect_multi_step_filter(layer, layer_props),
                 primary_key=self.get_primary_key(layer, layer_props)
             )
-            
+
             # Add forced backend if available
             if forced_backends and layer_id in forced_backends:
                 state.forced_backend = forced_backends[layer_id]
-            
+
             return state
-            
+
         except Exception as e:
             logger.error(f"Error getting sync state: {e}")
             return None
-    
+
     def _detect_multi_step_filter(
         self,
         layer: "QgsVectorLayer",
@@ -476,46 +486,46 @@ class LayerService(QObject):
     ) -> bool:
         """
         Detect if layer has multi-step (additive) filtering.
-        
+
         Args:
             layer: Layer to check
             layer_props: Optional cached properties
-            
+
         Returns:
             bool: True if multi-step filter detected
         """
         if layer is None:
             return False
-        
+
         try:
             # Check for existing subset
             subset = layer.subsetString()
             if not subset:
                 return False
-            
+
             # Check layer_props for previous filter history
             if layer_props:
                 # Check if has_combine_operator is enabled
                 has_combine = layer_props.get('has_combine_operator', {}).get('has_combine_operator', False)
                 if has_combine:
                     return True
-            
+
             # Check subset string for multiple conditions
             # Multi-step filters typically use AND/OR combinations
             upper_subset = subset.upper()
             if ' AND ' in upper_subset or ' OR ' in upper_subset:
                 return True
-            
+
             return False
-            
+
         except Exception as e:
             logger.debug(f"Error detecting multi-step filter: {e}")
             return False
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Field Validation
     # ─────────────────────────────────────────────────────────────────
-    
+
     def validate_field_expression(
         self,
         layer: "QgsVectorLayer",
@@ -523,46 +533,46 @@ class LayerService(QObject):
     ) -> Tuple[bool, Optional[str]]:
         """
         Validate a field expression for a layer.
-        
+
         Args:
             layer: Layer to validate against
             expression: Field expression string
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
         if not expression:
             return True, None
-        
+
         if layer is None:
             return False, "No layer provided"
-        
+
         try:
             # Normalize expression (remove quotes)
             normalized = expression.strip().strip('"')
-            
+
             # Get layer fields
             field_names = [f.name() for f in layer.fields()]
-            
+
             # Check if it's a simple field name
             if normalized in field_names or expression in field_names:
                 return True, None
-            
+
             # Try to validate as QGIS expression
             # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
             from ..ports.qgis_port import get_qgis_factory
-            
+
             factory = get_qgis_factory()
             expr = factory.create_expression(expression)
-            
+
             if expr.has_parse_error():
                 return False, expr.parse_error()
-            
+
             return True, None
-            
+
         except Exception as e:
             return False, str(e)
-    
+
     def get_valid_expression(
         self,
         layer: "QgsVectorLayer",
@@ -571,31 +581,31 @@ class LayerService(QObject):
     ) -> str:
         """
         Get a valid expression for a layer.
-        
+
         If expression is invalid, returns primary key or first field.
-        
+
         Args:
             layer: Layer to validate against
             expression: Expression to validate
             fallback_to_pk: Use primary key as fallback
-            
+
         Returns:
             Valid expression string
         """
         if layer is None:
             return expression or ""
-        
+
         is_valid, _ = self.validate_field_expression(layer, expression)
-        
+
         if is_valid:
             return expression
-        
+
         # Get fallback
         if fallback_to_pk:
             pk = self._detect_primary_key(layer)
             if pk:
                 return pk
-        
+
         # Use first field
         try:
             fields = layer.fields()
@@ -603,17 +613,17 @@ class LayerService(QObject):
                 return fields[0].name()
         except Exception:
             pass
-        
+
         return expression or ""
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Protection Window Management
     # ─────────────────────────────────────────────────────────────────
-    
+
     def save_layer_before_filter(self, layer: "QgsVectorLayer") -> None:
         """
         Save layer ID before filter operation for protection.
-        
+
         Args:
             layer: Layer being filtered
         """
@@ -622,62 +632,62 @@ class LayerService(QObject):
                 self._saved_layer_id_before_filter = layer.id()
             except RuntimeError:
                 pass
-    
+
     def mark_filter_completed(self) -> None:
         """Mark that a filter operation has completed."""
         self._filter_completed_time = time.time()
-    
+
     def clear_filter_protection(self) -> None:
         """Clear the filter protection state."""
         self._filter_completed_time = 0
         self._saved_layer_id_before_filter = None
-    
+
     def is_within_protection_window(self) -> bool:
         """Check if within post-filter protection window."""
         if self._filter_completed_time == 0:
             return False
-        
+
         elapsed = time.time() - self._filter_completed_time
         return elapsed < self.POST_FILTER_PROTECTION_WINDOW
-    
+
     def should_block_layer_change(
         self,
         new_layer: Optional["QgsVectorLayer"]
     ) -> Tuple[bool, str]:
         """
         Check if a layer change should be blocked.
-        
+
         Args:
             new_layer: Layer being changed to
-            
+
         Returns:
             Tuple of (should_block, reason)
         """
         if not self.is_within_protection_window():
             return False, ""
-        
+
         saved_id = self._saved_layer_id_before_filter
-        
+
         if not saved_id:
             return False, ""
-        
+
         # Block None layer during protection
         if new_layer is None:
             return True, "Layer None during protection window"
-        
+
         # Block different layer during protection
         try:
             if new_layer.id() != saved_id:
                 return True, "Layer change during protection window"
         except RuntimeError:
             return True, "Layer deleted during protection window"
-        
+
         return False, ""
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Utility Methods
     # ─────────────────────────────────────────────────────────────────
-    
+
     def get_layer_display_name(
         self,
         layer: "QgsVectorLayer",
@@ -685,17 +695,17 @@ class LayerService(QObject):
     ) -> str:
         """
         Get display name for a layer.
-        
+
         Args:
             layer: Layer to get name for
             max_length: Maximum name length
-            
+
         Returns:
             Display name string
         """
         if layer is None:
             return "(No layer)"
-        
+
         try:
             name = layer.name()
             if len(name) <= max_length:
@@ -703,17 +713,17 @@ class LayerService(QObject):
             return name[:max_length - 3] + "..."
         except RuntimeError:
             return "(Deleted)"
-    
+
     def get_provider_display_name(
         self,
         provider_type: str
     ) -> Tuple[str, str]:
         """
         Get display name and icon for provider type.
-        
+
         Args:
             provider_type: Provider type string
-            
+
         Returns:
             Tuple of (display_name, icon)
         """
@@ -724,35 +734,35 @@ class LayerService(QObject):
             'memory': ('Memory', '🧠'),
             'wfs': ('WFS', '🌐'),
         }
-        
+
         return providers.get(provider_type, (provider_type, '📄'))
-    
+
     def cleanup_for_removed_layers(
         self,
         existing_layer_ids: List[str]
     ) -> int:
         """
         Remove cached data for layers that no longer exist.
-        
+
         Args:
             existing_layer_ids: List of existing layer IDs
-            
+
         Returns:
             Number of entries removed
         """
         existing_set = set(existing_layer_ids)
-        
+
         to_remove = [
             layer_id for layer_id in self._layer_info_cache
             if layer_id not in existing_set
         ]
-        
+
         for layer_id in to_remove:
             del self._layer_info_cache[layer_id]
-        
+
         # Clear protection if saved layer was removed
-        if (self._saved_layer_id_before_filter and 
-            self._saved_layer_id_before_filter not in existing_set):
+        if (self._saved_layer_id_before_filter and
+                self._saved_layer_id_before_filter not in existing_set):
             self.clear_filter_protection()
-        
+
         return len(to_remove)

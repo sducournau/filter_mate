@@ -26,14 +26,14 @@ _PROVIDER_MAP: Dict[str, ProviderType] = {
     'postgres': ProviderType.POSTGRESQL,
     'postgresql': ProviderType.POSTGRESQL,
     'postgis': ProviderType.POSTGRESQL,
-    
+
     # Spatialite variants
     'spatialite': ProviderType.SPATIALITE,
     'gpkg': ProviderType.SPATIALITE,  # GeoPackage uses spatialite provider
-    
+
     # OGR provider
     'ogr': ProviderType.OGR,
-    
+
     # Memory/Virtual providers
     'memory': ProviderType.MEMORY,
     'virtual': ProviderType.MEMORY,
@@ -52,16 +52,16 @@ _BACKEND_AVAILABILITY: Dict[ProviderType, bool] = {
 def detect_provider_type(layer) -> ProviderType:
     """
     Detect the provider type for a layer.
-    
+
     This is the canonical way to detect provider type in FilterMate.
     Replaces all inline if/elif chains.
-    
+
     Args:
         layer: QGIS vector layer (QgsVectorLayer)
-    
+
     Returns:
         ProviderType enum value
-    
+
     Example:
         >>> provider = detect_provider_type(my_layer)
         >>> if provider == ProviderType.POSTGRESQL:
@@ -69,7 +69,7 @@ def detect_provider_type(layer) -> ProviderType:
     """
     if layer is None:
         return ProviderType.UNKNOWN
-    
+
     # Check for deleted Qt object
     try:
         if not layer.isValid():
@@ -78,7 +78,7 @@ def detect_provider_type(layer) -> ProviderType:
     except RuntimeError:
         # Layer C++ object deleted
         return ProviderType.UNKNOWN
-    
+
     # Check for GeoPackage (special case - uses OGR but we treat as Spatialite)
     if qgis_provider == 'ogr':
         try:
@@ -87,17 +87,17 @@ def detect_provider_type(layer) -> ProviderType:
                 return ProviderType.SPATIALITE
         except (RuntimeError, AttributeError):
             pass
-    
+
     return _PROVIDER_MAP.get(qgis_provider, ProviderType.UNKNOWN)
 
 
 def is_postgresql(layer) -> bool:
     """
     Check if layer is PostgreSQL/PostGIS.
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer uses PostgreSQL provider
     """
@@ -107,12 +107,12 @@ def is_postgresql(layer) -> bool:
 def is_spatialite(layer) -> bool:
     """
     Check if layer is Spatialite or GeoPackage.
-    
+
     Note: GeoPackage layers are treated as Spatialite for backend purposes.
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer uses Spatialite provider
     """
@@ -122,12 +122,12 @@ def is_spatialite(layer) -> bool:
 def is_ogr(layer) -> bool:
     """
     Check if layer uses OGR provider.
-    
+
     Note: GeoPackage layers return False (treated as Spatialite).
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer uses OGR provider
     """
@@ -137,10 +137,10 @@ def is_ogr(layer) -> bool:
 def is_memory(layer) -> bool:
     """
     Check if layer is in-memory or virtual.
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer is memory-based
     """
@@ -150,16 +150,16 @@ def is_memory(layer) -> bool:
 def is_geopackage(layer) -> bool:
     """
     Check if layer is specifically a GeoPackage.
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer source is a GeoPackage file
     """
     if layer is None:
         return False
-    
+
     try:
         source = layer.source().lower()
         return '.gpkg' in source
@@ -170,10 +170,10 @@ def is_geopackage(layer) -> bool:
 def get_provider_display_name(provider: ProviderType) -> str:
     """
     Get human-readable name for provider.
-    
+
     Args:
         provider: ProviderType enum value
-    
+
     Returns:
         Display-friendly name string
     """
@@ -190,10 +190,10 @@ def get_provider_display_name(provider: ProviderType) -> str:
 def get_provider_icon_name(provider: ProviderType) -> str:
     """
     Get icon filename for provider.
-    
+
     Args:
         provider: ProviderType enum value
-    
+
     Returns:
         Icon filename (without path)
     """
@@ -210,18 +210,18 @@ def get_provider_icon_name(provider: ProviderType) -> str:
 def is_backend_available(provider: ProviderType) -> bool:
     """
     Check if a backend is available for use.
-    
+
     For PostgreSQL, this checks if psycopg2 is installed.
     Other backends are always available.
-    
+
     Args:
         provider: ProviderType enum value
-    
+
     Returns:
         True if backend can be used
     """
     global _BACKEND_AVAILABILITY
-    
+
     if provider == ProviderType.POSTGRESQL:
         if _BACKEND_AVAILABILITY[ProviderType.POSTGRESQL] is None:
             # Lazy check for psycopg2
@@ -231,38 +231,38 @@ def is_backend_available(provider: ProviderType) -> bool:
             except ImportError:
                 _BACKEND_AVAILABILITY[ProviderType.POSTGRESQL] = False
         return _BACKEND_AVAILABILITY[ProviderType.POSTGRESQL]
-    
+
     return _BACKEND_AVAILABILITY.get(provider, False)
 
 
 def get_optimal_backend_for_layer(layer) -> ProviderType:
     """
     Determine the optimal backend for a layer.
-    
+
     Considers:
     - Layer's native provider
     - Backend availability
     - Performance characteristics
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         Best available ProviderType for the layer
     """
     native_provider = detect_provider_type(layer)
-    
+
     # If native provider's backend is available, use it
     if is_backend_available(native_provider):
         return native_provider
-    
+
     # PostgreSQL not available, fall back
     if native_provider == ProviderType.POSTGRESQL:
         # Try Spatialite, then OGR
         if is_backend_available(ProviderType.SPATIALITE):
             return ProviderType.SPATIALITE
         return ProviderType.OGR
-    
+
     # Default fallback
     return ProviderType.OGR
 
@@ -270,18 +270,18 @@ def get_optimal_backend_for_layer(layer) -> ProviderType:
 def get_connection_info(layer) -> Optional[Dict[str, Any]]:
     """
     Extract connection information from layer.
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         Dict with connection info, or None if not extractable
     """
     if layer is None:
         return None
-    
+
     provider = detect_provider_type(layer)
-    
+
     try:
         if provider == ProviderType.POSTGRESQL and HAS_QGIS:
             uri = QgsDataSourceUri(layer.source())
@@ -296,7 +296,7 @@ def get_connection_info(layer) -> Optional[Dict[str, Any]]:
                 'username': uri.username(),
                 'srid': uri.srid(),
             }
-        
+
         elif provider == ProviderType.SPATIALITE:
             source = layer.source()
             # Parse Spatialite/GPKG source
@@ -308,45 +308,45 @@ def get_connection_info(layer) -> Optional[Dict[str, Any]]:
                 for part in parts[1:]:
                     if part.startswith('layername='):
                         table_name = part.replace('layername=', '')
-            
+
             return {
                 'provider': provider,
                 'database': db_path,
                 'table': table_name or layer.name(),
                 'is_geopackage': is_geopackage(layer),
             }
-        
+
         elif provider == ProviderType.OGR:
             return {
                 'provider': provider,
                 'source': layer.source(),
             }
-        
+
         elif provider == ProviderType.MEMORY:
             return {
                 'provider': provider,
                 'name': layer.name(),
             }
-    
+
     except (RuntimeError, AttributeError, ValueError):
         pass
-    
+
     return {'provider': provider}
 
 
 def supports_subset_string(layer) -> bool:
     """
     Check if layer supports subset string (filter expression).
-    
+
     Args:
         layer: QGIS vector layer
-    
+
     Returns:
         True if layer supports setSubsetString()
     """
     if layer is None:
         return False
-    
+
     try:
         provider = layer.dataProvider()
         if provider is None:
@@ -359,7 +359,7 @@ def supports_subset_string(layer) -> bool:
 def get_all_provider_types() -> list:
     """
     Get list of all provider types.
-    
+
     Returns:
         List of ProviderType values (excluding UNKNOWN)
     """
@@ -369,7 +369,7 @@ def get_all_provider_types() -> list:
 def get_available_backends() -> list:
     """
     Get list of currently available backends.
-    
+
     Returns:
         List of available ProviderType values
     """

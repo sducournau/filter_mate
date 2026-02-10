@@ -10,7 +10,7 @@ Submodules:
     - signals: QGIS signal handlers
 """
 
-from .filter_optimizer import (
+from .filter_optimizer import (  # noqa: F401
     QgisFilterOptimizer,
     QgisSelectivityEstimator,
     SpatialiteQueryBuilder,
@@ -20,14 +20,14 @@ from .filter_optimizer import (
     create_filter_optimizer,
 )
 
-from .geometry_preparation import (
+from .geometry_preparation import (  # noqa: F401
     GeometryPreparationAdapter,
     GeometryPreparationConfig,
     GeometryPreparationResult,
     create_geometry_preparation_adapter,
 )
 
-from .source_feature_resolver import (
+from .source_feature_resolver import (  # noqa: F401
     SourceFeatureResolver,
     FeatureResolverConfig,
     FeatureResolutionResult,

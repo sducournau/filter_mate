@@ -17,11 +17,17 @@ Author: FilterMate Team
 Date: January 2026
 """
 
+from __future__ import annotations
+
 import logging
 import time
-from typing import Optional, List, Dict, Callable, Any
+from typing import TYPE_CHECKING, Optional, List, Dict, Callable, Any
 
 from .base_task import BaseFilterMateTask, TaskResult
+
+if TYPE_CHECKING:
+    from ....core.domain.layer_info import LayerInfo
+    from ....core.ports.filter_optimizer import IFilterOptimizer, FilterPlan, FilterStep
 
 logger = logging.getLogger('FilterMate.Tasks.MultiStep')
 
@@ -124,7 +130,7 @@ class MultiStepFilterTask(BaseFilterMateTask):
                 progress = int((i / total_steps) * 80) + 10
                 self.report_progress(
                     progress, 100,
-                    f"Step {i+1}/{total_steps}: {step.step_type.value}"
+                    f"Step {i + 1}/{total_steps}: {step.step_type.value}"
                 )
 
                 step_result = self._execute_step(step, candidates)

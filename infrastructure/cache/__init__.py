@@ -10,7 +10,7 @@ Migrated from modules/tasks/ (EPIC-1 v3.0).
 """
 
 # Re-export query cache utilities (migrated from modules/tasks/)
-from .query_cache import (
+from .query_cache import (  # noqa: F401
     QueryExpressionCache,
     CacheEntry,
     get_query_cache,
@@ -20,16 +20,16 @@ from .query_cache import (
 )
 
 # Re-export geometry cache (migrated from modules/tasks/)
-from .geometry_cache import SourceGeometryCache
+from .geometry_cache import SourceGeometryCache  # noqa: F401
 
 # Re-export exploring features cache (v4.0 Sprint 18)
-from .exploring_cache import ExploringFeaturesCache
+from .exploring_cache import ExploringFeaturesCache  # noqa: F401
 
 # WKT Cache (migrated from before_migration v4.1.0)
-from .wkt_cache import WKTCache, WKTCacheEntry, get_wkt_cache
+from .wkt_cache import WKTCache, WKTCacheEntry, get_wkt_cache  # noqa: F401
 
 # Spatialite Persistent Cache (migrated from before_migration v4.1.0)
-from .spatialite_persistent_cache import (
+from .spatialite_persistent_cache import (  # noqa: F401
     SpatialitePersistentCache,
     get_persistent_cache,
     store_filter_fids,

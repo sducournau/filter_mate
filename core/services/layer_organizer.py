@@ -68,28 +68,28 @@ class LayerOrganizationContext:
 class LayerOrganizer:
     """
     Service for organizing layers by provider type.
-    
+
     This service extracts the layer organization logic from FilterTask,
     making it testable and reusable.
-    
+
     Example:
         organizer = LayerOrganizer()
         result = organizer.organize(context)
         for provider, layers in result.layers_by_provider.items():
-          
+
     """
-    
+
     def __init__(self, log_to_qgis: bool = True):
         """
         Initialize LayerOrganizer.
-        
+
         Args:
             log_to_qgis: Whether to log messages to QGIS message panel
         """
         self._log_to_qgis = log_to_qgis
         self._qgs_message_log = None
         self._qgis_level = None
-        
+
         if log_to_qgis:
             try:
                 from qgis.core import QgsMessageLog, Qgis
@@ -97,40 +97,40 @@ class LayerOrganizer:
                 self._qgis_level = Qgis
             except ImportError:
                 self._log_to_qgis = False
-    
+
     def organize(self, context: LayerOrganizationContext) -> OrganizedLayers:
         """
         Organize layers by provider type.
-        
+
         Args:
             context: Organization context with task parameters and project
-            
+
         Returns:
             OrganizedLayers with layers grouped by provider
         """
         result = OrganizedLayers()
-        
+
         logger.info(f"🔍 LayerOrganizer.organize() called for action: {context.task_action}")
-        
+
         # Get layer parameters
         filtering_params = context.task_parameters.get("filtering", {})
         task_params = context.task_parameters.get("task", {})
-        
+
         has_layers_to_filter = filtering_params.get("has_layers_to_filter", False)
         layers_list = task_params.get("layers", [])
         has_layers_in_params = len(layers_list) > 0
-        
+
         logger.info(f"  has_layers_to_filter: {has_layers_to_filter}")
         logger.info(f"  task['layers'] count: {len(layers_list)}")
-        
+
         # Early exit for filter action with no layers
         if context.task_action == 'filter' and not has_layers_in_params:
             logger.info("  ℹ️ No layers in task params - skipping organization")
             return result
-        
+
         # Get forced backends
         forced_backends = context.task_parameters.get('forced_backends', {}) or context.forced_backends
-        
+
         # Process each layer
         for layer_props_original in layers_list:
             layer_result = self._process_single_layer(
@@ -139,26 +139,26 @@ class LayerOrganizer:
                 forced_backends,
                 result
             )
-            
+
             if layer_result:
                 provider_type, layer, layer_props = layer_result
-                
+
                 # Add to result
                 if provider_type not in result.layers_by_provider:
                     result.layers_by_provider[provider_type] = []
-                
+
                 result.layers_by_provider[provider_type].append([layer, layer_props])
                 result.layers_count += 1
                 logger.info(f"    ✓ Added to filter list (total: {result.layers_count})")
-        
+
         # Build provider list
         result.provider_list = list(result.layers_by_provider.keys())
-        
+
         # Log summary
         self._log_summary(result, len(layers_list))
-        
+
         return result
-    
+
     def _process_single_layer(
         self,
         layer_props_original: Dict[str, Any],
@@ -168,24 +168,24 @@ class LayerOrganizer:
     ) -> Optional[Tuple[str, Any, Dict]]:
         """
         Process a single layer for organization.
-        
+
         Returns:
             Tuple of (provider_type, layer, layer_props) or None if layer not found
         """
         # Create copy to avoid modifying original
         layer_props = layer_props_original.copy()
-        
+
         # Remove stale runtime keys
         for stale_key in STALE_RUNTIME_KEYS:
             layer_props.pop(stale_key, None)
-        
+
         provider_type = layer_props.get("layer_provider_type", "unknown")
         layer_name = layer_props.get("layer_name", "unknown")
         layer_id = layer_props.get("layer_id", "unknown")
-        
+
         self._log_qgis(f"📂 Organizing layer: {layer_name} ({provider_type})", "Info")
         logger.debug(f"  📋 Layer '{layer_name}' initial provider_type='{provider_type}'")
-        
+
         # Determine effective provider type
         provider_type = self._determine_effective_provider(
             layer_props,
@@ -195,27 +195,27 @@ class LayerOrganizer:
             context,
             forced_backends
         )
-        
+
         logger.debug(f"  Processing layer: {layer_name} ({provider_type}), id={layer_id}")
-        
+
         # Resolve layer from project
         layer = self._resolve_layer(layer_props, layer_name, layer_id, context, result)
-        
+
         if layer is None:
             result.not_found_layers.append(layer_name)
             return None
-        
+
         # FIX v4.0.3 (2026-01-16): Add layer instance to layer_props for auto-detection of geometry column
         # The backend needs access to the QgsVectorLayer to detect the actual geometry column name
         # when the stored value is invalid (e.g., "NULL")
         layer_props["layer"] = layer
-        
+
         # FIX v4.1.1 (2026-01-18): ALWAYS verify geometry column from layer URI
         # Even if stored value is non-empty, it may be incorrect (e.g., "geom" when actual is "geometry")
         # This was causing PostgreSQL EXISTS filters to fail silently
         stored_geom_field = layer_props.get("layer_geometry_field")
         is_memory_layer = layer.providerType() == 'memory'
-        
+
         detected_geom = None
         try:
             if is_memory_layer:
@@ -233,7 +233,7 @@ class LayerOrganizer:
                     logger.debug(f"  ✓ Detected geometry column for {layer_name}: '{detected_geom}'")
         except Exception as e:
             logger.warning(f"  ⚠️ Could not detect geometry column for {layer_name}: {e}")
-        
+
         # Update layer_props with detected value (or fallback)
         if detected_geom:
             if stored_geom_field and stored_geom_field != detected_geom and stored_geom_field not in ('NULL', 'None', ''):
@@ -245,11 +245,11 @@ class LayerOrganizer:
             layer_props["layer_geometry_field"] = 'geometry' if is_memory_layer else 'geom'
             logger.warning(f"  ⚠️ Using fallback geometry column '{layer_props['layer_geometry_field']}' for {layer_name}")
         # else: keep stored value if detection failed but stored value exists
-        
+
         logger.info(f"  📐 Final geometry column for {layer_name}: '{layer_props.get('layer_geometry_field')}'")
-        
+
         return provider_type, layer, layer_props
-    
+
     def _determine_effective_provider(
         self,
         layer_props: Dict[str, Any],
@@ -260,7 +260,7 @@ class LayerOrganizer:
         forced_backends: Dict[str, str]
     ) -> str:
         """Determine the effective provider type for a layer."""
-        
+
         # PRIORITY 1: Check if backend is forced by user
         forced_backend = forced_backends.get(layer_id)
         if forced_backend:
@@ -268,12 +268,12 @@ class LayerOrganizer:
             layer_props["_effective_provider_type"] = forced_backend
             layer_props["_forced_backend"] = True
             return forced_backend
-        
+
         # PRIORITY 2: PostgreSQL availability check
         # FIX v4.1.3 (2026-01-18): PostgreSQL layers are ALWAYS filterable via QGIS native API
         # even without psycopg2. NEVER fall back to OGR for PostgreSQL layers - this breaks
         # spatial filtering because PostgreSQL geometry won't be prepared correctly.
-        # 
+        #
         # The ONLY limitation without psycopg2 is that advanced features (materialized views,
         # connection pooling) are disabled. But basic filtering via setSubsetString works.
         if provider_type == PROVIDER_POSTGRES:
@@ -282,7 +282,7 @@ class LayerOrganizer:
             layer_props["postgresql_connection_available"] = True
             logger.debug(f"  ✓ PostgreSQL layer '{layer_name}': using PostgreSQL backend (QGIS native API)")
             # DO NOT fallback to OGR - this would break spatial filtering
-        
+
         # PRIORITY 3: Detect provider from actual layer
         if context.detect_provider_fn and context.is_valid_layer_fn:
             layer_by_id = context.project.mapLayer(layer_id)
@@ -295,9 +295,9 @@ class LayerOrganizer:
                     )
                     layer_props["layer_provider_type"] = detected_provider
                     return detected_provider
-        
+
         return provider_type
-    
+
     def _resolve_layer(
         self,
         layer_props: Dict[str, Any],
@@ -307,17 +307,17 @@ class LayerOrganizer:
         result: OrganizedLayers
     ) -> Optional[Any]:
         """Resolve layer from project by name or ID."""
-        
+
         is_valid = context.is_valid_layer_fn or (lambda x: True)
         is_sip_deleted = context.is_sip_deleted_fn or (lambda x: False)
-        
+
         # Try to find by name first
         layers_by_name = context.project.mapLayersByName(layer_name)
         logger.debug(f"    Found {len(layers_by_name)} layers by name '{layer_name}'")
-        
+
         for layer in layers_by_name:
             if is_sip_deleted(layer):
-                logger.debug(f"    Skipping sip-deleted layer")
+                logger.debug("    Skipping sip-deleted layer")
                 continue
             if layer.id() == layer_id:
                 if is_valid(layer):
@@ -325,11 +325,11 @@ class LayerOrganizer:
                 else:
                     logger.warning(f"    Layer '{layer_name}' found but is_valid_layer=False!")
                     self._log_qgis(f"⚠️ Layer invalid: {layer_name}", "Warning")
-        
+
         # Fallback: try by ID only
-        logger.debug(f"    Layer not found by name, trying by ID...")
+        logger.debug("    Layer not found by name, trying by ID...")
         layer_by_id = context.project.mapLayer(layer_id)
-        
+
         if layer_by_id:
             if is_valid(layer_by_id):
                 try:
@@ -339,27 +339,27 @@ class LayerOrganizer:
                 except RuntimeError:
                     logger.warning(f"    Layer {layer_id} became invalid during access")
             else:
-                logger.warning(f"    Layer found by ID but is_valid_layer=False!")
+                logger.warning("    Layer found by ID but is_valid_layer=False!")
                 self._log_qgis(f"⚠️ Layer invalid (by ID): {layer_name}", "Warning")
         else:
             logger.warning(f"    Layer not found by ID: {layer_id[:16]}...")
-        
+
         # Layer not found
         logger.warning(f"    ⚠️ Layer not found in project: {layer_name}")
         self._log_qgis(f"⚠️ Layer not found: {layer_name} (id: {layer_id[:16]}...)", "Warning")
-        
+
         # Log available layer IDs for debugging
         all_layer_ids = list(context.project.mapLayers().keys())
         logger.debug(f"    Available layer IDs: {all_layer_ids[:10]}{'...' if len(all_layer_ids) > 10 else ''}")
-        
+
         return None
-    
+
     def _log_summary(self, result: OrganizedLayers, input_count: int) -> None:
         """Log organization summary."""
         organized_count = result.layers_count
-        
+
         logger.info(f"  📊 Final organized layers count: {organized_count}, providers: {result.provider_list}")
-        
+
         if organized_count < input_count:
             self._log_qgis(
                 f"⚠️ Only {organized_count}/{input_count} distant layers found!",
@@ -371,15 +371,15 @@ class LayerOrganizer:
                 f"✓ {organized_count} distant layers organized for filtering",
                 "Info"
             )
-        
+
         if result.layers_count > 0:
             layer_summary = [
-                (layer.name(), provider) 
-                for provider, layers_list in result.layers_by_provider.items() 
+                (layer.name(), provider)
+                for provider, layers_list in result.layers_by_provider.items()
                 for layer, props in layers_list
             ]
             logger.info(f"  ✓ Layers organized: {layer_summary}")
-    
+
     def _log_qgis(self, message: str, level: str = "Info") -> None:
         """Log message to QGIS message panel if available."""
         if self._log_to_qgis and self._qgs_message_log:
@@ -394,10 +394,10 @@ class LayerOrganizer:
 def create_layer_organizer(log_to_qgis: bool = True) -> LayerOrganizer:
     """
     Factory function to create a LayerOrganizer.
-    
+
     Args:
         log_to_qgis: Whether to log to QGIS message panel
-        
+
     Returns:
         LayerOrganizer instance
     """
@@ -419,9 +419,9 @@ def organize_layers_for_filtering(
 ) -> OrganizedLayers:
     """
     Organize layers for filtering.
-    
+
     Convenience function that creates a LayerOrganizer and runs organization.
-    
+
     Args:
         task_action: Action being performed ('filter', 'unfilter', 'reset')
         task_parameters: Task parameters dict
@@ -430,7 +430,7 @@ def organize_layers_for_filtering(
         detect_provider_fn: Function to detect provider type from layer
         is_valid_layer_fn: Function to check if layer is valid
         is_sip_deleted_fn: Function to check if layer is SIP-deleted
-        
+
     Returns:
         OrganizedLayers result
     """
@@ -443,6 +443,6 @@ def organize_layers_for_filtering(
         is_valid_layer_fn=is_valid_layer_fn,
         is_sip_deleted_fn=is_sip_deleted_fn
     )
-    
+
     organizer = create_layer_organizer(log_to_qgis=True)
     return organizer.organize(context)

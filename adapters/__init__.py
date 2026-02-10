@@ -9,22 +9,22 @@ Submodules:
     - qgis: QGIS-specific adapters
     - repositories: Data persistence adapters
     - app_bridge: Bridge for legacy FilterMateApp integration
-    
+
 For backward compatibility imports, see adapters.compat module.
 """
 
 # Re-export key components for convenience
-from .backends import BackendFactory, BackendSelector, create_backend_factory
+from .backends import BackendFactory, BackendSelector, create_backend_factory  # noqa: F401
 
 # v4.0.1: Backend registry for hexagonal architecture compliance
-from .backend_registry import (
+from .backend_registry import (  # noqa: F401
     BackendRegistry,
     get_backend_registry,
     reset_backend_registry,
 )
 
 # Application bridge for legacy integration
-from .app_bridge import (
+from .app_bridge import (  # noqa: F401
     initialize_services,
     cleanup_services,
     is_initialized,
@@ -49,7 +49,7 @@ __all__ = [
     'BackendFactory',
     'BackendSelector',
     'create_backend_factory',
-    
+
     # Application bridge
     'initialize_services',
     'cleanup_services',
@@ -68,26 +68,26 @@ __all__ = [
     'redo_filter',
     'can_undo',
     'can_redo',
-    
+
     # Task parameter building (v3.0)
     'TaskParameterBuilder',
     'TaskParameters',
     'FilteringConfig',
     'LayerInfo',
     'TaskType',
-    
+
     # Task bridge for Strangler Fig migration (v3.0 MIG-023)
     'TaskBridge',
     'BridgeResult',
     'get_task_bridge',
-    
+
     # Database manager (v3.0 MIG-024)
     'DatabaseManager',
 ]
 
 # Task parameter builder for MIG-024
 try:
-    from .task_builder import (
+    from .task_builder import (  # noqa: F401
         TaskParameterBuilder,
         TaskParameters,
         FilteringConfig,
@@ -104,7 +104,7 @@ except ImportError:
 
 # Task bridge for MIG-023 (Strangler Fig pattern)
 try:
-    from .task_bridge import (
+    from .task_bridge import (  # noqa: F401
         TaskBridge,
         BridgeResult,
         get_task_bridge,
@@ -117,7 +117,6 @@ except ImportError:
 
 # Database manager for MIG-024 (God Class reduction)
 try:
-    from .database_manager import DatabaseManager
+    from .database_manager import DatabaseManager  # noqa: F401
 except ImportError:
     DatabaseManager = None
-

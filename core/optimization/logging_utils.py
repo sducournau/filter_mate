@@ -27,10 +27,10 @@ def log_filtering_summary(
 ) -> None:
     """
     Log summary of filtering results.
-    
+
     Provides a detailed summary of the geometric filtering operation,
     including success/failure counts and recommendations for failed layers.
-    
+
     Args:
         layers_count: Total number of layers in the filter operation
         successful_filters: Number of layers that filtered successfully
@@ -40,7 +40,7 @@ def log_filtering_summary(
     """
     if failed_layer_names is None:
         failed_layer_names = []
-    
+
     logger.info("")
     logger.info("=" * 70)
     logger.info("📊 RÉSUMÉ DU FILTRAGE GÉOMÉTRIQUE")
@@ -48,12 +48,12 @@ def log_filtering_summary(
     logger.info(f"  Total couches: {layers_count}")
     logger.info(f"  ✅ Succès: {successful_filters}")
     logger.info(f"  ❌ Échecs: {failed_filters}")
-    
+
     # Log to QGIS message panel if requested
     if log_to_qgis:
         try:
             from qgis.core import QgsMessageLog, Qgis as QgisLevel
-            
+
             if failed_filters > 0:
                 QgsMessageLog.logMessage(
                     f"📊 Filter summary: {successful_filters} OK, {failed_filters} failed ({', '.join(failed_layer_names[:3])})",
@@ -66,7 +66,7 @@ def log_filtering_summary(
                 )
         except ImportError:
             pass  # Not in QGIS environment
-    
+
     if failed_filters > 0:
         logger.info("")
         if failed_layer_names:
@@ -95,9 +95,9 @@ def log_backend_info(
 ) -> None:
     """
     Log backend information and performance warnings for filtering tasks.
-    
+
     Only logs if task_action is 'filter'.
-    
+
     Args:
         task_action: Current task action ('filter', 'unfilter', 'reset', etc.)
         provider_type: Provider type being used
@@ -110,7 +110,7 @@ def log_backend_info(
     """
     if task_action != 'filter':
         return
-    
+
     # Determine active backend
     backend_name = "Memory/QGIS"
     if postgresql_available and provider_type == provider_postgres:
@@ -119,9 +119,9 @@ def log_backend_info(
         backend_name = "Spatialite"
     elif provider_type == provider_ogr:
         backend_name = "OGR"
-    
+
     logger.debug(f"Using {backend_name} backend for filtering")
-    
+
     # Performance warning for large datasets without PostgreSQL
     if large_dataset_threshold > 0 and feature_count > large_dataset_threshold and not (
         postgresql_available and provider_type == provider_postgres

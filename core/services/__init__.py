@@ -13,22 +13,22 @@ Services:
 All services are pure Python with no QGIS dependencies,
 enabling true unit testing and clear separation of concerns.
 """
-from .expression_service import (
+from .expression_service import (  # noqa: F401
     ExpressionService,
     ValidationResult,
     ParsedExpression,
 )
-from .filter_service import (
+from .filter_service import (  # noqa: F401
     FilterService,
     FilterRequest,
     FilterResponse,
 )
-from .history_service import (
+from .history_service import (  # noqa: F401
     HistoryService,
     HistoryEntry,
     HistoryState,
 )
-from .buffer_service import (
+from .buffer_service import (  # noqa: F401
     BufferService,
     BufferConfig,
     BufferEndCapStyle,

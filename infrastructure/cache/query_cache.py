@@ -19,9 +19,9 @@ Performance Benefits:
 - Memory-efficient with LRU eviction
 
 Usage:
-    from ...infrastructure.cache.query_cache import QueryExpressionCache    
+    from ...infrastructure.cache.query_cache import QueryExpressionCache
     cache = QueryExpressionCache()
-    
+
     # Try to get cached expression
     cached = cache.get(layer_id, predicates, buffer_value, source_hash)
     if cached:
@@ -29,16 +29,15 @@ Usage:
     else:
         expression = build_expression(...)
         cache.put(layer_id, predicates, buffer_value, source_hash, expression)
-    
+
     # Enhanced: Get expression with cached result count
     expr, count = cache.get_with_count(key)
-    
+
     # Enhanced: Cache complexity scores
     cache.put_complexity(expression_hash, complexity_score)
 """
 
 import hashlib
-import logging
 import time
 from typing import Optional, Dict, Any, Tuple, List
 from collections import OrderedDict
@@ -59,18 +58,18 @@ class CacheEntry:
     result_count: Optional[int] = None
     complexity_score: Optional[float] = None
     execution_time_ms: Optional[float] = None
-    
+
     def touch(self):
         """Update access time and count."""
         self.last_accessed = time.time()
         self.access_count += 1
-    
+
     def is_expired(self, ttl_seconds: float) -> bool:
         """Check if entry has expired based on TTL."""
         if ttl_seconds <= 0:
             return False
         return (time.time() - self.created_at) > ttl_seconds
-    
+
     def age_seconds(self) -> float:
         """Get entry age in seconds."""
         return time.time() - self.created_at
@@ -79,22 +78,22 @@ class CacheEntry:
 class QueryExpressionCache:
     """
     LRU cache for spatial query expressions.
-    
+
     Caches the built SQL/expression strings to avoid repeated building
     when filtering with the same parameters.
-    
+
     Cache Key Components:
     - layer_id: Target layer identifier
     - predicates: Spatial predicates (intersects, contains, etc.)
     - buffer_value: Buffer distance (or None)
     - source_geometry_hash: Hash of source geometry (WKT or features)
     - provider_type: Backend type (postgresql, spatialite, ogr)
-    
+
     Performance:
     - First build: ~50-100ms for complex expressions
     - Cache hit: ~0.1ms (500x faster)
     - Memory: ~10KB per cached expression (typical)
-    
+
     Example:
         >>> cache = QueryExpressionCache(max_size=100)
         >>> key = cache.get_cache_key(layer_id, predicates, buffer, source_hash, 'postgresql')
@@ -104,11 +103,11 @@ class QueryExpressionCache:
         ...     expression = build_expression(...)
         ...     cache.put(key, expression)
     """
-    
+
     def __init__(self, max_size: int = 100, default_ttl_seconds: float = 0):
         """
         Initialize query expression cache.
-        
+
         Args:
             max_size: Maximum number of cached expressions (default: 100)
             default_ttl_seconds: Default TTL for entries (0 = no expiration)
@@ -118,14 +117,14 @@ class QueryExpressionCache:
         self._default_ttl = default_ttl_seconds
         self._hits = 0
         self._misses = 0
-        
+
         # Enhanced caches
         self._complexity_cache: Dict[str, float] = {}  # expression_hash -> score
         self._result_counts: Dict[Tuple, int] = {}     # key -> feature count
-        self._execution_times: Dict[Tuple, float] = {} # key -> ms
-        
+        self._execution_times: Dict[Tuple, float] = {}  # key -> ms
+
         logger.info(f"✓ QueryExpressionCache initialized (max_size: {max_size}, ttl: {default_ttl_seconds}s)")
-    
+
     def get_cache_key(
         self,
         layer_id: str,
@@ -139,7 +138,7 @@ class QueryExpressionCache:
     ) -> Tuple:
         """
         Generate a unique cache key for a query expression.
-        
+
         Args:
             layer_id: Target layer ID
             predicates: Dict of spatial predicates {name: sql_func}
@@ -152,13 +151,13 @@ class QueryExpressionCache:
                           v2.5.14: Added to ensure cache invalidation when centroid option changes
             use_centroids_source: Whether centroid optimization is enabled for source layer
                           v2.5.15: Added for complete centroid cache invalidation
-        
+
         Returns:
             Tuple: Unique cache key
         """
         # Normalize predicates to sorted tuple for consistent hashing
         pred_tuple = tuple(sorted(predicates.keys()))
-        
+
         return (
             layer_id,
             pred_tuple,
@@ -169,31 +168,31 @@ class QueryExpressionCache:
             use_centroids,  # v2.5.14: Include centroid flag for cache invalidation (distant layers)
             use_centroids_source  # v2.5.15: Include centroid flag for source layer
         )
-    
+
     def compute_source_hash(self, source_geometry: Any) -> str:
         """
         Compute hash of source geometry for cache key.
-        
+
         Handles different geometry types:
         - WKT string: Direct hash
         - QgsVectorLayer: Hash of layer ID + feature count + extent
         - Feature list: Hash of feature IDs
-        
+
         Args:
             source_geometry: Source geometry (WKT string, layer, or features)
-        
+
         Returns:
             str: MD5 hash of the source geometry
         """
         hash_input = ""
-        
+
         if isinstance(source_geometry, str):
             # WKT string - use first 1000 chars + length for efficiency
             if len(source_geometry) > 1000:
                 hash_input = f"wkt:{len(source_geometry)}:{source_geometry[:500]}:{source_geometry[-500:]}"
             else:
                 hash_input = f"wkt:{source_geometry}"
-        
+
         elif hasattr(source_geometry, 'id') and hasattr(source_geometry, 'featureCount'):
             # QgsVectorLayer
             try:
@@ -206,7 +205,7 @@ class QueryExpressionCache:
                 )
             except Exception:
                 hash_input = f"layer:{source_geometry.id()}"
-        
+
         elif isinstance(source_geometry, (list, tuple)):
             # Feature list - hash feature IDs
             try:
@@ -217,67 +216,67 @@ class QueryExpressionCache:
                     hash_input = f"list:{len(source_geometry)}"
             except Exception:
                 hash_input = f"list:{len(source_geometry)}"
-        
+
         else:
             # Unknown type - use string representation
             hash_input = f"unknown:{str(source_geometry)[:500]}"
-        
-        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]
-    
+
+        return hashlib.md5(hash_input.encode('utf-8', usedforsecurity=False)).hexdigest()[:16]
+
     def get(self, key: Tuple) -> Optional[str]:
         """
         Get cached expression if available.
-        
+
         Args:
             key: Cache key from get_cache_key()
-        
+
         Returns:
             str or None: Cached expression or None if not found
         """
         if key in self._cache:
             entry = self._cache[key]
-            
+
             # Check TTL expiration
             if entry.is_expired(self._default_ttl):
                 del self._cache[key]
                 self._misses += 1
                 logger.debug(f"QueryCache EXPIRED (key age: {entry.age_seconds():.1f}s)")
                 return None
-            
+
             # Move to end (most recently used)
             self._cache.move_to_end(key)
             entry.touch()
             self._hits += 1
             logger.debug(f"QueryCache HIT (hits: {self._hits}, misses: {self._misses})")
             return entry.expression
-        
+
         self._misses += 1
         logger.debug(f"QueryCache MISS (hits: {self._hits}, misses: {self._misses})")
         return None
-    
+
     def get_with_count(self, key: Tuple) -> Tuple[Optional[str], Optional[int]]:
         """
         Get cached expression AND result count if available.
-        
+
         This avoids expensive COUNT(*) queries when result count is cached.
-        
+
         Args:
             key: Cache key from get_cache_key()
-        
+
         Returns:
             Tuple of (expression, result_count) - either may be None
         """
         expression = self.get(key)
         result_count = self._result_counts.get(key)
         return expression, result_count
-    
+
     def get_entry(self, key: Tuple) -> Optional[CacheEntry]:
         """
         Get full cache entry with metadata.
-        
+
         Args:
             key: Cache key
-        
+
         Returns:
             CacheEntry or None
         """
@@ -288,14 +287,14 @@ class QueryExpressionCache:
                 entry.touch()
                 return entry
         return None
-    
+
     def put(self, key: Tuple, expression: str, result_count: Optional[int] = None,
             complexity_score: Optional[float] = None, execution_time_ms: Optional[float] = None) -> None:
         """
         Store expression in cache with optional metadata.
-        
+
         Uses LRU eviction when cache is full.
-        
+
         Args:
             key: Cache key from get_cache_key()
             expression: SQL expression string to cache
@@ -312,7 +311,7 @@ class QueryExpressionCache:
             self._result_counts.pop(oldest_key, None)
             self._execution_times.pop(oldest_key, None)
             logger.debug(f"QueryCache evicted oldest entry (size was: {self._max_size})")
-        
+
         # Create cache entry with metadata
         entry = CacheEntry(
             expression=expression,
@@ -320,24 +319,24 @@ class QueryExpressionCache:
             complexity_score=complexity_score,
             execution_time_ms=execution_time_ms
         )
-        
+
         # Add to main cache
         self._cache[key] = entry
-        
+
         # Update auxiliary caches
         if result_count is not None:
             self._result_counts[key] = result_count
         if execution_time_ms is not None:
             self._execution_times[key] = execution_time_ms
-        
+
         logger.debug(f"QueryCache stored expression (size: {len(self._cache)}/{self._max_size})")
-    
+
     def update_result_count(self, key: Tuple, count: int) -> None:
         """
         Update cached result count for an existing entry.
-        
+
         Call this after executing a query to cache the result count.
-        
+
         Args:
             key: Cache key
             count: Feature count result
@@ -345,11 +344,11 @@ class QueryExpressionCache:
         self._result_counts[key] = count
         if key in self._cache:
             self._cache[key].result_count = count
-    
+
     def update_execution_time(self, key: Tuple, time_ms: float) -> None:
         """
         Update cached execution time for an existing entry.
-        
+
         Args:
             key: Cache key
             time_ms: Execution time in milliseconds
@@ -357,23 +356,23 @@ class QueryExpressionCache:
         self._execution_times[key] = time_ms
         if key in self._cache:
             self._cache[key].execution_time_ms = time_ms
-    
+
     def get_complexity(self, expression_hash: str) -> Optional[float]:
         """
         Get cached complexity score for an expression.
-        
+
         Args:
             expression_hash: MD5 hash of the expression
-        
+
         Returns:
             Cached complexity score or None
         """
         return self._complexity_cache.get(expression_hash)
-    
+
     def put_complexity(self, expression_hash: str, score: float) -> None:
         """
         Cache complexity score for an expression.
-        
+
         Args:
             expression_hash: MD5 hash of the expression
             score: Complexity score to cache
@@ -384,9 +383,9 @@ class QueryExpressionCache:
             keys = list(self._complexity_cache.keys())[:250]
             for k in keys:
                 del self._complexity_cache[k]
-        
+
         self._complexity_cache[expression_hash] = score
-    
+
     def clear(self) -> None:
         """Clear all cached expressions and metadata."""
         count = len(self._cache)
@@ -397,16 +396,16 @@ class QueryExpressionCache:
         self._hits = 0
         self._misses = 0
         logger.info(f"QueryCache cleared ({count} entries removed)")
-    
+
     def invalidate_layer(self, layer_id: str) -> int:
         """
         Invalidate all cached expressions for a specific layer.
-        
+
         Call this when a layer is modified or removed.
-        
+
         Args:
             layer_id: Layer ID to invalidate
-        
+
         Returns:
             int: Number of entries removed
         """
@@ -415,54 +414,54 @@ class QueryExpressionCache:
             del self._cache[key]
             self._result_counts.pop(key, None)
             self._execution_times.pop(key, None)
-        
+
         if keys_to_remove:
             logger.debug(f"QueryCache invalidated {len(keys_to_remove)} entries for layer {layer_id[:8]}...")
-        
+
         return len(keys_to_remove)
-    
+
     def evict_expired(self) -> int:
         """
         Remove all expired entries from cache.
-        
+
         Call periodically to clean up stale entries.
-        
+
         Returns:
             int: Number of entries evicted
         """
         if self._default_ttl <= 0:
             return 0
-        
+
         expired_keys = [
             k for k, entry in self._cache.items()
             if entry.is_expired(self._default_ttl)
         ]
-        
+
         for key in expired_keys:
             del self._cache[key]
             self._result_counts.pop(key, None)
             self._execution_times.pop(key, None)
-        
+
         if expired_keys:
             logger.debug(f"QueryCache evicted {len(expired_keys)} expired entries")
-        
+
         return len(expired_keys)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Get cache statistics.
-        
+
         Returns:
             dict: Statistics including hits, misses, hit rate, size
         """
         total = self._hits + self._misses
         hit_rate = (self._hits / total * 100) if total > 0 else 0.0
-        
+
         # Calculate average access counts
         avg_access = 0.0
         if self._cache:
             avg_access = sum(e.access_count for e in self._cache.values()) / len(self._cache)
-        
+
         return {
             'hits': self._hits,
             'misses': self._misses,
@@ -475,16 +474,16 @@ class QueryExpressionCache:
             'avg_access_count': round(avg_access, 2),
             'ttl_seconds': self._default_ttl
         }
-    
+
     def get_hot_entries(self, limit: int = 10) -> List[Dict]:
         """
         Get most frequently accessed cache entries.
-        
+
         Useful for debugging and understanding cache usage patterns.
-        
+
         Args:
             limit: Maximum entries to return
-        
+
         Returns:
             List of dicts with entry info
         """
@@ -500,16 +499,16 @@ class QueryExpressionCache:
                 'result_count': entry.result_count,
                 'complexity': entry.complexity_score
             })
-        
+
         # Sort by access count descending
         entries.sort(key=lambda x: x['access_count'], reverse=True)
-        
+
         return entries[:limit]
-    
+
     def __len__(self) -> int:
         """Return current cache size."""
         return len(self._cache)
-    
+
     def __contains__(self, key: Tuple) -> bool:
         """Check if key is in cache."""
         return key in self._cache
@@ -522,9 +521,9 @@ _global_query_cache: Optional[QueryExpressionCache] = None
 def get_query_cache() -> QueryExpressionCache:
     """
     Get the global query expression cache instance.
-    
+
     Creates the cache on first call (lazy initialization).
-    
+
     Returns:
         QueryExpressionCache: Global cache instance
     """
@@ -537,7 +536,7 @@ def get_query_cache() -> QueryExpressionCache:
 def clear_query_cache() -> None:
     """
     Clear the global query expression cache.
-    
+
     Call this when project changes or on plugin unload.
     """
     global _global_query_cache
@@ -553,28 +552,28 @@ def warm_cache_for_layer(
 ) -> int:
     """
     Pre-warm the cache with expression templates for common operations.
-    
+
     PERFORMANCE IMPROVEMENT (v2.6.0): Pre-computes cache keys for commonly
     used filter operations to reduce cold-start latency.
-    
+
     Args:
         layer_id: Layer ID to warm cache for
         predicates: List of predicates to warm (default: common predicates)
         provider_type: Provider type for cache key
-    
+
     Returns:
         int: Number of cache entries prepared
-    
+
     Example:
         >>> warm_cache_for_layer("layer123", predicates=['intersects', 'within'])
         2
     """
     if predicates is None:
         predicates = ['intersects', 'within', 'contains']
-    
+
     cache = get_query_cache()
     count = 0
-    
+
     for predicate in predicates:
         # Create cache key template
         key = cache.get_cache_key(
@@ -584,7 +583,7 @@ def warm_cache_for_layer(
             source_geometry_hash='template',
             provider_type=provider_type
         )
-        
+
         # Only create template if not already cached
         if key not in cache:
             # Store a placeholder template that will be replaced on actual use
@@ -595,31 +594,31 @@ def warm_cache_for_layer(
                 complexity_score=0.5  # Medium default complexity
             )
             count += 1
-    
+
     if count > 0:
         logger.debug(f"Cache warmed for layer {layer_id[:8]}... ({count} predicates)")
-    
+
     return count
 
 
 def warm_cache_for_project(layers: list, predicates: list = None) -> int:
     """
     Pre-warm cache for all layers in a project.
-    
+
     Call this after project load to reduce first-filter latency.
-    
+
     Args:
         layers: List of (layer_id, provider_type) tuples
         predicates: List of predicates to warm (default: common predicates)
-    
+
     Returns:
         int: Total number of cache entries prepared
     """
     total = 0
     for layer_id, provider_type in layers:
         total += warm_cache_for_layer(layer_id, predicates, provider_type)
-    
+
     if total > 0:
         logger.info(f"Cache warmed for {len(layers)} layers ({total} entries)")
-    
+
     return total

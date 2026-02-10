@@ -144,7 +144,7 @@ PERFORMANCE_THRESHOLD_XLARGE = 500000    # > 500k: Critical warning
 
 # Query duration thresholds for performance warnings (in seconds)
 LONG_QUERY_WARNING_THRESHOLD = 10.0      # > 10s: Show warning to user
-VERY_LONG_QUERY_WARNING_THRESHOLD = 30.0 # > 30s: Show critical warning
+VERY_LONG_QUERY_WARNING_THRESHOLD = 30.0  # > 30s: Show critical warning
 
 # Small dataset optimization threshold
 SMALL_DATASET_THRESHOLD = 5000           # < 5k: Use OGR memory instead of PostgreSQL
@@ -232,7 +232,7 @@ CONNECTION_POOL_VALIDATION_QUERY = "SELECT 1"  # Query to validate connection
 # Circuit Breaker settings
 CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5   # Failures before opening circuit
 CIRCUIT_BREAKER_SUCCESS_THRESHOLD = 2   # Successes to close circuit
-CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 30.0 # Seconds before testing recovery
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT = 30.0  # Seconds before testing recovery
 
 # =============================================================================
 # SQLite/Spatialite Retry Constants
@@ -336,14 +336,14 @@ GEOMETRY_TYPE_LEGACY_STRINGS = {
 # =============================================================================
 def get_geometry_type_string(geom_type, legacy_format: bool = False):
     """Get geometry type as string.
-    
+
     Args:
         geom_type: QGIS geometry type (QgsWkbTypes.GeometryType)
         legacy_format: If True, return 'GeometryType.X' format for icon_per_geometry_type()
-    
+
     Returns:
         str: Geometry type name
-        
+
     Examples:
         >>> get_geometry_type_string(0)
         'Point'
@@ -358,13 +358,13 @@ def get_geometry_type_string(geom_type, legacy_format: bool = False):
 def get_provider_name(qgis_provider_type: str) -> str:
     """
     Convert QGIS provider type to FilterMate provider constant.
-    
+
     Args:
         qgis_provider_type: Provider type from layer.providerType()
-        
+
     Returns:
         FilterMate provider constant (PROVIDER_POSTGRES, etc.)
-        
+
     Example:
         >>> get_provider_name('postgres')
         'postgresql'
@@ -388,13 +388,13 @@ def get_provider_display_name(provider_type: str) -> str:
 def get_sql_predicate(predicate_name: str) -> str:
     """
     Get SQL function name for a geometric predicate.
-    
+
     Args:
         predicate_name: Name of predicate (case-insensitive)
-        
+
     Returns:
         SQL function name (e.g., 'ST_Intersects')
-        
+
     Example:
         >>> get_sql_predicate('intersects')
         'ST_Intersects'
@@ -407,40 +407,40 @@ def get_sql_predicate(predicate_name: str) -> str:
 def should_warn_performance(feature_count: int, has_postgresql: bool = False) -> tuple:
     """
     Determine if performance warning should be shown.
-    
+
     Args:
         feature_count: Number of features in layer
         has_postgresql: Whether PostgreSQL backend is available
-        
+
     Returns:
         Tuple of (should_warn: bool, severity: str, message: str)
-        
+
     Example:
         >>> should_warn_performance(60000, has_postgresql=False)
         (True, 'warning', 'Large dataset without PostgreSQL...')
     """
     if feature_count < PERFORMANCE_THRESHOLD_SMALL:
         return (False, 'info', '')
-    
+
     if feature_count < PERFORMANCE_THRESHOLD_MEDIUM:
         if not has_postgresql:
-            return (True, 'info', 
+            return (True, 'info',
                    f'Dataset has {feature_count} features. Consider PostgreSQL for better performance.')
         return (False, 'info', '')
-    
+
     if feature_count < PERFORMANCE_THRESHOLD_LARGE:
         if not has_postgresql:
             return (True, 'warning',
                    f'Large dataset ({feature_count} features) without PostgreSQL. Performance may be reduced.')
         return (False, 'info', '')
-    
+
     if feature_count < PERFORMANCE_THRESHOLD_XLARGE:
         if not has_postgresql:
             return (True, 'warning',
                    f'Very large dataset ({feature_count} features). PostgreSQL strongly recommended.')
         return (True, 'info',
                f'Large dataset ({feature_count} features). Operations may take time.')
-    
+
     # XLarge datasets
     if not has_postgresql:
         return (True, 'critical',
@@ -455,7 +455,7 @@ def should_warn_performance(feature_count: int, has_postgresql: bool = False) ->
 __all__ = [
     # Provider types
     'PROVIDER_POSTGRES',
-    'PROVIDER_SPATIALITE', 
+    'PROVIDER_SPATIALITE',
     'PROVIDER_OGR',
     'PROVIDER_MEMORY',
     'PROVIDER_VIRTUAL',

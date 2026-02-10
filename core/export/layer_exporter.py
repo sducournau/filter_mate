@@ -22,7 +22,7 @@ import os
 import logging
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Any
 
 try:
     from qgis.core import (
@@ -60,28 +60,28 @@ class ExportFormat(Enum):
 @dataclass
 class ExportConfig:
     """Configuration for layer export."""
-    
+
     layers: List[str]
     """Layer names to export."""
-    
+
     output_path: str
     """Output path (file or directory)."""
-    
+
     datatype: str
     """Export format (GPKG, SHP, etc.)."""
-    
+
     projection: Optional[QgsCoordinateReferenceSystem] = None
     """Target CRS or None to use layer's CRS."""
-    
+
     style_format: Optional[str] = None
     """Style format (qml, sld, lyrx) or None."""
-    
+
     save_styles: bool = False
     """Whether to save layer styles."""
-    
+
     batch_mode: bool = False
     """Whether to export each layer to separate file."""
-    
+
     batch_zip: bool = False
     """Whether to create zip archive."""
 
@@ -89,25 +89,25 @@ class ExportConfig:
 @dataclass
 class ExportResult:
     """Result of export operation."""
-    
+
     success: bool
     """Whether export succeeded."""
-    
+
     exported_count: int = 0
     """Number of layers successfully exported."""
-    
+
     failed_count: int = 0
     """Number of layers that failed to export."""
-    
+
     output_path: Optional[str] = None
     """Path to exported file/directory."""
-    
+
     error_message: Optional[str] = None
     """Error message if export failed."""
-    
+
     warnings: List[str] = None
     """Non-fatal warnings during export."""
-    
+
     def __post_init__(self):
         if self.warnings is None:
             self.warnings = []
@@ -116,14 +116,14 @@ class ExportResult:
 class LayerExporter:
     """
     Exports QGIS vector layers to various formats.
-    
+
     Supports:
     - Single layer export
     - Batch export to directory
     - GeoPackage multi-layer export
     - Style export (via StyleExporter)
     - CRS reprojection
-    
+
     Example:
         exporter = LayerExporter(project)
         config = ExportConfig(
@@ -134,9 +134,9 @@ class LayerExporter:
         )
         result = exporter.export(config)
         if result.success:
-          
+
     """
-    
+
     # Format driver mapping
     DRIVER_MAP = {
         'GPKG': 'GPKG',
@@ -155,23 +155,23 @@ class LayerExporter:
         'SQLITE': 'SQLite',
         'SPATIALITE': 'SpatiaLite'
     }
-    
+
     def __init__(self, project: Optional[QgsProject] = None):
         """
         Initialize layer exporter.
-        
+
         Args:
             project: QgsProject instance or None to use current project
         """
         self.project = project or (QgsProject.instance() if QGIS_AVAILABLE else None)
-    
+
     def export(self, config: ExportConfig) -> ExportResult:
         """
         Export layers according to configuration.
-        
+
         Args:
             config: Export configuration
-            
+
         Returns:
             ExportResult with export status and statistics
         """
@@ -180,21 +180,21 @@ class LayerExporter:
                 success=False,
                 error_message="QGIS not available"
             )
-        
+
         if not self.project:
             return ExportResult(
                 success=False,
                 error_message="No QGIS project available"
             )
-        
+
         # Special handling for GPKG multi-layer export
         if config.datatype.upper() == 'GPKG' and not config.batch_mode:
             return self.export_to_gpkg(config.layers, config.output_path, config.save_styles)
-        
+
         # Batch export (one file per layer)
         if config.batch_mode:
             return self.export_batch(config)
-        
+
         # Single layer export
         if len(config.layers) == 1:
             return self.export_single_layer(
@@ -205,10 +205,10 @@ class LayerExporter:
                 config.style_format,
                 config.save_styles
             )
-        
+
         # Multiple layers to directory
         return self.export_multiple_to_directory(config)
-    
+
     def export_single_layer(
         self,
         layer_name: str,
@@ -220,7 +220,7 @@ class LayerExporter:
     ) -> ExportResult:
         """
         Export a single layer to file.
-        
+
         Args:
             layer_name: Layer name to export
             output_path: Output file path
@@ -228,7 +228,7 @@ class LayerExporter:
             datatype: Export format (e.g., 'SHP', 'GPKG')
             style_format: Style file format or None
             save_styles: Whether to save layer styles
-            
+
         Returns:
             ExportResult with export status
         """
@@ -239,15 +239,15 @@ class LayerExporter:
                 success=False,
                 error_message=f"Layer '{layer_name}' not found in project"
             )
-        
+
         # Determine CRS
         current_projection = projection if projection else layer.sourceCrs()
-        
+
         # Map datatype to QGIS driver
         driver_name = self.DRIVER_MAP.get(datatype.upper(), datatype)
-        
+
         logger.debug(f"Exporting layer '{layer.name()}' to {output_path} (driver: {driver_name})")
-        
+
         try:
             result = QgsVectorFileWriter.writeAsVectorFormat(
                 layer,
@@ -256,7 +256,7 @@ class LayerExporter:
                 current_projection,
                 driver_name
             )
-            
+
             if result[0] != QgsVectorFileWriter.NoError:
                 error_msg = result[1] if len(result) > 1 else "Unknown error"
                 logger.error(f"Export failed for layer '{layer.name()}': {error_msg}")
@@ -264,18 +264,18 @@ class LayerExporter:
                     success=False,
                     error_message=error_msg
                 )
-            
+
             # Save style if requested
             if save_styles and style_format:
                 from .style_exporter import save_layer_style
                 save_layer_style(layer, output_path, style_format, datatype)
-            
+
             return ExportResult(
                 success=True,
                 exported_count=1,
                 output_path=output_path
             )
-            
+
         except Exception as e:
             error_msg = str(e)
             logger.error(f"Export exception for layer '{layer.name()}': {error_msg}")
@@ -283,7 +283,7 @@ class LayerExporter:
                 success=False,
                 error_message=error_msg
             )
-    
+
     def export_to_gpkg(
         self,
         layer_names: List[str],
@@ -292,17 +292,17 @@ class LayerExporter:
     ) -> ExportResult:
         """
         Export layers to GeoPackage format using QGIS processing.
-        
+
         Args:
             layer_names: List of layer names to export
             output_path: Output GPKG file path
             save_styles: Whether to include layer styles
-            
+
         Returns:
             ExportResult with export status
         """
         logger.info(f"Exporting {len(layer_names)} layer(s) to GPKG: {output_path}")
-        
+
         # Collect layer objects
         layer_objects = []
         for layer_item in layer_names:
@@ -310,31 +310,31 @@ class LayerExporter:
             layer = self.get_layer_by_name(layer_name)
             if layer:
                 layer_objects.append(layer)
-        
+
         if not layer_objects:
             return ExportResult(
                 success=False,
                 error_message="No valid layers found for GPKG export"
             )
-        
+
         alg_parameters = {
             'LAYERS': layer_objects,
             'OVERWRITE': True,
             'SAVE_STYLES': save_styles,
             'OUTPUT': output_path
         }
-        
+
         try:
             output = processing.run("qgis:package", alg_parameters)
-            
+
             if not output or 'OUTPUT' not in output:
                 return ExportResult(
                     success=False,
                     error_message="GPKG export failed: no output returned"
                 )
-            
+
             logger.info(f"GPKG export successful: {output['OUTPUT']}")
-            
+
             # Show success message to user
             try:
                 from qgis.utils import iface
@@ -344,42 +344,42 @@ class LayerExporter:
                 )
             except Exception:
                 pass  # Don't fail if message bar not available
-            
+
             return ExportResult(
                 success=True,
                 exported_count=len(layer_objects),
                 output_path=output['OUTPUT']
             )
-            
+
         except Exception as e:
             logger.error(f"GPKG export failed with exception: {e}")
             return ExportResult(
                 success=False,
                 error_message=str(e)
             )
-    
+
     def export_multiple_to_directory(self, config: ExportConfig) -> ExportResult:
         """
         Export multiple layers to a directory (one file per layer).
-        
+
         Args:
             config: Export configuration
-            
+
         Returns:
             ExportResult with export statistics
         """
         result = ExportResult(success=True, output_path=config.output_path)
-        
+
         for layer_name_item in config.layers:
             # Handle both dict and string formats
             layer_name = layer_name_item['layer_name'] if isinstance(layer_name_item, dict) else layer_name_item
-            
+
             # Build output path for this layer
             layer_output = os.path.join(
                 config.output_path,
                 f"{layer_name}.{config.datatype.lower()}"
             )
-            
+
             # Export layer
             layer_result = self.export_single_layer(
                 layer_name,
@@ -389,35 +389,35 @@ class LayerExporter:
                 config.style_format,
                 config.save_styles
             )
-            
+
             if layer_result.success:
                 result.exported_count += 1
             else:
                 result.failed_count += 1
                 if layer_result.error_message:
                     result.warnings.append(f"{layer_name}: {layer_result.error_message}")
-        
+
         # Overall success if at least one layer exported
         result.success = result.exported_count > 0
         if result.failed_count > 0:
             result.error_message = f"{result.failed_count} layer(s) failed to export"
-        
+
         return result
-    
+
     def export_batch(self, config: ExportConfig) -> ExportResult:
         """
         Export layers in batch mode (directory or zip).
-        
+
         Args:
             config: Export configuration with batch settings
-            
+
         Returns:
             ExportResult with export statistics
         """
         import tempfile
         import shutil
         import zipfile
-        
+
         if config.batch_zip:
             # v5.0: Implement ZIP archive creation
             # Export to temp directory first, then zip
@@ -434,51 +434,51 @@ class LayerExporter:
                     batch_mode=True,
                     batch_zip=False  # Prevent recursion
                 )
-                
+
                 # Export to temp directory
                 result = self.export_multiple_to_directory(temp_config)
-                
+
                 if result.success:
                     # Create ZIP archive
                     zip_path = config.output_path
                     if not zip_path.endswith('.zip'):
                         zip_path = zip_path + '.zip'
-                    
+
                     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         for root, dirs, files in os.walk(temp_dir):
                             for file in files:
                                 file_path = os.path.join(root, file)
                                 arcname = os.path.relpath(file_path, temp_dir)
                                 zipf.write(file_path, arcname)
-                    
+
                     result.output_path = zip_path
                     logger.info(f"Created ZIP archive: {zip_path} with {result.exported_count} layers")
-                
+
                 return result
-                
+
             finally:
                 # Clean up temp directory
                 if os.path.exists(temp_dir):
                     shutil.rmtree(temp_dir, ignore_errors=True)
-        
+
         return self.export_multiple_to_directory(config)
-    
+
     def get_layer_by_name(self, layer_name: str) -> Optional[QgsVectorLayer]:
         """
         Get layer object from project by name.
-        
+
         Args:
             layer_name: Layer name to search for
-            
+
         Returns:
             QgsVectorLayer or None if not found
         """
         if not self.project:
             return None
-        
+
         layers_found = self.project.mapLayersByName(layer_name)
         if layers_found:
             return layers_found[0]
-        
+
         logger.warning(f"Layer '{layer_name}' not found in project")
         return None

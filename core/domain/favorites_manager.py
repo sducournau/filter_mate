@@ -25,7 +25,7 @@ GLOBAL_PROJECT_UUID = "00000000-0000-0000-0000-000000000000"
 @dataclass
 class FilterFavorite:
     """Filter favorite data class."""
-    
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     expression: str = ""
@@ -40,11 +40,11 @@ class FilterFavorite:
     last_used_at: Optional[str] = None
     remote_layers: Optional[Dict] = None
     spatial_config: Optional[Dict] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'FilterFavorite':
         """Create from dictionary."""
@@ -52,20 +52,20 @@ class FilterFavorite:
         if 'tags' in data and isinstance(data['tags'], str):
             data['tags'] = json.loads(data['tags']) if data['tags'] else []
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
-    
+
     def get_layers_count(self) -> int:
         """Get total number of layers (1 + remote layers)."""
         count = 1  # Main layer
         if self.remote_layers:
             count += len(self.remote_layers)
         return count
-    
+
     def get_display_name(self, max_length: int = 30) -> str:
         """Get truncated display name for UI."""
         if len(self.name) <= max_length:
             return self.name
         return self.name[:max_length - 3] + "..."
-    
+
     def get_preview(self, max_length: int = 80) -> str:
         """Get expression preview for tooltips."""
         if not self.expression:
@@ -73,7 +73,7 @@ class FilterFavorite:
         if len(self.expression) <= max_length:
             return self.expression
         return self.expression[:max_length - 3] + "..."
-    
+
     def mark_used(self) -> None:
         """Mark favorite as used (increment counter and update timestamp)."""
         self.use_count += 1
@@ -83,7 +83,7 @@ class FilterFavorite:
 class FavoritesManager:
     """
     Manages filter favorites with SQLite persistence.
-    
+
     Features:
     - CRUD operations for favorites
     - SQLite database storage
@@ -91,11 +91,11 @@ class FavoritesManager:
     - Search and filtering
     - Per-project organization
     """
-    
+
     def __init__(self, db_path: Optional[str] = None, project_uuid: Optional[str] = None):
         """
         Initialize FavoritesManager.
-        
+
         Args:
             db_path: Path to SQLite database
             project_uuid: Project UUID for favorites isolation
@@ -104,47 +104,47 @@ class FavoritesManager:
         self._project_uuid = project_uuid
         self._favorites: Dict[str, FilterFavorite] = {}
         self._initialized = False
-        
+
         if db_path and project_uuid:
             self._initialize_database()
             self._load_favorites()
-    
+
     def set_database(self, db_path: str, project_uuid: str) -> None:
         """
         Set database path and project UUID.
-        
+
         Args:
             db_path: Path to SQLite database
             project_uuid: Project UUID
         """
-        logger.debug(f"FavoritesManager: Configuring database")
+        logger.debug("FavoritesManager: Configuring database")
         logger.debug(f"  → Path: {db_path}")
         logger.debug(f"  → Project UUID: {project_uuid}")
-        
+
         self._db_path = db_path
         self._project_uuid = project_uuid
         self._initialize_database()
         self._load_favorites()
-    
+
     def _initialize_database(self) -> None:
         """Initialize database schema if needed."""
         if not self._db_path:
             return
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             # Check if table exists and get its columns
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='fm_favorites'")
             table_exists = cursor.fetchone() is not None
-            
+
             if table_exists:
                 # Check existing columns
                 cursor.execute("PRAGMA table_info(fm_favorites)")
                 existing_columns = {row[1] for row in cursor.fetchall()}
-                
+
                 # Add missing columns to existing table (migration)
                 required_columns = {
                     'layer_id': 'TEXT',
@@ -158,12 +158,12 @@ class FavoritesManager:
                     'remote_layers': 'TEXT',
                     'spatial_config': 'TEXT'
                 }
-                
+
                 for col_name, col_type in required_columns.items():
                     if col_name not in existing_columns:
                         logger.info(f"Adding missing column '{col_name}' to fm_favorites table")
-                        cursor.execute(f"ALTER TABLE fm_favorites ADD COLUMN {col_name} {col_type}")
-                
+                        cursor.execute(f"ALTER TABLE fm_favorites ADD COLUMN {col_name} {col_type}")  # nosec B608
+
                 conn.commit()
                 logger.debug("fm_favorites table migrated to new schema")
             else:
@@ -187,50 +187,50 @@ class FavoritesManager:
                         spatial_config TEXT
                     )
                 """)
-                
+
                 # Create index on project_uuid
                 cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_favorites_project 
+                    CREATE INDEX IF NOT EXISTS idx_favorites_project
                     ON fm_favorites(project_uuid)
                 """)
-                
+
                 conn.commit()
                 logger.debug("fm_favorites table created with full schema")
-            
+
             conn.close()
-            
+
             self._initialized = True
             logger.debug(f"FavoritesManager: Database initialized at {self._db_path}")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize favorites database: {e}")
             self._initialized = False
-    
+
     def _load_favorites(self) -> None:
         """Load favorites from database."""
         if not self._initialized:
             logger.warning("Cannot load favorites: database not initialized")
             return
-        
+
         if not self._project_uuid:
             logger.warning("Cannot load favorites: no project UUID set")
             return
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             conn.row_factory = sqlite3.Row  # Enable column access by name
             cursor = conn.cursor()
-            
+
             # Get available columns dynamically
             cursor.execute("PRAGMA table_info(fm_favorites)")
             available_columns = {row[1] for row in cursor.fetchall()}
-            
+
             # Build SELECT query with only available columns
             columns_to_select = []
             column_map = {
                 'id': 'id',
-                'name': 'name', 
+                'name': 'name',
                 'expression': 'expression',
                 'layer_name': 'layer_name',
                 'layer_id': 'layer_id',
@@ -244,21 +244,21 @@ class FavoritesManager:
                 'remote_layers': 'remote_layers',
                 'spatial_config': 'spatial_config'
             }
-            
+
             for col in column_map.keys():
                 if col in available_columns:
                     columns_to_select.append(col)
-            
-            select_clause = ', '.join(columns_to_select)
-            
-            cursor.execute(f"""
+
+            ', '.join(columns_to_select)
+
+            cursor.execute("""
                 SELECT {select_clause}
                 FROM fm_favorites
                 WHERE project_uuid = ?
             """, (self._project_uuid,))
-            
+
             self._favorites.clear()
-            
+
             for row in cursor.fetchall():
                 # Build data dict with defaults for missing columns
                 data = {
@@ -279,67 +279,67 @@ class FavoritesManager:
                 }
                 favorite = FilterFavorite.from_dict(data)
                 self._favorites[favorite.id] = favorite
-            
+
             conn.close()
             logger.info(f"✓ Loaded {len(self._favorites)} favorites for project {self._project_uuid}")
             if len(self._favorites) > 0:
                 logger.debug(f"  → Database: {self._db_path}")
                 logger.debug(f"  → Favorites: {', '.join([f.name for f in list(self._favorites.values())[:5]])}{'...' if len(self._favorites) > 5 else ''}")
-            
+
         except Exception as e:
             logger.error(f"Failed to load favorites: {e}")
-    
+
     @property
     def count(self) -> int:
         """Get number of favorites."""
         return len(self._favorites)
-    
+
     def get_all_favorites(self) -> List[FilterFavorite]:
         """Get all favorites."""
         return list(self._favorites.values())
-    
+
     def get_favorite(self, favorite_id: str) -> Optional[FilterFavorite]:
         """Get favorite by ID."""
         return self._favorites.get(favorite_id)
-    
+
     def get_by_id(self, favorite_id: str) -> Optional[FilterFavorite]:
         """Alias for get_favorite."""
         return self.get_favorite(favorite_id)
-    
+
     def get_favorite_by_name(self, name: str) -> Optional[FilterFavorite]:
         """Get favorite by name."""
         for fav in self._favorites.values():
             if fav.name == name:
                 return fav
         return None
-    
+
     def add_favorite(self, favorite: FilterFavorite) -> bool:
         """
         Add a new favorite.
-        
+
         Args:
             favorite: FilterFavorite instance
-            
+
         Returns:
             bool: True if added successfully
         """
         if not self._initialized:
             logger.warning("Cannot add favorite: database not initialized")
             return False
-        
+
         try:
             import sqlite3
-            
+
             # Ensure favorite has an ID
             if not favorite.id:
                 favorite.id = str(uuid.uuid4())
-            
+
             favorite.created_at = datetime.now().isoformat()
             favorite.updated_at = favorite.created_at
-            
+
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 INSERT INTO fm_favorites (
                     id, project_uuid, name, expression, layer_name, layer_id,
@@ -363,63 +363,63 @@ class FavoritesManager:
                 json.dumps(favorite.remote_layers) if favorite.remote_layers else None,
                 json.dumps(favorite.spatial_config) if favorite.spatial_config else None,
             ))
-            
+
             conn.commit()
             conn.close()
-            
+
             self._favorites[favorite.id] = favorite
             logger.info(f"✓ Favorite '{favorite.name}' saved to database (ID: {favorite.id}, Project: {self._project_uuid})")
             logger.debug(f"  → Database: {self._db_path}")
             logger.debug(f"  → Expression: {favorite.expression[:80]}..." if len(favorite.expression) > 80 else f"  → Expression: {favorite.expression}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to add favorite: {e}")
             return False
-    
+
     def remove_favorite(self, favorite_id: str) -> bool:
         """Remove a favorite."""
         if not self._initialized or favorite_id not in self._favorites:
             return False
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             cursor.execute("DELETE FROM fm_favorites WHERE id = ?", (favorite_id,))
-            
+
             conn.commit()
             conn.close()
-            
+
             del self._favorites[favorite_id]
             logger.info(f"Removed favorite: {favorite_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to remove favorite: {e}")
             return False
-    
+
     def update_favorite(self, favorite_id: str, **kwargs) -> bool:
         """Update a favorite."""
         if not self._initialized or favorite_id not in self._favorites:
             return False
-        
+
         try:
             import sqlite3
-            
+
             favorite = self._favorites[favorite_id]
-            
+
             # Update fields
             for key, value in kwargs.items():
                 if hasattr(favorite, key):
                     setattr(favorite, key, value)
-            
+
             favorite.updated_at = datetime.now().isoformat()
-            
+
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 UPDATE fm_favorites SET
                     name = ?, expression = ?, layer_name = ?, layer_id = ?,
@@ -441,99 +441,99 @@ class FavoritesManager:
                 json.dumps(favorite.spatial_config) if favorite.spatial_config else None,
                 favorite_id
             ))
-            
+
             conn.commit()
             conn.close()
-            
+
             logger.info(f"Updated favorite: {favorite.name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to update favorite: {e}")
             return False
-    
+
     def increment_use_count(self, favorite_id: str) -> bool:
         """Increment use count for a favorite."""
         if favorite_id not in self._favorites:
             return False
-        
+
         self._favorites[favorite_id].use_count += 1
         self._favorites[favorite_id].last_used_at = datetime.now().isoformat()
-        
+
         return self.update_favorite(
             favorite_id,
             use_count=self._favorites[favorite_id].use_count,
             last_used_at=self._favorites[favorite_id].last_used_at
         )
-    
+
     def search_favorites(self, query: str) -> List[FilterFavorite]:
         """Search favorites by name, expression, or tags."""
         query_lower = query.lower()
         results = []
-        
+
         for fav in self._favorites.values():
             if (query_lower in fav.name.lower() or
                 query_lower in fav.expression.lower() or
-                any(query_lower in tag.lower() for tag in fav.tags)):
+                    any(query_lower in tag.lower() for tag in fav.tags)):
                 results.append(fav)
-        
+
         return results
-    
+
     def get_recent_favorites(self, limit: int = 10) -> List[FilterFavorite]:
         """Get recently used favorites."""
         favorites = [f for f in self._favorites.values() if f.last_used_at]
         favorites.sort(key=lambda f: f.last_used_at or "", reverse=True)
         return favorites[:limit]
-    
+
     def get_most_used_favorites(self, limit: int = 10) -> List[FilterFavorite]:
         """Get most frequently used favorites."""
         favorites = list(self._favorites.values())
         favorites.sort(key=lambda f: f.use_count, reverse=True)
         return favorites[:limit]
-    
+
     def save_to_project(self) -> None:
         """Save favorites to project (no-op, already persisted)."""
         # Favorites are saved to database immediately in add/update/remove
         logger.debug("save_to_project called (favorites already persisted)")
-    
+
     def load_from_project(self) -> None:
         """Load favorites from project."""
         self._load_favorites()
-    
+
     def load_from_database(self) -> None:
         """Reload favorites from database."""
         self._load_favorites()
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Global Favorites Support
     # ─────────────────────────────────────────────────────────────────
-    
+
     def get_global_favorites(self) -> List[FilterFavorite]:
         """
         Get all global favorites (available in all projects).
-        
+
         Returns:
             List of global FilterFavorite objects
         """
         if not self._initialized or not self._db_path:
             return []
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
+
             cursor.execute("""
                 SELECT id, name, expression, layer_name, layer_id,
-                       layer_provider, description, tags, created_at, 
-                       updated_at, use_count, last_used_at, 
+                       layer_provider, description, tags, created_at,
+                       updated_at, use_count, last_used_at,
                        remote_layers, spatial_config
                 FROM fm_favorites
                 WHERE project_uuid = ?
                 ORDER BY name
             """, (GLOBAL_PROJECT_UUID,))
-            
+
             global_favorites = []
             for row in cursor.fetchall():
                 data = {
@@ -553,49 +553,49 @@ class FavoritesManager:
                     'spatial_config': json.loads(row['spatial_config']) if row['spatial_config'] else None,
                 }
                 global_favorites.append(FilterFavorite.from_dict(data))
-            
+
             conn.close()
             logger.debug(f"Loaded {len(global_favorites)} global favorites")
             return global_favorites
-            
+
         except Exception as e:
             logger.error(f"Failed to load global favorites: {e}")
             return []
-    
+
     def get_all_with_global(self) -> List[FilterFavorite]:
         """
         Get all favorites including global ones.
-        
+
         Returns:
             List of FilterFavorite (project-specific + global)
         """
         project_favorites = self.get_all_favorites()
         global_favorites = self.get_global_favorites()
-        
+
         # Combine and sort by name
         all_favorites = project_favorites + global_favorites
         all_favorites.sort(key=lambda f: f.name.lower())
-        
+
         return all_favorites
-    
+
     def make_favorite_global(self, favorite_id: str) -> bool:
         """
         Make a favorite global (available in all projects).
-        
+
         Args:
             favorite_id: ID of favorite to make global
-            
+
         Returns:
             True if successful
         """
         if not self._initialized or favorite_id not in self._favorites:
             return False
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             # Ensure global project exists
             cursor.execute(
                 "SELECT project_id FROM fm_projects WHERE project_id = ?",
@@ -604,51 +604,51 @@ class FavoritesManager:
             if not cursor.fetchone():
                 cursor.execute("""
                     INSERT INTO fm_projects VALUES(
-                        ?, datetime(), datetime(), 
+                        ?, datetime(), datetime(),
                         '__GLOBAL__', '__GLOBAL_FAVORITES__', '{}'
                     )
                 """, (GLOBAL_PROJECT_UUID,))
-            
+
             # Update favorite to global project
             cursor.execute("""
-                UPDATE fm_favorites 
+                UPDATE fm_favorites
                 SET project_uuid = ?, updated_at = ?
                 WHERE id = ?
             """, (GLOBAL_PROJECT_UUID, datetime.now().isoformat(), favorite_id))
-            
+
             conn.commit()
             conn.close()
-            
+
             # Remove from local cache
             del self._favorites[favorite_id]
-            
+
             logger.info(f"✓ Made favorite {favorite_id} global")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error making favorite global: {e}")
             return False
-    
+
     def copy_to_global(self, favorite_id: str) -> Optional[str]:
         """
         Copy a favorite to global (keeps original in project).
-        
+
         Args:
             favorite_id: ID of favorite to copy
-            
+
         Returns:
             New favorite ID if successful, None otherwise
         """
         if favorite_id not in self._favorites:
             return None
-        
+
         favorite = self._favorites[favorite_id]
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             cursor = conn.cursor()
-            
+
             # Ensure global project exists
             cursor.execute(
                 "SELECT project_id FROM fm_projects WHERE project_id = ?",
@@ -657,15 +657,15 @@ class FavoritesManager:
             if not cursor.fetchone():
                 cursor.execute("""
                     INSERT INTO fm_projects VALUES(
-                        ?, datetime(), datetime(), 
+                        ?, datetime(), datetime(),
                         '__GLOBAL__', '__GLOBAL_FAVORITES__', '{}'
                     )
                 """, (GLOBAL_PROJECT_UUID,))
-            
+
             # Create new global favorite
             new_id = str(uuid.uuid4())
             now = datetime.now().isoformat()
-            
+
             cursor.execute("""
                 INSERT INTO fm_favorites (
                     id, project_uuid, name, expression, layer_name, layer_id,
@@ -689,51 +689,51 @@ class FavoritesManager:
                 json.dumps(favorite.remote_layers) if favorite.remote_layers else None,
                 json.dumps(favorite.spatial_config) if favorite.spatial_config else None,
             ))
-            
+
             conn.commit()
             conn.close()
-            
+
             logger.info(f"✓ Copied favorite to global: {new_id}")
             return new_id
-            
+
         except Exception as e:
             logger.error(f"Error copying favorite to global: {e}")
             return None
-    
+
     def import_global_to_project(self, global_favorite_id: str) -> Optional[str]:
         """
         Import a global favorite to the current project.
-        
+
         Args:
             global_favorite_id: ID of global favorite to import
-            
+
         Returns:
             New favorite ID if successful, None otherwise
         """
         if not self._initialized or not self._project_uuid:
             return None
-        
+
         try:
             import sqlite3
             conn = sqlite3.connect(self._db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            
+
             # Get global favorite
             cursor.execute(
                 "SELECT * FROM fm_favorites WHERE id = ? AND project_uuid = ?",
                 (global_favorite_id, GLOBAL_PROJECT_UUID)
             )
             row = cursor.fetchone()
-            
+
             if not row:
                 conn.close()
                 return None
-            
+
             # Create new project-specific favorite
             new_id = str(uuid.uuid4())
             now = datetime.now().isoformat()
-            
+
             cursor.execute("""
                 INSERT INTO fm_favorites (
                     id, project_uuid, name, expression, layer_name, layer_id,
@@ -757,16 +757,16 @@ class FavoritesManager:
                 row['remote_layers'],
                 row['spatial_config'],
             ))
-            
+
             conn.commit()
             conn.close()
-            
+
             # Reload favorites
             self._load_favorites()
-            
+
             logger.info(f"✓ Imported global favorite to project: {new_id}")
             return new_id
-            
+
         except Exception as e:
             logger.error(f"Error importing global favorite: {e}")
             return None

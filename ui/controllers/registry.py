@@ -14,7 +14,7 @@ T = TypeVar('T', bound=BaseController)
 class TabIndex(IntEnum):
     """
     Tab indices matching UI layout.
-    
+
     These correspond to the tab positions in the main QTabWidget.
     Note: Exploring is in a separate frame, not a tab.
     """
@@ -32,20 +32,20 @@ class ControllerRegistry:
 
     Usage:
         registry = ControllerRegistry()
-        
+
         # Register controllers
         registry.register('exploring', ExploringController(...))
         registry.register('filtering', FilteringController(...), tab_index=TabIndex.FILTERING)
-        
+
         # Initialize all controllers
         registry.setup_all()
-        
+
         # Access controllers
         filtering = registry.get_typed('filtering', FilteringController)
-        
+
         # Handle tab switching
         registry.notify_tab_changed(old_index=0, new_index=1)
-        
+
         # Cleanup
         registry.teardown_all()
     """
@@ -75,7 +75,7 @@ class ControllerRegistry:
         """
         if name in self._controllers:
             raise ValueError(f"Controller '{name}' already registered")
-        
+
         if not isinstance(controller, BaseController):
             raise ValueError(
                 f"Controller must inherit from BaseController, got {type(controller)}"
@@ -83,7 +83,7 @@ class ControllerRegistry:
 
         self._controllers[name] = controller
         self._registration_order.append(name)
-        
+
         if tab_index is not None:
             self._tab_mapping[tab_index] = name
 
@@ -101,16 +101,16 @@ class ControllerRegistry:
             return False
 
         del self._controllers[name]
-        
+
         if name in self._registration_order:
             self._registration_order.remove(name)
-        
+
         # Remove from tab mapping
         for tab_index, ctrl_name in list(self._tab_mapping.items()):
             if ctrl_name == name:
                 del self._tab_mapping[tab_index]
                 break
-        
+
         return True
 
     def get(self, name: str) -> Optional[BaseController]:
@@ -195,8 +195,8 @@ class ControllerRegistry:
                 try:
                     controller.setup()
                     count += 1
-                except Exception as e:
-                    import traceback
+                except Exception:
+                    pass
         return count
 
     def teardown_all(self) -> int:

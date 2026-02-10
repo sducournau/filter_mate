@@ -8,7 +8,7 @@ Provides streaming and batch processing utilities for large datasets:
 Migrated from modules/tasks/ (EPIC-1 v3.0).
 """
 
-from .result_streaming import (
+from .result_streaming import (  # noqa: F401
     StreamingConfig,
     ExportProgress,
     StreamingExporter,

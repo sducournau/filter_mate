@@ -35,21 +35,20 @@ class StyleFormat(Enum):
 class StyleExporter:
     """
     Exports layer styles to various formats.
-    
+
     Supports:
     - QML (QGIS native)
     - SLD (OGC standard)
     - LYRX (ArcGIS Pro)
-    
+
     Example:
         exporter = StyleExporter()
         exporter.save_style(layer, "/path/to/output", StyleFormat.LYRX)
     """
-    
+
     def __init__(self):
         """Initialize style exporter."""
-        pass
-    
+
     def save_style(
         self,
         layer: QgsVectorLayer,
@@ -59,25 +58,25 @@ class StyleExporter:
     ) -> bool:
         """
         Save layer style to file.
-        
+
         Args:
             layer: QgsVectorLayer to export style from
             output_path: Base path for export (without extension)
             style_format: Style format to export
             datatype: Export datatype (to check if styles are supported)
-            
+
         Returns:
             True if export succeeded, False otherwise
         """
         if not QGIS_AVAILABLE:
             logger.warning("QGIS not available - cannot export styles")
             return False
-        
+
         # Skip for unsupported formats
         if datatype == 'XLSX':
-            logger.debug(f"Skipping style export for XLSX format")
+            logger.debug("Skipping style export for XLSX format")
             return False
-        
+
         if style_format == StyleFormat.LYRX:
             return self._save_lyrx(layer, output_path)
         elif style_format in (StyleFormat.QML, StyleFormat.SLD):
@@ -85,7 +84,7 @@ class StyleExporter:
         else:
             logger.warning(f"Unknown style format: {style_format}")
             return False
-    
+
     def _save_qgis_style(
         self,
         layer: QgsVectorLayer,
@@ -94,12 +93,12 @@ class StyleExporter:
     ) -> bool:
         """
         Save layer style using QGIS native saveNamedStyle.
-        
+
         Args:
             layer: QgsVectorLayer
             output_path: Base path without extension
             format_name: Format extension (qml or sld)
-            
+
         Returns:
             True if saved successfully
         """
@@ -111,35 +110,35 @@ class StyleExporter:
         except Exception as e:
             logger.warning(f"Could not save {format_name.upper()} style for '{layer.name()}': {e}")
             return False
-    
+
     def _save_lyrx(self, layer: QgsVectorLayer, output_path: str) -> bool:
         """
         Export layer style to ArcGIS-compatible LYRX format.
-        
+
         Creates a JSON-based style file that can be imported into ArcGIS Pro.
         Note: This is a basic conversion that includes symbology metadata.
         Full ArcGIS style support requires ArcPy (not available in QGIS).
-        
+
         Args:
             layer: QgsVectorLayer
             output_path: Base path for export (without extension)
-            
+
         Returns:
             True if export succeeded
         """
         style_path = os.path.normcase(f"{output_path}.lyrx")
-        
+
         try:
             # Build ArcGIS-compatible layer definition
             renderer = layer.renderer()
             geometry_type_map = {
                 0: "esriGeometryPoint",
-                1: "esriGeometryPolyline", 
+                1: "esriGeometryPolyline",
                 2: "esriGeometryPolygon",
                 3: "esriGeometryMultipoint",
                 4: "esriGeometryNull"
             }
-            
+
             lyrx_content = {
                 "type": "CIMLayerDocument",
                 "version": "2.9.0",
@@ -193,7 +192,7 @@ class StyleExporter:
                     }
                 ]
             }
-            
+
             # Add symbology info if available
             if renderer:
                 if renderer.type() == 'singleSymbol':
@@ -206,24 +205,24 @@ class StyleExporter:
                                 "symbol": self._convert_symbol_to_arcgis(symbol)
                             }
                         }
-            
+
             with open(style_path, 'w', encoding='utf-8') as f:
                 json.dump(lyrx_content, f, indent=2, ensure_ascii=False)
-            
+
             logger.info(f"ArcGIS LYRX style saved: {style_path}")
             return True
-            
+
         except Exception as e:
             logger.warning(f"Could not save ArcGIS LYRX style for '{layer.name()}': {e}")
             return False
-    
+
     def _convert_symbol_to_arcgis(self, symbol: Any) -> dict:
         """
         Convert QGIS symbol to basic ArcGIS CIM symbol format.
-        
+
         Args:
             symbol: QGIS symbol object
-            
+
         Returns:
             dict: ArcGIS CIM symbol definition
         """
@@ -235,9 +234,9 @@ class StyleExporter:
                 rgb = [color.red(), color.green(), color.blue(), color.alpha()]
             else:
                 rgb = [128, 128, 128, 255]
-            
+
             symbol_type = symbol.type()
-            
+
             if symbol_type == 0:  # Marker (Point)
                 return {
                     "type": "CIMPointSymbol",
@@ -292,25 +291,25 @@ def save_layer_style(
 ) -> bool:
     """
     Convenience function to save layer style.
-    
+
     Args:
         layer: QgsVectorLayer to export style from
         output_path: Base path for export (without extension)
         style_format: Style format string ('qml', 'sld', 'lyrx', 'arcgis (lyrx)')
         datatype: Export datatype (to check if styles are supported)
-        
+
     Returns:
         True if export succeeded
-        
+
     Example:
         save_layer_style(layer, "/path/output", "lyrx")
     """
     if not style_format or datatype == 'XLSX':
         return False
-    
+
     # Normalize format name
     format_lower = style_format.lower().replace('arcgis (lyrx)', 'lyrx').strip()
-    
+
     # Map to enum
     format_map = {
         'qml': StyleFormat.QML,
@@ -318,11 +317,11 @@ def save_layer_style(
         'lyrx': StyleFormat.LYRX,
         'arcgis': StyleFormat.LYRX
     }
-    
+
     style_enum = format_map.get(format_lower)
     if not style_enum:
         logger.warning(f"Unknown style format: {style_format}")
         return False
-    
+
     exporter = StyleExporter()
     return exporter.save_style(layer, output_path, style_enum, datatype)

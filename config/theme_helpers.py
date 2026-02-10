@@ -17,11 +17,11 @@ logger = logging.getLogger('FilterMate.ThemeHelpers')
 def get_config_value(config_data: Dict[str, Any], *keys) -> Optional[Any]:
     """
     Get config value by nested keys.
-    
+
     Args:
         config_data: Configuration dictionary
         *keys: Nested keys to traverse
-    
+
     Returns:
         Value at the nested path, or None if not found
     """
@@ -36,10 +36,10 @@ def get_config_value(config_data: Dict[str, Any], *keys) -> Optional[Any]:
 def get_active_theme(config_data: Dict[str, Any]) -> str:
     """
     Get active theme from config.
-    
+
     Args:
         config_data: Configuration dictionary
-    
+
     Returns:
         Active theme name, defaults to 'default'
     """
@@ -55,11 +55,11 @@ def get_active_theme(config_data: Dict[str, Any]) -> str:
 def get_theme_colors(config_data: Dict[str, Any], theme_name: str) -> Dict[str, Any]:
     """
     Get colors for a specific theme.
-    
+
     Args:
         config_data: Configuration dictionary
         theme_name: Name of the theme
-    
+
     Returns:
         Dictionary of theme colors
     """
@@ -77,10 +77,10 @@ def get_theme_colors(config_data: Dict[str, Any], theme_name: str) -> Dict[str, 
 def get_background_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
     """
     Get background colors from config.
-    
+
     Args:
         config_data: Configuration dictionary
-    
+
     Returns:
         Dictionary with primary and secondary background colors
     """
@@ -92,10 +92,10 @@ def get_background_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
 def get_font_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
     """
     Get font colors from config.
-    
+
     Args:
         config_data: Configuration dictionary
-    
+
     Returns:
         Dictionary with primary and secondary font colors
     """
@@ -107,10 +107,10 @@ def get_font_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
 def get_accent_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
     """
     Get accent colors from config.
-    
+
     Args:
         config_data: Configuration dictionary
-    
+
     Returns:
         Dictionary with primary and secondary accent colors
     """
@@ -122,10 +122,10 @@ def get_accent_colors(config_data: Dict[str, Any]) -> Dict[str, str]:
 def get_available_themes(config_data: Dict[str, Any]) -> List[str]:
     """
     Get list of available theme names.
-    
+
     Args:
         config_data: Configuration dictionary
-    
+
     Returns:
         List of available theme names
     """

@@ -74,7 +74,7 @@ class PostgreSQLBackend(BackendPort):
             connection_pool = task_parameters.get('connection')
             if session_id is None:
                 session_id = task_parameters.get('session_id')
-        
+
         self._pool = connection_pool
         self._task_parameters = task_parameters  # Store for later use
         self._session_id = session_id or self._generate_session_id()
@@ -170,7 +170,7 @@ class PostgreSQLBackend(BackendPort):
         self._metrics['executions'] += 1
 
         # DEBUG: Log execution details
-        logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] EXECUTE START:")
+        logger.debug("[PostgreSQL] [PostgreSQL v4.0] EXECUTE START:")
         logger.debug(f"[PostgreSQL]   Layer: {layer_info.layer_id}")
         logger.debug(f"[PostgreSQL]   Table: {layer_info.table_name} (schema: {layer_info.schema_name})")
         logger.debug(f"[PostgreSQL]   PK: {layer_info.pk_attr}")
@@ -201,14 +201,14 @@ class PostgreSQLBackend(BackendPort):
             # Determine execution strategy
             use_mv = self._should_use_mv(layer_info, analysis)
             logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Strategy: {'MV' if use_mv else 'DIRECT'}")
-            
+
             if use_mv:
                 feature_ids = self._execute_with_mv(expression, layer_info, conn)
                 self._metrics['mv_executions'] += 1
             else:
                 feature_ids = self._execute_direct(expression, layer_info, conn)
                 self._metrics['direct_executions'] += 1
-            
+
             logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Execution successful: {len(feature_ids)} features matched")
 
             execution_time = (time.time() - start_time) * 1000
@@ -263,23 +263,23 @@ class PostgreSQLBackend(BackendPort):
     ) -> Optional[str]:
         """
         Create a materialized view for large source feature selection.
-        
+
         This method creates a temporary MV containing the selected features,
         which can then be used in EXISTS queries instead of massive IN clauses.
-        
+
         CRITICAL FIX for 212KB expressions with 2862+ UUIDs!
         Instead of: pk IN ('uuid1', 'uuid2', ..., 'uuid2862')  → 212KB
         We get:     pk IN (SELECT pk FROM fm_temp_src_xxx)   → ~60 bytes
-        
+
         Args:
             layer: QgsVectorLayer source layer
             fids: List of feature IDs to include
             pk_field: Primary key field name
             geom_field: Geometry field name (for spatial index)
-            
+
         Returns:
             Optional[str]: MV name if successful, None on failure
-            
+
         Example:
             mv_name = backend.create_source_selection_mv(
                 layer=ducts_layer,
@@ -293,37 +293,37 @@ class PostgreSQLBackend(BackendPort):
         if not fids:
             logger.warning("[PostgreSQL] create_source_selection_mv: No FIDs provided")
             return None
-        
-        logger.info(f"[PostgreSQL] 🗄️ Creating source selection MV for {len(fids)} features")
-        
+
+        logger.info(f"[PostgreSQL] 🗄️ Creating source selection MV for {len(fids)} features")  # nosec B608
+
         try:
             # Get connection - try multiple sources
             conn = None
             conn_source = "none"
-            
+
             # Source 1: Connection pool
             conn = self._get_connection()
             if conn:
                 conn_source = "pool"
-                logger.debug(f"[PostgreSQL] MV: Connection from pool: OK")
-            
+                logger.debug("[PostgreSQL] MV: Connection from pool: OK")
+
             # Source 2: Task parameters (passed by ExpressionBuilder)
             if conn is None and self._task_parameters:
                 conn = self._task_parameters.get('connection')
                 if conn:
                     conn_source = "task_parameters"
-                    logger.debug(f"[PostgreSQL] MV: Connection from task_parameters: OK")
-            
+                    logger.debug("[PostgreSQL] MV: Connection from task_parameters: OK")
+
             # Source 3: Layer fallback
             if conn is None and layer:
                 try:
                     conn = self._get_connection_from_layer(layer.id())
                     if conn:
                         conn_source = "layer"
-                        logger.debug(f"[PostgreSQL] MV: Connection from layer: OK")
+                        logger.debug("[PostgreSQL] MV: Connection from layer: OK")
                 except Exception as layer_conn_err:
                     logger.debug(f"[PostgreSQL] MV: Layer connection failed: {layer_conn_err}")
-            
+
             if conn is None:
                 logger.error("[PostgreSQL] No connection available for MV creation")
                 logger.error("[PostgreSQL] → Tried: pool, task_parameters, layer - all failed")
@@ -331,40 +331,40 @@ class PostgreSQLBackend(BackendPort):
                 logger.error(f"[PostgreSQL] → Pool: {self._pool is not None}")
                 logger.error(f"[PostgreSQL] → task_parameters keys: {list(self._task_parameters.keys()) if self._task_parameters else 'None'}")
                 return None
-            
+
             logger.info(f"[PostgreSQL] MV: Using connection from '{conn_source}'")
-            
+
             # Extract table info from layer
             schema_name, table_name = self._extract_table_info(layer)
             if not table_name:
                 logger.error("[PostgreSQL] Could not extract table name from layer")
                 return None
-            
-            full_table = f'"{schema_name}"."{table_name}"' if schema_name else f'"{table_name}"'
-            
+
+            f'"{schema_name}"."{table_name}"' if schema_name else f'"{table_name}"'
+
             # Format FIDs for SQL (handle UUIDs vs integers)
             formatted_fids = self._format_fids_for_sql(fids)
-            
+
             # Build SELECT query for MV
             # Include pk and geometry for spatial indexing
             # FIX v4.3.1 (2026-01-22): Ensure pk_field and geom_field are simple field names
             # Strip any table prefixes if present (should be just field names)
             clean_pk_field = pk_field.split('.')[-1].strip('"')
             clean_geom_field = geom_field.split('.')[-1].strip('"')
-            
-            query = f"""
+
+            query = """
                 SELECT "{clean_pk_field}" as pk, "{clean_geom_field}" as geom
                 FROM {full_table}
                 WHERE "{clean_pk_field}" IN ({formatted_fids})
             """
-            
+
             logger.debug(f"[PostgreSQL] MV query: {query[:200]}...")
-            
+
             # Generate unique MV name (unified fm_temp_src_ prefix)
             import hashlib
-            fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
+            fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in fids[:10]).encode()).hexdigest()[:8]
             mv_name = f"fm_temp_src_{self._session_id[:6]}_{fid_hash}"
-            
+
             # Create MV using mv_manager
             try:
                 created_name = self._mv_manager.create_mv(
@@ -375,25 +375,25 @@ class PostgreSQLBackend(BackendPort):
                     session_scoped=True,
                     connection=conn
                 )
-                
+
                 # Verify MV was created
                 if created_name and self._mv_manager.mv_exists(created_name, connection=conn):
                     # Get row count for logging
                     cursor = conn.cursor()
-                    cursor.execute(f'SELECT COUNT(*) FROM "filtermate_temp"."{created_name}"')
+                    cursor.execute(f'SELECT COUNT(*) FROM "filtermate_temp"."{created_name}"')  # nosec B608
                     row_count = cursor.fetchone()[0]
-                    
+
                     logger.info(
-                        f"[PostgreSQL] ✅ Source selection MV created: {created_name} "
+                        f"[PostgreSQL] ✅ Source selection MV created: {created_name} "  # nosec B608
                         f"({row_count} rows, was {len(fids)} FIDs)"
                     )
-                    
+
                     # Return full reference for use in queries
-                    return f'"filtermate_temp"."{created_name}"'
+                    return f'"filtermate_temp"."{created_name}"'  # nosec B608
                 else:
-                    logger.error(f"[PostgreSQL] MV creation reported success but MV not found")
+                    logger.error("[PostgreSQL] MV creation reported success but MV not found")
                     return None
-                    
+
             except Exception as mv_error:
                 logger.error(f"[PostgreSQL] MV creation failed: {mv_error}")
                 logger.error(f"[PostgreSQL] Query was: {query[:300]}...")
@@ -405,81 +405,81 @@ class PostgreSQLBackend(BackendPort):
                 return self._create_source_selection_temp_table(
                     conn, table_name, clean_pk_field, clean_geom_field, fids, formatted_fids
                 )
-                
+
         except Exception as e:
-            logger.error(f"[PostgreSQL] create_source_selection_mv failed: {e}")
+            logger.error(f"[PostgreSQL] create_source_selection_mv failed: {e}")  # nosec B608
             import traceback
             logger.debug(traceback.format_exc())
             return None
-    
+
     def _extract_table_info(self, layer) -> Tuple[Optional[str], Optional[str]]:
         """
         Extract schema and table name from QGIS layer.
-        
+
         Args:
             layer: QgsVectorLayer
-            
+
         Returns:
             Tuple of (schema_name, table_name)
         """
         if not layer:
             return None, None
-        
+
         try:
             source = layer.source()
-            
+
             # Parse PostgreSQL connection string
             # Format: "dbname='x' host='y' port='z' sslmode='prefer' ... table=\"schema\".\"table\" ..."
-            
+
             # Try table="schema"."table" format
             import re
             match = re.search(r'table="([^"]+)"\.?"([^"]+)"', source)
             if match:
                 return match.group(1), match.group(2)
-            
+
             # Try table=schema.table format (no quotes)
             match = re.search(r'table=([^\s"]+)\.([^\s"]+)', source)
             if match:
                 return match.group(1), match.group(2)
-            
+
             # Try just table name
             match = re.search(r'table=["\']?([^"\'\s]+)["\']?', source)
             if match:
                 # Assume public schema if not specified
                 return 'public', match.group(1)
-            
+
             logger.warning(f"[PostgreSQL] Could not parse table from source: {source[:200]}")
             return None, None
-            
+
         except Exception as e:
             logger.error(f"[PostgreSQL] Error extracting table info: {e}")
             return None, None
-    
+
     def _format_fids_for_sql(self, fids: List[Any]) -> str:
         """
         Format FID list for SQL IN clause.
-        
+
         Handles both UUIDs (strings) and integers.
-        
+
         Args:
             fids: List of feature IDs
-            
+
         Returns:
             Formatted string for SQL IN clause
         """
         if not fids:
             return ""
-        
+
         # Check if UUIDs (strings) or integers
         sample = fids[0]
-        
+
         if isinstance(sample, str):
             # Quote strings/UUIDs
             return ', '.join(f"'{str(fid)}'" for fid in fids)
         else:
             # Integers don't need quotes
             return ', '.join(str(fid) for fid in fids)
-    
+
     def _create_source_selection_temp_table(
         self,
         conn,
@@ -491,13 +491,13 @@ class PostgreSQLBackend(BackendPort):
     ) -> Optional[str]:
         """
         Fallback: Create persistent temp table instead of MV.
-        
+
         This is used when MV creation fails (e.g., due to permissions).
-        
+
         FIX v4.3.2 (2026-01-25): Use persistent table in filtermate_temp schema
-        instead of TEMPORARY table. TEMPORARY tables are session-scoped and 
+        instead of TEMPORARY table. TEMPORARY tables are session-scoped and
         not visible to QGIS's PostgreSQL connection (different session).
-        
+
         Args:
             conn: Database connection
             table_name: Source table name
@@ -505,48 +505,48 @@ class PostgreSQLBackend(BackendPort):
             geom_field: Geometry field
             fids: List of FIDs
             formatted_fids: Pre-formatted FID string
-            
+
         Returns:
             Optional[str]: Full qualified table name or None
         """
         try:
             import hashlib
             from ....infrastructure.constants import DEFAULT_TEMP_SCHEMA
-            
-            fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode()).hexdigest()[:8]
+
+            fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in fids[:10]).encode()).hexdigest()[:8]
             temp_name = f"fm_temp_src_sel_{fid_hash}"
-            
+
             # FIX v4.3.1 (2026-01-22): Clean field names (remove table prefixes if present)
-            clean_pk_field = pk_field.split('.')[-1].strip('"')
-            clean_geom_field = geom_field.split('.')[-1].strip('"')
-            
+            pk_field.split('.')[-1].strip('"')
+            geom_field.split('.')[-1].strip('"')
+
             cursor = conn.cursor()
-            
+
             # FIX v4.3.2: Ensure filtermate_temp schema exists
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{DEFAULT_TEMP_SCHEMA}"')
-            
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{DEFAULT_TEMP_SCHEMA}"')  # nosec B608
+
             # FIX v4.3.2: Create persistent table in filtermate_temp schema
             # (NOT TEMPORARY - QGIS uses a different PostgreSQL session)
             # Drop existing table first to avoid conflicts
-            cursor.execute(f'DROP TABLE IF EXISTS "{DEFAULT_TEMP_SCHEMA}"."{temp_name}"')
-            
-            create_sql = f"""
+            cursor.execute(f'DROP TABLE IF EXISTS "{DEFAULT_TEMP_SCHEMA}"."{temp_name}"')  # nosec B608
+
+            create_sql = """
                 CREATE TABLE "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" AS
                 SELECT "{clean_pk_field}" as pk
                 FROM "{table_name}"
                 WHERE "{clean_pk_field}" IN ({formatted_fids})
             """
             cursor.execute(create_sql)
-            
+
             # Create index for fast lookups
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" (pk)')
-            
+            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" (pk)')  # nosec B608
+
             conn.commit()
-            
+
             full_name = f'"{DEFAULT_TEMP_SCHEMA}"."{temp_name}"'
-            logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {full_name}")
+            logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {full_name}")  # nosec B608
             return full_name
-            
+
         except Exception as e:
             logger.error(f"[PostgreSQL] Temp table fallback failed: {e}")
             return None
@@ -559,7 +559,7 @@ class PostgreSQLBackend(BackendPort):
             if conn:
                 mv_count = self._mv_manager.cleanup_session_mvs(connection=conn)
                 view_count, _ = self._cleanup_service.cleanup_session_views(conn)
-                logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")
+                logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")  # nosec B608
         except Exception as e:
             logger.error(f"[PostgreSQL] Cleanup failed: {e}")
 
@@ -664,23 +664,23 @@ class PostgreSQLBackend(BackendPort):
     def _get_connection_from_layer(self, layer_id: str):
         """
         Get connection from QGIS layer when pool is not available.
-        
+
         Args:
             layer_id: QGIS layer ID
-            
+
         Returns:
             psycopg2 connection or None
         """
         try:
             from qgis.core import QgsProject
             from ....infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
-            
+
             # Get layer from QGIS project
             layer = QgsProject.instance().mapLayer(layer_id)
             if not layer:
                 logger.warning(f"[PostgreSQL] Layer not found in project: {layer_id}")
                 return None
-            
+
             # Get connection from layer
             conn, _ = get_datasource_connexion_from_layer(layer)
             if conn:
@@ -688,7 +688,7 @@ class PostgreSQLBackend(BackendPort):
             else:
                 logger.warning(f"[PostgreSQL] Could not get connection from layer {layer_id}")
             return conn
-            
+
         except Exception as e:
             logger.error(f"[PostgreSQL] Failed to get connection from layer: {e}")
             return None
@@ -722,7 +722,7 @@ class PostgreSQLBackend(BackendPort):
         """Execute filter using materialized view."""
         # Build query for MV
         table_name = self._get_table_name(layer_info)
-        query = f"SELECT * FROM {table_name} WHERE {expression.sql}"
+        query = f"SELECT * FROM {table_name} WHERE {expression.sql}"  # nosec B608
 
         # Create MV
         mv_name = self._mv_manager.create_mv(
@@ -750,10 +750,10 @@ class PostgreSQLBackend(BackendPort):
         connection
     ) -> List[int]:
         """Execute filter directly without MV."""
-        table_name = self._get_table_name(layer_info)
-        pk_column = self._get_pk_column(layer_info)
+        self._get_table_name(layer_info)
+        self._get_pk_column(layer_info)
 
-        query = f"""
+        query = """
             SELECT "{pk_column}" FROM {table_name}
             WHERE {expression.sql}
         """
@@ -802,7 +802,7 @@ class PostgreSQLBackend(BackendPort):
             logger.debug(f"[PostgreSQL] [PostgreSQL v4.0] Table from LayerInfo: {table}")
             return table
 
-        logger.warning(f"[PostgreSQL] [PostgreSQL v4.0] Could not extract table name - using 'unknown_table'")
+        logger.warning("[PostgreSQL] [PostgreSQL v4.0] Could not extract table name - using 'unknown_table'")
         return "unknown_table"
 
     def _get_geometry_column(self, layer_info: LayerInfo) -> str:

@@ -11,7 +11,7 @@ Phase: 6 - God Class DockWidget Migration
 from typing import TYPE_CHECKING, Optional, List, Any
 import logging
 
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QMenu, QInputDialog, QMessageBox, QFileDialog,
     QLabel
@@ -23,7 +23,8 @@ from .base_controller import BaseController
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
-    from ...core.services.favorites_service import FavoritesService, FilterFavorite
+    from ...core.services.favorites_service import FilterFavorite
+    from ...core.domain.favorites_manager import FavoritesManager
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +104,13 @@ class FavoritesController(BaseController):
         """
         self._find_indicator_label()
         self._init_favorites_manager()
-        
+
         # CRITICAL FIX 2026-01-18: Connect to favorites_changed signal from FavoritesService
         # This ensures the UI is updated when favorites are loaded from database
         if self._favorites_manager and hasattr(self._favorites_manager, 'favorites_changed'):
             self._favorites_manager.favorites_changed.connect(self._on_favorites_loaded)
             logger.debug("✓ Connected to FavoritesService.favorites_changed signal")
-        
+
         self._initialized = True
         logger.debug("FavoritesController setup complete")
 
@@ -121,40 +122,40 @@ class FavoritesController(BaseController):
     def sync_with_dockwidget_manager(self) -> bool:
         """
         Re-synchronize with the favorites manager from dockwidget.
-        
+
         FIX 2026-01-19: Called when the dockwidget's _favorites_manager is updated
         (e.g., after init_filterMate_db() configures it).
-        
+
         Returns:
             bool: True if sync was successful
         """
         if not hasattr(self.dockwidget, '_favorites_manager'):
             logger.debug("sync_with_dockwidget_manager: dockwidget has no _favorites_manager")
             return False
-            
+
         new_manager = self.dockwidget._favorites_manager
         if new_manager is None:
             logger.debug("sync_with_dockwidget_manager: dockwidget._favorites_manager is None")
             return False
-            
+
         # Disconnect old signal if any
         if self._favorites_manager and hasattr(self._favorites_manager, 'favorites_changed'):
             try:
                 self._favorites_manager.favorites_changed.disconnect(self._on_favorites_loaded)
             except (TypeError, RuntimeError):
                 pass  # Signal wasn't connected
-        
+
         # Update reference
         old_count = self.count
         self._favorites_manager = new_manager
-        
+
         # Connect new signal
         if hasattr(self._favorites_manager, 'favorites_changed'):
             self._favorites_manager.favorites_changed.connect(self._on_favorites_loaded)
-        
+
         # Update UI
         self.update_indicator()
-        
+
         logger.info(f"✓ FavoritesController synced with dockwidget manager (was {old_count}, now {self.count} favorites)")
         return True
 
@@ -168,7 +169,7 @@ class FavoritesController(BaseController):
         super().on_tab_deactivated()
 
     # === Public API ===
-    
+
     def _on_favorites_loaded(self) -> None:
         """
         Handler for favorites_changed signal from FavoritesService.
@@ -205,11 +206,11 @@ class FavoritesController(BaseController):
 
         Shows the favorites context menu.
         """
-        
+
         # Lazy initialization fallback - if setup() was never called, do it now
         if not self._initialized:
             self.setup()
-        
+
         self._show_favorites_menu()
 
     def add_current_to_favorites(self, name: Optional[str] = None) -> bool:
@@ -465,14 +466,14 @@ class FavoritesController(BaseController):
             if not self._favorites_manager:
                 self._show_warning("Favorites manager not initialized. Please restart FilterMate.")
                 return
-            
+
             from ..dialogs import FavoritesManagerDialog
             # Note: FavoritesManagerDialog(favorites_manager, parent) - order matters!
             dialog = FavoritesManagerDialog(self._favorites_manager, self.dockwidget)
-            
+
             # Connect the favoriteApplied signal to apply the favorite
             dialog.favoriteApplied.connect(self.apply_favorite)
-            
+
             dialog.exec_()
             # Refresh after dialog closes
             self.favorites_changed.emit()
@@ -494,15 +495,15 @@ class FavoritesController(BaseController):
     def _init_favorites_manager(self) -> None:
         """
         Initialize the favorites manager.
-        
+
         FIX 2026-01-19: The controller should NOT create its own FavoritesService.
         The FavoritesService is created by FilterMateApp and should be passed via
         dockwidget._favorites_manager AFTER init_filterMate_db() configures it.
-        
+
         If _favorites_manager is not available yet, we create a temporary empty one
         and wait for sync_with_dockwidget_manager() to be called later.
         """
-        
+
         # PRIORITY 1: Check if already initialized on dockwidget (from FilterMateApp)
         if hasattr(self.dockwidget, '_favorites_manager') and self.dockwidget._favorites_manager:
             self._favorites_manager = self.dockwidget._favorites_manager
@@ -513,11 +514,11 @@ class FavoritesController(BaseController):
         project = getattr(self.dockwidget, 'PROJECT', None) or QgsProject.instance()
         project_uuid = None
         db_path = None
-        
+
         if project:
             scope = QgsExpressionContextUtils.projectScope(project)
             project_uuid = scope.variable('filterMate_db_project_uuid')
-            
+
             if project_uuid:
                 from ...config.config import ENV_VARS
                 import os
@@ -526,12 +527,12 @@ class FavoritesController(BaseController):
                 )
                 if not os.path.exists(db_path):
                     db_path = None
-        
+
         # PRIORITY 3: Create FavoritesService and configure if possible
         try:
             from ...core.services.favorites_service import FavoritesService
             self._favorites_manager = FavoritesService()
-            
+
             # Configure with database if available
             if project_uuid and db_path:
                 self._favorites_manager.set_database(db_path, str(project_uuid))
@@ -543,38 +544,35 @@ class FavoritesController(BaseController):
             logger.debug(f"FavoritesManager initialized with {self.count} favorites")
 
         except Exception as e:
-            import traceback
             logger.error(f"Failed to initialize FavoritesManager: {e}")
             self._favorites_manager = None
-        
 
     def _restore_spatial_config(self, favorite: 'FilterFavorite') -> bool:
         """
         Restore spatial configuration from favorite to dockwidget.
-        
+
         This ensures task_features (selected FIDs) are available when
         launchTaskEvent is called, so the filter task can rebuild
         EXISTS expressions correctly.
-        
+
         Args:
             favorite: Favorite containing spatial_config
-            
+
         Returns:
             True if config was restored successfully
         """
         if not favorite.spatial_config:
             logger.warning(f"Favorite '{favorite.name}' has no spatial_config to restore")
             return False
-        
+
         try:
-            from qgis.core import QgsProject
             config = favorite.spatial_config
-            
+
             # Restore selected feature IDs (task_features)
             if 'task_feature_ids' in config and self.dockwidget.current_layer:
                 feature_ids = config['task_feature_ids']
                 logger.info(f"Restoring {len(feature_ids)} task_feature IDs from favorite")
-                
+
                 # Fetch actual QgsFeature objects from the source layer
                 source_layer = self.dockwidget.current_layer
                 features = []
@@ -584,7 +582,7 @@ class FavoritesController(BaseController):
                         features.append(feature)
                     else:
                         logger.warning(f"  ⚠️ Could not fetch feature {fid} from {source_layer.name()}")
-                
+
                 if features:
                     logger.info(f"  → Loaded {len(features)} features from {len(feature_ids)} FIDs")
                     # Store in dockwidget for get_current_features() to pick up
@@ -592,14 +590,14 @@ class FavoritesController(BaseController):
                     logger.info(f"  ✓ Stored {len(features)} features in dockwidget._restored_task_features")
                 else:
                     logger.warning(f"  ⚠️ Could not load any features from {len(feature_ids)} FIDs!")
-            
+
             # Restore predicates if present
             if 'predicates' in config:
                 predicates = config['predicates']
                 logger.info(f"Restoring predicates: {list(predicates.keys())}")
                 # Store in dockwidget for task to pick up
                 self.dockwidget._restored_predicates = predicates
-            
+
             # Restore buffer settings if present
             if 'buffer_value' in config:
                 buffer_value = config['buffer_value']
@@ -608,10 +606,10 @@ class FavoritesController(BaseController):
                 if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
                     self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.setValue(float(buffer_value))
                     logger.info(f"  ✓ Buffer widget set to {buffer_value}")
-            
+
             logger.info(f"✓ Spatial config restored from favorite '{favorite.name}'")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to restore spatial_config: {e}")
             import traceback
@@ -620,9 +618,9 @@ class FavoritesController(BaseController):
 
     def _get_indicator_style(self, state: str) -> str:
         """Get stylesheet for indicator state."""
-        style_data = FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
+        FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
         # v4.0: Harmonized with BackendIndicatorWidget - soft "mousse" style
-        return f"""
+        return """
             QLabel#label_favorites_indicator {{
                 color: {style_data['color']};
                 font-size: 8pt;
@@ -662,7 +660,7 @@ class FavoritesController(BaseController):
 
         # === QUICK FILTER SECTION (Favorites) ===
         favorites = self.get_all_favorites()
-        
+
         if favorites:
             # Header for quick filter
             header = menu.addAction(f"⚡ Filtrage Rapide ({len(favorites)})")
@@ -675,7 +673,7 @@ class FavoritesController(BaseController):
             # Sort by use_count (most used first), then by name
             sorted_favs = sorted(favorites, key=lambda f: (-f.use_count, f.name.lower()))
             display_favs = sorted_favs[:8]
-            
+
             for fav in display_favs:
                 layers_count = fav.get_layers_count() if hasattr(fav, 'get_layers_count') else 1
                 fav_text = f"★ {fav.get_display_name(30)}"
@@ -693,7 +691,7 @@ class FavoritesController(BaseController):
             if len(favorites) > 8:
                 more_action = menu.addAction(f"  ➤ Voir tous ({len(favorites)})...")
                 more_action.setData('__SHOW_ALL__')
-                
+
             menu.addSeparator()
 
         # === ADD TO FAVORITES ===
@@ -715,11 +713,11 @@ class FavoritesController(BaseController):
 
         import_action = menu.addAction("📥 Import...")
         import_action.setData('__IMPORT__')
-        
+
         # === GLOBAL FAVORITES SUBMENU ===
         menu.addSeparator()
         global_menu = menu.addMenu("🌐 Favoris globaux")
-        
+
         # Add current favorites as global options
         if favorites:
             copy_global_menu = global_menu.addMenu("Copier vers global...")
@@ -728,7 +726,7 @@ class FavoritesController(BaseController):
                 action.setData(('copy_to_global', fav.id))
             if len(favorites) > 5:
                 copy_global_menu.addAction("  ...").setEnabled(False)
-        
+
         # Show global favorites
         global_favorites = self._get_global_favorites()
         if global_favorites:
@@ -742,22 +740,22 @@ class FavoritesController(BaseController):
                 more_action.setData('__SHOW_GLOBAL__')
         else:
             global_menu.addAction("(Aucun favori global)").setEnabled(False)
-        
+
         # === MAINTENANCE ===
         menu.addSeparator()
         maintenance_menu = menu.addMenu("🔧 Maintenance")
-        
+
         backup_action = maintenance_menu.addAction("💾 Sauvegarder dans le projet (.qgz)")
         backup_action.setData('__BACKUP_TO_PROJECT__')
-        
+
         restore_action = maintenance_menu.addAction("📂 Restaurer depuis le projet")
         restore_action.setData('__RESTORE_FROM_PROJECT__')
-        
+
         maintenance_menu.addSeparator()
-        
+
         cleanup_action = maintenance_menu.addAction("🧹 Nettoyer projets orphelins")
         cleanup_action.setData('__CLEANUP_ORPHANS__')
-        
+
         stats_action = maintenance_menu.addAction("📊 Statistiques base de données")
         stats_action.setData('__SHOW_STATS__')
 
@@ -829,7 +827,7 @@ class FavoritesController(BaseController):
     def _create_favorite(self, name: str, expression: str) -> bool:
         """
         Create a new favorite.
-        
+
         ENHANCEMENT 2026-01-18: Capture spatial_config (task_features, predicates, etc.)
         so favorites can be properly restored with full geometric context.
         """
@@ -847,7 +845,7 @@ class FavoritesController(BaseController):
             remote_layers = {}
             source_layer_id = layer.id() if layer else None
             project = QgsProject.instance()
-            
+
             for layer_id, map_layer in project.mapLayers().items():
                 # Skip non-vector layers
                 if not hasattr(map_layer, 'subsetString'):
@@ -864,10 +862,10 @@ class FavoritesController(BaseController):
                         'layer_id': layer_id,
                         'provider': map_layer.providerType()
                     }
-            
+
             # ENHANCEMENT 2026-01-18: Capture spatial configuration
             spatial_config = self._capture_spatial_config()
-            
+
             # Use FavoritesService.add_favorite() with individual parameters
             favorite_id = self._favorites_manager.add_favorite(
                 name=name,
@@ -877,7 +875,7 @@ class FavoritesController(BaseController):
                 remote_layers=remote_layers if remote_layers else None,
                 spatial_config=spatial_config
             )
-            
+
             if favorite_id:
                 # Note: Favorite already saved to database in add_favorite()
                 # save() is a no-op but we call it for consistency
@@ -891,19 +889,19 @@ class FavoritesController(BaseController):
         except Exception as e:
             logger.error(f"Failed to create favorite: {e}")
             return False
-    
+
     def _capture_spatial_config(self) -> dict:
         """
         Capture current spatial configuration for favorite restoration.
-        
+
         This ensures favorites can be restored with full geometric context,
         including selected features, predicates, buffer settings, etc.
-        
+
         Returns:
             dict: Spatial configuration
         """
         config = {}
-        
+
         try:
             # Capture task_features (selected feature IDs)
             features, _ = self.dockwidget.get_current_features()
@@ -912,7 +910,7 @@ class FavoritesController(BaseController):
                 if feature_ids:
                     config['task_feature_ids'] = feature_ids
                     logger.info(f"Captured {len(feature_ids)} task_feature IDs for favorite")
-            
+
             # Capture predicates from dockwidget if available
             if hasattr(self.dockwidget, 'PROJECT_LAYERS') and self.dockwidget.current_layer:
                 layer_id = self.dockwidget.current_layer.id()
@@ -922,7 +920,7 @@ class FavoritesController(BaseController):
                     if predicates:
                         config['predicates'] = predicates
                         logger.info(f"Captured predicates: {list(predicates.keys())}")
-            
+
             # Capture buffer value if set
             # v5.0: Read buffer value from widget
             if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
@@ -930,12 +928,12 @@ class FavoritesController(BaseController):
                 if buffer_value != 0.0:
                     config['buffer_value'] = buffer_value
                     logger.info(f"Captured buffer_value: {buffer_value}")
-            
+
             logger.info(f"Spatial config captured: {list(config.keys())}")
-            
+
         except Exception as e:
             logger.warning(f"Failed to capture spatial config: {e}")
-        
+
         return config if config else None
 
     def _apply_favorite_expression(self, favorite: 'FilterFavorite') -> bool:
@@ -955,9 +953,9 @@ class FavoritesController(BaseController):
             # favorite.spatial_config so the filter task can REBUILD the remote filters properly.
             if favorite.remote_layers:
                 logger.info(f"Favorite has {len(favorite.remote_layers)} remote layers")
-                logger.info(f"  → Remote layers will be re-filtered by main filter task")
-                logger.info(f"  → NOT applying filters directly to avoid __source cleanup")
-            
+                logger.info("  → Remote layers will be re-filtered by main filter task")
+                logger.info("  → NOT applying filters directly to avoid __source cleanup")
+
             # Restore spatial configuration (task_features, predicates, buffer, etc.)
             if favorite.spatial_config:
                 logger.info(f"Restoring spatial_config from favorite '{favorite.name}'...")
@@ -969,7 +967,7 @@ class FavoritesController(BaseController):
             if hasattr(self.dockwidget, 'launchTaskEvent'):
                 self.dockwidget.launchTaskEvent(False, 'filter')
                 logger.info(f"Filter triggered for favorite: {favorite.name}")
-            
+
             return True
 
         except Exception as e:
@@ -991,26 +989,26 @@ class FavoritesController(BaseController):
             show_warning("FilterMate", message)
         except ImportError:
             logger.warning(message)
-    
+
     # ─────────────────────────────────────────────────────────────────
     # Global Favorites & Maintenance Methods
     # ─────────────────────────────────────────────────────────────────
-    
+
     def _get_global_favorites(self) -> List['FilterFavorite']:
         """Get global favorites from the manager."""
         if not self._favorites_manager:
             return []
-        
+
         if hasattr(self._favorites_manager, 'get_global_favorites'):
             return self._favorites_manager.get_global_favorites()
-        
+
         return []
-    
+
     def _apply_global_favorite(self, favorite_id: str) -> bool:
         """Apply a global favorite."""
         if not self._favorites_manager:
             return False
-        
+
         # First, import the global favorite to the current project
         if hasattr(self._favorites_manager, 'import_global_to_project'):
             new_id = self._favorites_manager.import_global_to_project(favorite_id)
@@ -1018,23 +1016,23 @@ class FavoritesController(BaseController):
                 # Then apply the newly imported favorite
                 self.update_indicator()
                 return self.apply_favorite(new_id)
-        
+
         return False
-    
+
     def _copy_to_global(self, favorite_id: str) -> bool:
         """Copy a favorite to global favorites."""
         if not self._favorites_manager:
             return False
-        
+
         if hasattr(self._favorites_manager, 'copy_to_global'):
             new_id = self._favorites_manager.copy_to_global(favorite_id)
             if new_id:
                 self._show_success("Favori copié vers les favoris globaux")
                 return True
-        
+
         self._show_warning("Échec de la copie vers global")
         return False
-    
+
     def _show_global_favorites_dialog(self) -> None:
         """Show dialog for managing global favorites."""
         # For now, show a message - full dialog can be added later
@@ -1045,12 +1043,12 @@ class FavoritesController(BaseController):
             f"Il y a {global_count} favori(s) global(aux) disponibles.\n\n"
             "Les favoris globaux sont partagés entre tous les projets."
         )
-    
+
     def _backup_to_project(self) -> None:
         """Backup favorites to the QGIS project file."""
         if not self._favorites_manager:
             return
-        
+
         if hasattr(self._favorites_manager, 'save_to_project_file'):
             from qgis.core import QgsProject
             success = self._favorites_manager.save_to_project_file(QgsProject.instance())
@@ -1058,12 +1056,12 @@ class FavoritesController(BaseController):
                 self._show_success(f"Sauvegardé {self.count} favori(s) dans le fichier projet")
             else:
                 self._show_warning("Échec de la sauvegarde")
-    
+
     def _restore_from_project(self) -> None:
         """Restore favorites from the QGIS project file."""
         if not self._favorites_manager:
             return
-        
+
         if hasattr(self._favorites_manager, 'restore_from_project_file'):
             from qgis.core import QgsProject
             count = self._favorites_manager.restore_from_project_file(QgsProject.instance())
@@ -1072,50 +1070,50 @@ class FavoritesController(BaseController):
                 self._show_success(f"Restauré {count} favori(s) depuis le fichier projet")
             else:
                 self._show_warning("Aucun favori à restaurer trouvé dans le projet")
-    
+
     def _cleanup_orphan_projects(self) -> None:
         """Clean up orphan projects from the database."""
         try:
             from ...core.services.favorites_migration_service import FavoritesMigrationService
             from ...config.config import ENV_VARS
             import os
-            
+
             db_path = os.path.normpath(
                 ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
             )
-            
+
             migration_service = FavoritesMigrationService(db_path)
             deleted_count, deleted_ids = migration_service.cleanup_orphan_projects()
-            
+
             if deleted_count > 0:
                 self._show_success(f"Nettoyé {deleted_count} projet(s) orphelin(s)")
             else:
                 self._show_success("Aucun projet orphelin à nettoyer")
-                
+
         except Exception as e:
             logger.error(f"Error cleaning up orphan projects: {e}")
             self._show_warning(f"Erreur: {e}")
-    
+
     def _show_database_stats(self) -> None:
         """Show database statistics dialog."""
         try:
             from ...core.services.favorites_migration_service import FavoritesMigrationService
             from ...config.config import ENV_VARS
             import os
-            
+
             db_path = os.path.normpath(
                 ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "") + os.sep + 'filterMate_db.sqlite'
             )
-            
+
             migration_service = FavoritesMigrationService(db_path)
             stats = migration_service.get_database_statistics()
-            
+
             if 'error' in stats:
                 self._show_warning(f"Erreur: {stats['error']}")
                 return
-            
+
             # Format statistics message
-            msg = f"""📊 Statistiques de la base de données FilterMate
+            msg = """📊 Statistiques de la base de données FilterMate
 
 📁 Fichier: {os.path.basename(stats.get('database_path', 'N/A'))}
 💾 Taille: {stats.get('database_size_kb', 0):.1f} Ko
@@ -1127,20 +1125,20 @@ class FavoritesController(BaseController):
    ├─ Orphelins: {stats.get('orphan_favorites', 0)}
    └─ Globaux: {stats.get('global_favorites', 0)}
 """
-            
+
             # Add top projects
             top_projects = stats.get('top_projects', [])
             if top_projects:
                 msg += "\n🏆 Projets avec le plus de favoris:\n"
                 for proj in top_projects[:3]:
                     msg += f"   • {proj['name']}: {proj['favorites']}\n"
-            
+
             QMessageBox.information(
                 self.dockwidget,
                 "Statistiques FilterMate",
                 msg
             )
-            
+
         except Exception as e:
             logger.error(f"Error showing database stats: {e}")
             self._show_warning(f"Erreur: {e}")

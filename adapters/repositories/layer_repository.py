@@ -23,28 +23,28 @@ except ImportError:
 class QGISLayerRepository:
     """
     Repository for accessing QGIS layers.
-    
+
     Provides a clean interface for the domain layer to access
     QGIS layers without direct QGIS dependencies.
     """
-    
+
     def __init__(self):
         """Initialize the repository."""
         self._cache: Dict[str, Any] = {}
-    
+
     def get_layer(self, layer_id: str) -> Optional[Any]:
         """
         Get a layer by ID.
-        
+
         Args:
             layer_id: QGIS layer ID
-            
+
         Returns:
             QgsVectorLayer or None
         """
         if not QGIS_AVAILABLE:
             return None
-        
+
         try:
             project = QgsProject.instance()
             layer = project.mapLayer(layer_id)
@@ -52,22 +52,22 @@ class QGISLayerRepository:
                 return layer
         except Exception as e:
             logger.warning(f"Failed to get layer {layer_id}: {e}")
-        
+
         return None
-    
+
     def get_layer_by_name(self, name: str) -> Optional[Any]:
         """
         Get a layer by name.
-        
+
         Args:
             name: Layer name
-            
+
         Returns:
             QgsVectorLayer or None (first match)
         """
         if not QGIS_AVAILABLE:
             return None
-        
+
         try:
             project = QgsProject.instance()
             layers = project.mapLayersByName(name)
@@ -76,19 +76,19 @@ class QGISLayerRepository:
                     return layer
         except Exception as e:
             logger.warning(f"Failed to get layer by name {name}: {e}")
-        
+
         return None
-    
+
     def get_all_vector_layers(self) -> List[Any]:
         """
         Get all vector layers in the project.
-        
+
         Returns:
             List of QgsVectorLayer
         """
         if not QGIS_AVAILABLE:
             return []
-        
+
         try:
             project = QgsProject.instance()
             return [
@@ -98,49 +98,48 @@ class QGISLayerRepository:
         except Exception as e:
             logger.warning(f"Failed to get vector layers: {e}")
             return []
-    
+
     def layer_exists(self, layer_id: str) -> bool:
         """Check if a layer exists."""
         return self.get_layer(layer_id) is not None
-    
+
     def get_layer_info(self, layer_id: str) -> Optional[Any]:
         """
         Get layer information by ID.
-        
+
         Args:
             layer_id: QGIS layer ID
-            
+
         Returns:
             LayerInfo if layer exists, None otherwise
         """
         layer = self.get_layer(layer_id)
         if layer is None:
             return None
-        
+
         try:
             from ..app_bridge import layer_info_from_qgis_layer
             return layer_info_from_qgis_layer(layer)
         except Exception as e:
             logger.warning(f"Failed to get layer info for {layer_id}: {e}")
             return None
-    
+
     def get_layers_by_provider(self, provider_type: Any) -> List[Any]:
         """
         Get layers filtered by provider type.
-        
+
         Args:
             provider_type: Provider type to filter by
-            
+
         Returns:
             List of LayerInfo matching the provider type
         """
         if not QGIS_AVAILABLE:
             return []
-        
+
         try:
             from ..app_bridge import layer_info_from_qgis_layer
-            from ...core.domain.layer_info import ProviderType
-            
+
             layers = self.get_all_vector_layers()
             result = []
             for layer in layers:
@@ -151,7 +150,7 @@ class QGISLayerRepository:
         except Exception as e:
             logger.warning(f"Failed to get layers by provider: {e}")
             return []
-    
+
     def clear_cache(self) -> None:
         """Clear the internal cache."""
         self._cache.clear()

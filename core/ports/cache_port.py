@@ -19,7 +19,7 @@ V = TypeVar('V')  # Value type
 class CacheStats:
     """
     Statistics about cache usage.
-    
+
     Attributes:
         hits: Number of cache hits
         misses: Number of cache misses
@@ -39,7 +39,7 @@ class CacheStats:
     def hit_rate(self) -> float:
         """
         Calculate cache hit rate.
-        
+
         Returns:
             Hit rate as float between 0.0 and 1.0
         """
@@ -52,7 +52,7 @@ class CacheStats:
     def miss_rate(self) -> float:
         """
         Calculate cache miss rate.
-        
+
         Returns:
             Miss rate as float between 0.0 and 1.0
         """
@@ -67,7 +67,7 @@ class CacheStats:
     def utilization(self) -> float:
         """
         Calculate cache utilization.
-        
+
         Returns:
             Utilization as float between 0.0 and 1.0
         """
@@ -88,7 +88,7 @@ class CacheStats:
 class CacheEntry(Generic[V]):
     """
     Wrapper for cached values with metadata.
-    
+
     Attributes:
         value: The cached value
         created_at: When the entry was created
@@ -132,7 +132,7 @@ class CachePort(ABC, Generic[K, V]):
     - Layer metadata (LayerInfo)
     - Geometry objects
     - SQL query results
-    
+
     Implementations should be thread-safe.
 
     Example:
@@ -156,9 +156,9 @@ class CachePort(ABC, Generic[K, V]):
 
     @abstractmethod
     def set(
-        self, 
-        key: K, 
-        value: V, 
+        self,
+        key: K,
+        value: V,
         ttl_seconds: Optional[float] = None
     ) -> None:
         """
@@ -231,7 +231,7 @@ class CachePort(ABC, Generic[K, V]):
 
         Returns:
             Cached or newly computed value
-            
+
         Example:
             result = cache.get_or_compute(
                 key="filter_123",
@@ -250,10 +250,10 @@ class CachePort(ABC, Generic[K, V]):
     def get_many(self, keys: List[K]) -> dict[K, V]:
         """
         Get multiple values from cache.
-        
+
         Args:
             keys: List of cache keys
-            
+
         Returns:
             Dictionary of found key-value pairs
         """
@@ -265,13 +265,13 @@ class CachePort(ABC, Generic[K, V]):
         return result
 
     def set_many(
-        self, 
-        items: dict[K, V], 
+        self,
+        items: dict[K, V],
         ttl_seconds: Optional[float] = None
     ) -> None:
         """
         Store multiple values in cache.
-        
+
         Args:
             items: Dictionary of key-value pairs
             ttl_seconds: Optional TTL for all items
@@ -282,10 +282,10 @@ class CachePort(ABC, Generic[K, V]):
     def delete_many(self, keys: List[K]) -> int:
         """
         Delete multiple values from cache.
-        
+
         Args:
             keys: List of cache keys
-            
+
         Returns:
             Number of keys deleted
         """
@@ -298,12 +298,12 @@ class CachePort(ABC, Generic[K, V]):
     def touch(self, key: K) -> bool:
         """
         Update access time for key without retrieving value.
-        
+
         Useful for LRU caches to mark key as recently used.
-        
+
         Args:
             key: Cache key
-            
+
         Returns:
             True if key exists
         """
@@ -313,7 +313,7 @@ class CachePort(ABC, Generic[K, V]):
     def get_keys(self) -> List[K]:
         """
         Get all keys in cache.
-        
+
         Returns:
             List of all cache keys
         """
@@ -328,7 +328,7 @@ class CachePort(ABC, Generic[K, V]):
 class ResultCachePort(CachePort[str, 'FilterResult']):
     """
     Specialized cache for filter results.
-    
+
     Extends CachePort with filter-specific functionality.
     """
 
@@ -339,11 +339,11 @@ class ResultCachePort(CachePort[str, 'FilterResult']):
     ) -> Optional['FilterResult']:
         """
         Get cached result by expression and layer.
-        
+
         Args:
             expression_raw: Filter expression string
             layer_id: Layer ID
-            
+
         Returns:
             Cached FilterResult if found
         """
@@ -357,7 +357,7 @@ class ResultCachePort(CachePort[str, 'FilterResult']):
     ) -> None:
         """
         Cache a filter result.
-        
+
         Args:
             result: FilterResult to cache
             ttl_seconds: Optional TTL
@@ -368,12 +368,12 @@ class ResultCachePort(CachePort[str, 'FilterResult']):
     def invalidate_layer(self, layer_id: str) -> int:
         """
         Invalidate all cached results for a layer.
-        
+
         Called when layer data changes.
-        
+
         Args:
             layer_id: Layer ID to invalidate
-            
+
         Returns:
             Number of entries invalidated
         """
@@ -389,7 +389,7 @@ class ResultCachePort(CachePort[str, 'FilterResult']):
 class GeometryCachePort(CachePort[str, 'GeometryData']):
     """
     Specialized cache for geometry data.
-    
+
     Extends CachePort with geometry-specific functionality.
     """
 
@@ -399,10 +399,10 @@ class GeometryCachePort(CachePort[str, 'GeometryData']):
     ) -> Optional['GeometryData']:
         """
         Get cached geometries for a layer.
-        
+
         Args:
             layer_id: Layer ID
-            
+
         Returns:
             Cached geometry data if found
         """
@@ -416,7 +416,7 @@ class GeometryCachePort(CachePort[str, 'GeometryData']):
     ) -> None:
         """
         Cache geometry data for a layer.
-        
+
         Args:
             layer_id: Layer ID
             geometry_data: Geometry data to cache
@@ -427,7 +427,7 @@ class GeometryCachePort(CachePort[str, 'GeometryData']):
     def get_memory_usage(self) -> int:
         """
         Get approximate memory usage in bytes.
-        
+
         Returns:
             Memory usage estimate
         """
@@ -438,7 +438,7 @@ class GeometryCachePort(CachePort[str, 'GeometryData']):
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..domain import FilterResult
-    
+
     @dataclass
     class GeometryData:
         """Placeholder for geometry cache data."""
@@ -447,36 +447,35 @@ if TYPE_CHECKING:
 class NullCache(CachePort):
     """
     Null Object pattern implementation of CachePort.
-    
+
     A cache that does nothing - useful for testing or when
     caching is disabled.
     """
-    
+
     def get(self, key, default=None):
         """Always returns default (cache miss)."""
         return default
-    
+
     def set(self, key, value, ttl_seconds=None) -> bool:
         """Does nothing, returns True."""
         return True
-    
+
     def delete(self, key) -> bool:
         """Does nothing, returns False."""
         return False
-    
+
     def has(self, key) -> bool:
         """Always returns False."""
         return False
-    
+
     def clear(self) -> int:
         """Does nothing, returns 0."""
         return 0
-    
+
     def get_stats(self) -> CacheStats:
         """Returns empty stats."""
         return CacheStats(hits=0, misses=0, size=0, max_size=0)
-    
+
     def get_or_compute(self, key, compute_fn, ttl_seconds=None):
         """Always computes, never caches."""
         return compute_fn()
-

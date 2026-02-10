@@ -42,38 +42,38 @@ class ServiceDescriptor:
 class Scope:
     """
     Scoped container for request-scoped services.
-    
+
     Usage:
         with container.create_scope() as scope:
             service = scope.resolve(MyService)
     """
-    
+
     def __init__(self, parent: 'Container'):
         self._parent = parent
         self._instances: Dict[Type, Any] = {}
         self._is_disposed = False
-    
+
     def resolve(self, service_type: Type[T]) -> T:
         """
         Resolve a service within this scope.
-        
+
         Args:
             service_type: The type to resolve
-            
+
         Returns:
             Service instance
         """
         if self._is_disposed:
             raise RuntimeError("Scope has been disposed")
-        
+
         # Check if we have a scoped instance
         if service_type in self._instances:
             return self._instances[service_type]
-        
+
         descriptor = self._parent._get_descriptor(service_type)
         if descriptor is None:
             raise KeyError(f"Service not registered: {service_type.__name__}")
-        
+
         if descriptor.lifecycle == Lifecycle.SCOPED:
             # Create new instance for this scope
             instance = descriptor.factory(self)
@@ -82,7 +82,7 @@ class Scope:
         else:
             # Delegate to parent for singletons and transients
             return self._parent.resolve(service_type)
-    
+
     def dispose(self) -> None:
         """Clean up scoped instances."""
         self._is_disposed = True
@@ -93,10 +93,10 @@ class Scope:
                 except Exception as e:
                     logger.warning(f"Error during scope cleanup: {e}")
         self._instances.clear()
-    
+
     def __enter__(self) -> 'Scope':
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.dispose()
 
@@ -104,15 +104,15 @@ class Scope:
 class Container:
     """
     Lightweight dependency injection container.
-    
+
     Supports three lifecycles:
     - TRANSIENT: New instance created each time
     - SINGLETON: Single instance shared across application
     - SCOPED: One instance per scope (e.g., per request)
-    
+
     Example:
         container = Container()
-        
+
         # Register services
         container.register_singleton(
             CachePort,
@@ -122,17 +122,17 @@ class Container:
             BackendPort,
             lambda c: PostgreSQLBackend(c.resolve(ConnectionPool))
         )
-        
+
         # Resolve services
         cache = container.resolve(CachePort)
         backend = container.resolve(BackendPort)
     """
-    
+
     def __init__(self):
         self._descriptors: Dict[Type, ServiceDescriptor] = {}
         self._lock = threading.RLock()
         self._initialized = False
-    
+
     def register(
         self,
         service_type: Type[T],
@@ -141,12 +141,12 @@ class Container:
     ) -> 'Container':
         """
         Register a service with custom lifecycle.
-        
+
         Args:
             service_type: The interface/type to register
             factory: Factory function that creates the instance
             lifecycle: Service lifecycle
-            
+
         Returns:
             Self for fluent chaining
         """
@@ -157,7 +157,7 @@ class Container:
                 lifecycle=lifecycle
             )
         return self
-    
+
     def register_singleton(
         self,
         service_type: Type[T],
@@ -165,16 +165,16 @@ class Container:
     ) -> 'Container':
         """
         Register a singleton service.
-        
+
         Args:
             service_type: The interface/type to register
             factory: Factory function that creates the instance
-            
+
         Returns:
             Self for fluent chaining
         """
         return self.register(service_type, factory, Lifecycle.SINGLETON)
-    
+
     def register_transient(
         self,
         service_type: Type[T],
@@ -182,16 +182,16 @@ class Container:
     ) -> 'Container':
         """
         Register a transient service.
-        
+
         Args:
             service_type: The interface/type to register
             factory: Factory function that creates the instance
-            
+
         Returns:
             Self for fluent chaining
         """
         return self.register(service_type, factory, Lifecycle.TRANSIENT)
-    
+
     def register_scoped(
         self,
         service_type: Type[T],
@@ -199,16 +199,16 @@ class Container:
     ) -> 'Container':
         """
         Register a scoped service.
-        
+
         Args:
             service_type: The interface/type to register
             factory: Factory function that creates the instance
-            
+
         Returns:
             Self for fluent chaining
         """
         return self.register(service_type, factory, Lifecycle.SCOPED)
-    
+
     def register_instance(
         self,
         service_type: Type[T],
@@ -216,11 +216,11 @@ class Container:
     ) -> 'Container':
         """
         Register an existing instance as singleton.
-        
+
         Args:
             service_type: The interface/type to register
             instance: The pre-created instance
-            
+
         Returns:
             Self for fluent chaining
         """
@@ -232,24 +232,24 @@ class Container:
                 instance=instance
             )
         return self
-    
+
     def resolve(self, service_type: Type[T]) -> T:
         """
         Resolve a service by type.
-        
+
         Args:
             service_type: The type to resolve
-            
+
         Returns:
             Service instance
-            
+
         Raises:
             KeyError: If service is not registered
         """
         descriptor = self._get_descriptor(service_type)
         if descriptor is None:
             raise KeyError(f"Service not registered: {service_type.__name__}")
-        
+
         if descriptor.lifecycle == Lifecycle.SINGLETON:
             with self._lock:
                 if descriptor.instance is None:
@@ -262,14 +262,14 @@ class Container:
             raise RuntimeError(
                 f"Scoped service {service_type.__name__} must be resolved within a scope"
             )
-    
+
     def try_resolve(self, service_type: Type[T]) -> Optional[T]:
         """
         Try to resolve a service, returning None if not registered.
-        
+
         Args:
             service_type: The type to resolve
-            
+
         Returns:
             Service instance or None
         """
@@ -277,36 +277,36 @@ class Container:
             return self.resolve(service_type)
         except KeyError:
             return None
-    
+
     def is_registered(self, service_type: Type) -> bool:
         """
         Check if a service is registered.
-        
+
         Args:
             service_type: The type to check
-            
+
         Returns:
             True if registered
         """
         return service_type in self._descriptors
-    
+
     def create_scope(self) -> Scope:
         """
         Create a new scope for scoped services.
-        
+
         Returns:
             New Scope instance
         """
         return Scope(self)
-    
+
     def _get_descriptor(self, service_type: Type) -> Optional[ServiceDescriptor]:
         """Get service descriptor if registered."""
         return self._descriptors.get(service_type)
-    
+
     def cleanup(self) -> None:
         """
         Clean up all singleton instances.
-        
+
         Call this during application shutdown.
         """
         with self._lock:
@@ -319,7 +319,7 @@ class Container:
                             logger.warning(f"Error during cleanup: {e}")
                     descriptor.instance = None
             self._initialized = False
-    
+
     def __contains__(self, service_type: Type) -> bool:
         """Check if service is registered."""
         return self.is_registered(service_type)
@@ -333,9 +333,9 @@ _container_lock = threading.Lock()
 def get_container() -> Container:
     """
     Get the global container instance.
-    
+
     Creates a new container if none exists.
-    
+
     Returns:
         Global Container instance
     """
@@ -350,7 +350,7 @@ def get_container() -> Container:
 def reset_container() -> None:
     """
     Reset the global container.
-    
+
     Cleans up existing container and creates a new one.
     Useful for testing.
     """

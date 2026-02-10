@@ -16,9 +16,7 @@ This service is responsible for:
 v4.4: Strangler Fig Pattern - New service with fallback to FilterMateApp legacy code.
 """
 
-import logging
-import weakref
-from typing import Optional, Callable, List, Any, Dict
+from typing import Callable, List, Any
 from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import QgsVectorLayer, QgsProject
@@ -36,7 +34,7 @@ logger = get_app_logger()
 class AppInitializer:
     """
     Manages FilterMate application initialization.
-    
+
     Responsibilities:
     - Database setup and health checks
     - UI profile selection (normal/compact)
@@ -45,11 +43,11 @@ class AppInitializer:
     - Initial layer loading with retry mechanisms
     - Signal connection management
     - Recovery for failed initialization
-    
+
     Uses dependency injection callbacks to avoid circular dependencies
     and enable testing without QGIS UI dependencies.
     """
-    
+
     def __init__(
         self,
         # Callbacks for database operations
@@ -88,7 +86,7 @@ class AppInitializer:
     ):
         """
         Initialize AppInitializer with dependency injection.
-        
+
         Args:
             init_filtermate_db_callback: Callback to initialize database
             get_spatialite_connection_callback: Callback to get database connection
@@ -145,14 +143,14 @@ class AppInitializer:
         self._save_variables_from_layer = save_variables_from_layer_callback
         self._remove_variables_from_layer = remove_variables_from_layer_callback
         self._save_project_variables = save_project_variables_callback
-    
+
     def initialize_application(self, is_first_run: bool = True) -> bool:
         """
         Initialize and display the FilterMate dockwidget.
-        
+
         Args:
             is_first_run: True if this is the first call to run(), False for subsequent calls
-        
+
         Returns:
             bool: True if initialization succeeded, False otherwise
         """
@@ -160,18 +158,18 @@ class AppInitializer:
             return self._initialize_first_run()
         else:
             return self._reinitialize_existing()
-    
+
     def _initialize_first_run(self) -> bool:
         """
         First-time initialization: create dockwidget and set up everything.
-        
+
         Returns:
             bool: True if initialization succeeded
         """
         # Get project reference
         factory = get_qgis_factory()
         project = self._get_project() if self._get_project else factory.get_project()
-        
+
         # Cleanup corrupted filters
         if self._cleanup_corrupted_layer_filters:
             from ...infrastructure.field_utils import cleanup_corrupted_layer_filters
@@ -180,66 +178,66 @@ class AppInitializer:
                 show_warning(
                     f"Cleared corrupted filters from {len(cleared_layers)} layer(s). Please re-apply your filters."
                 )
-        
+
         # Get initial layers
         init_layers = None
         if self._filter_usable_layers:
             all_layers = list(project.mapLayers().values())
             init_layers = self._filter_usable_layers(all_layers)
             logger.info(f"FilterMate App.run(): Found {len(init_layers)} layers in project")
-        
+
         # Initialize database
         logger.info("FilterMate App.run(): Starting init_filterMate_db()")
         if self._init_filtermate_db:
             self._init_filtermate_db()
         logger.info("FilterMate App.run(): init_filterMate_db() complete")
-        
+
         # Database health check
         if not self._perform_database_health_check():
             return False
-        
+
         # Initialize UI profile based on screen resolution
         self._initialize_ui_profile()
-        
+
         # Create dockwidget
         if not self._create_dockwidget():
             return False
-        
+
         # Connect dockwidget to widget initialization signals
         self._connect_widget_initialization_signals()
-        
+
         # Force retranslation
         self._retranslate_ui()
-        
+
         # Get dock position and show dockwidget
         dock_position = self._get_dock_position() if self._get_dock_position else 2  # Qt.LeftDockWidgetArea
         iface_obj = self._get_iface()
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
-        
+
         if dockwidget:
             iface_obj.addDockWidget(dock_position, dockwidget)
             dockwidget.show()
             logger.info(f"FilterMate App.run(): DockWidget shown at position {dock_position}")
-        
+
         # Process existing layers with retry mechanism
         if init_layers is not None and len(init_layers) > 0:
             self._process_initial_layers(init_layers)
         else:
             logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
             show_info("Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin.")
-        
+
         # Connect layer store signals
         self._connect_layer_store_signals()
-        
+
         # Connect dockwidget signals
         self._connect_dockwidget_signals()
-        
+
         return True
-    
+
     def _reinitialize_existing(self) -> bool:
         """
         Reinitialize existing dockwidget: show it and refresh layers.
-        
+
         Returns:
             bool: True if reinitialization succeeded
         """
@@ -247,9 +245,9 @@ class AppInitializer:
         if not dockwidget:
             logger.warning("FilterMate: Dockwidget is None during reinit")
             return False
-        
+
         logger.info("FilterMate: Dockwidget already exists, showing and refreshing layers")
-        
+
         # Update project reference
         from ...config.config import init_env_vars, ENV_VARS
         init_env_vars()
@@ -258,27 +256,27 @@ class AppInitializer:
         map_layer_store = project.layerStore()
         if self._set_map_layer_store:
             self._set_map_layer_store(map_layer_store)
-        
+
         # Retranslate UI
         self._retranslate_ui()
-        
+
         # Make sure the dockwidget is visible
         if not dockwidget.isVisible():
             dockwidget.show()
-        
+
         # Check for new layers
         self._refresh_layers_if_needed(project)
-        
+
         # Reconnect signals if needed
         self._connect_layer_store_signals()
         self._connect_dockwidget_signals()
-        
+
         return True
-    
+
     def _perform_database_health_check(self) -> bool:
         """
         Verify database is accessible.
-        
+
         Returns:
             bool: True if database is healthy
         """
@@ -286,7 +284,7 @@ class AppInitializer:
             if not self._get_spatialite_connection:
                 logger.warning("No database connection callback available")
                 return True  # Continue anyway
-            
+
             db_conn = self._get_spatialite_connection()
             if db_conn is None:
                 logger.error("Database health check failed: Cannot connect to Spatialite database")
@@ -306,7 +304,7 @@ class AppInitializer:
                 f"Erreur lors de la vérification de la base de données: {str(db_err)}"
             )
             return False
-    
+
     def _initialize_ui_profile(self):
         """Initialize UI profile based on screen resolution."""
         try:
@@ -315,7 +313,7 @@ class AppInitializer:
                 screen_geometry = screen.geometry()
                 screen_width = screen_geometry.width()
                 screen_height = screen_geometry.height()
-                
+
                 # v4.0.2 FIX: Activate NORMAL mode for 1080p and above
                 # COMPACT: Small screens (< 1920x1080) - laptops, tablets
                 # NORMAL: Standard screens (≥ 1920x1080) - desktops, large laptops
@@ -334,38 +332,38 @@ class AppInitializer:
         except Exception as e:
             logger.error(f"FilterMate: Error detecting screen resolution: {e}")
             UIConfig.set_profile(DisplayProfile.NORMAL)  # Fail-safe: NORMAL for desktop QGIS
-    
+
     def _create_dockwidget(self) -> bool:
         """
         Create the FilterMateDockWidget.
-        
+
         Returns:
             bool: True if creation succeeded
         """
         try:
             from ...filter_mate_dockwidget import FilterMateDockWidget
-            
+
             project_layers = self._get_project_layers() if self._get_project_layers else {}
             plugin_dir = self._get_plugin_dir() if self._get_plugin_dir else ""
             config_data = self._get_config_data() if self._get_config_data else {}
             project = self._get_project() if self._get_project else QgsProject.instance()
-            
+
             logger.info("FilterMate App.run(): Creating FilterMateDockWidget")
             dockwidget = FilterMateDockWidget(project_layers, plugin_dir, config_data, project)
             logger.info("FilterMate App.run(): FilterMateDockWidget created")
-            
+
             if self._set_dockwidget:
                 self._set_dockwidget(dockwidget)
-            
+
             # Store reference to app in dockwidget for session management
             # Note: This creates a weak circular reference but is necessary for some features
             # dockwidget._app_ref = self (cannot do here since this is a service, not the app)
-            
+
             # Pass favorites manager to dockwidget and update FavoritesController
             favorites_manager = self._get_favorites_manager() if self._get_favorites_manager else None
             if favorites_manager:
                 dockwidget._favorites_manager = favorites_manager
-                
+
                 # CRITICAL FIX 2026-01-19: Update FavoritesController with the correctly initialized manager
                 # The controller was setup in dockwidget_widgets_configuration() BEFORE we could
                 # attach the favorites_manager, so it may have created its own uninitialized instance
@@ -388,39 +386,39 @@ class AppInitializer:
                         # Trigger initial UI update with loaded favorites
                         controller.update_indicator()
                         logger.info(f"✓ FavoritesController synchronized (fallback) ({favorites_manager.count} favorites)")
-                
+
                 if hasattr(dockwidget, '_update_favorite_indicator'):
                     dockwidget._update_favorite_indicator()
                 logger.debug("FavoritesManager attached to DockWidget")
-            
+
             return True
         except Exception as e:
             logger.error(f"Failed to create dockwidget: {e}", exc_info=True)
             return False
-    
+
     def _connect_widget_initialization_signals(self):
         """Connect signals for widget initialization synchronization."""
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         if not dockwidget:
             return
-        
+
         # Connect to widgetsInitialized signal
         if self._on_widgets_initialized:
             dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to _on_widgets_initialized")
-        
+
         # v4.1: Also connect to TaskOrchestrator if available
         task_orchestrator = self._get_task_orchestrator() if self._get_task_orchestrator else None
         if task_orchestrator is not None:
             dockwidget.widgetsInitialized.connect(task_orchestrator.on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to TaskOrchestrator")
-        
-        # v4.1.4: REMOVED - projectLayersReady signal is now connected ONLY in 
+
+        # v4.1.4: REMOVED - projectLayersReady signal is now connected ONLY in
         # ui/controllers/integration.py to avoid duplicate handler execution.
         # The ControllerIntegration._on_project_layers_ready() method properly
         # delegates to ExportingController.refresh_layers() and LayerSyncController.on_layers_ready()
         # See: integration.py line 406 and line 719 for the unified handler.
-        
+
         # CRITICAL FIX: Signal may have been emitted BEFORE connection
         if hasattr(dockwidget, 'widgets_initialized') and dockwidget.widgets_initialized:
             logger.info("Widgets already initialized before signal connection - syncing state")
@@ -428,13 +426,13 @@ class AppInitializer:
                 self._on_widgets_initialized()
             if task_orchestrator is not None:
                 task_orchestrator.on_widgets_initialized()
-    
+
     def _retranslate_ui(self):
         """Force retranslation to ensure tooltips/text use current translator."""
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         if not dockwidget:
             return
-        
+
         try:
             if hasattr(dockwidget, 'retranslateUi'):
                 dockwidget.retranslateUi(dockwidget)
@@ -444,11 +442,11 @@ class AppInitializer:
                 logger.info("FilterMate: Dynamic tooltips refreshed with active locale")
         except Exception as e:
             logger.warning(f"FilterMate: Failed to retranslate DockWidget UI: {e}")
-    
+
     def _process_initial_layers(self, init_layers: List[QgsVectorLayer]):
         """
         Process existing layers with retry mechanism.
-        
+
         Args:
             init_layers: List of layers to process
         """
@@ -457,9 +455,9 @@ class AppInitializer:
             """Wait for widgets to be fully initialized before adding layers."""
             max_retries = 10  # Max 3 seconds (10 * 300ms)
             retry_count = 0
-            
+
             dockwidget = self._get_dockwidget() if self._get_dockwidget else None
-            
+
             def check_and_add():
                 nonlocal retry_count
                 if dockwidget and dockwidget.widgets_initialized:
@@ -474,29 +472,29 @@ class AppInitializer:
                     logger.warning("Widget initialization timeout, forcing add_layers anyway")
                     if self._manage_task:
                         self._manage_task('add_layers', layers_to_add)
-            
+
             check_and_add()
-        
+
         # Use weakref to prevent access violations
         QTimer.singleShot(600, lambda: wait_for_widget_initialization(init_layers))
-        
+
         # Safety timer to ensure UI is enabled
         QTimer.singleShot(5000, self._ensure_ui_enabled_after_startup)
-    
+
     def _ensure_ui_enabled_after_startup(self):
         """
         Safety check to ensure UI is enabled after startup.
-        
+
         This prevents UI from being left in disabled/grey state on startup.
         """
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         project_layers = self._get_project_layers() if self._get_project_layers else {}
         project = self._get_project() if self._get_project else QgsProject.instance()
-        
+
         if not dockwidget:
             logger.warning("Safety timer: Dockwidget is None, cannot check UI state")
             return
-        
+
         # Check if layers were successfully loaded
         if len(project_layers) > 0:
             logger.info(f"Safety timer: Task completed successfully with {len(project_layers)} layers, forcing UI refresh")
@@ -506,20 +504,20 @@ class AppInitializer:
             # Task may have failed - try recovery
             logger.warning("Safety timer: PROJECT_LAYERS still empty after 5s, attempting recovery")
             self._attempt_layer_recovery()
-    
+
     def _attempt_layer_recovery(self):
         """Attempt to recover from failed layer loading."""
         project = self._get_project() if self._get_project else QgsProject.instance()
         all_layers = list(project.mapLayers().values())
-        
+
         logger.warning(f"Recovery: Total layers in project: {len(all_layers)}")
-        
+
         if not self._filter_usable_layers:
             logger.error("Recovery: No filter_usable_layers callback available")
             return
-        
+
         current_layers = self._filter_usable_layers(all_layers)
-        
+
         # Include ALL valid vector layers
         all_valid_vector_layers = [
             l for l in all_layers
@@ -528,14 +526,14 @@ class AppInitializer:
             and not sip.isdeleted(l)
         ]
         missed_layers = [l for l in all_valid_vector_layers if l not in current_layers]
-        
+
         if missed_layers:
             logger.warning(f"Recovery: Found {len(missed_layers)} valid vector layers that were filtered - forcing inclusion")
             for layer in missed_layers:
                 provider = layer.providerType()
                 logger.info(f"  Force-adding missed layer: {layer.name()} (provider={provider})")
             current_layers.extend(missed_layers)
-        
+
         if len(current_layers) > 0:
             logger.info(f"Recovery: Found {len(current_layers)} usable layers, retrying add_layers")
             if self._manage_task:
@@ -548,23 +546,23 @@ class AppInitializer:
             dockwidget = self._get_dockwidget() if self._get_dockwidget else None
             if dockwidget and hasattr(dockwidget, 'backend_indicator_label') and dockwidget.backend_indicator_label:
                 dockwidget.backend_indicator_label.setText("...")
-    
+
     def _ensure_ui_enabled_final(self, retry_count=0):
         """
         Final safety check after recovery attempt.
-        
+
         Args:
             retry_count: Number of retries already attempted (max 5)
         """
         MAX_RETRIES = 5
-        
+
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         project_layers = self._get_project_layers() if self._get_project_layers else {}
         project = self._get_project() if self._get_project else QgsProject.instance()
-        
+
         if not dockwidget:
             return
-        
+
         if len(project_layers) > 0:
             logger.info("Final safety timer: Layers loaded, refreshing UI")
             if hasattr(dockwidget, 'get_project_layers_from_app'):
@@ -578,24 +576,24 @@ class AppInitializer:
                 "FilterMate",
                 "Échec du chargement des couches. Utilisez F5 pour forcer le rechargement."
             )
-    
+
     def _refresh_layers_if_needed(self, project: QgsProject):
         """
         Check for new layers and refresh if needed.
-        
+
         Args:
             project: QgsProject instance
         """
         project_layers = self._get_project_layers() if self._get_project_layers else {}
         current_project_layers = list(project.mapLayers().values())
-        
+
         if not current_project_layers:
             return
-        
+
         # Filter to get only layers not already in PROJECT_LAYERS
         new_layers = [layer for layer in current_project_layers
                      if layer.id() not in project_layers]
-        
+
         if new_layers:
             logger.info(f"FilterMate: Found {len(new_layers)} new layers to add")
             if self._filter_usable_layers and self._manage_task:
@@ -608,11 +606,11 @@ class AppInitializer:
                 if self._filter_usable_layers and self._manage_task:
                     usable_layers = self._filter_usable_layers(current_project_layers)
                     QTimer.singleShot(300, lambda: self._safe_add_layers(usable_layers))
-    
+
     def _safe_add_layers(self, usable_layers: List[QgsVectorLayer]):
         """
         Safely add layers, filtering out deleted ones.
-        
+
         Args:
             usable_layers: List of layers to add
         """
@@ -620,53 +618,53 @@ class AppInitializer:
         still_valid = [l for l in usable_layers if l is not None and not sip.isdeleted(l)]
         if still_valid and self._manage_task:
             self._manage_task('add_layers', still_valid)
-    
+
     def _connect_layer_store_signals(self):
         """Connect layer store signals for layer management."""
         signals_connected = self._get_signals_connected() if self._get_signals_connected else False
-        
+
         if signals_connected:
             return  # Already connected
-        
+
         map_layer_store = self._get_map_layer_store() if self._get_map_layer_store else None
         if not map_layer_store:
             logger.warning("Cannot connect layer store signals: MapLayerStore is None")
             return
-        
+
         logger.debug("Connecting layer store signals (layersAdded, layersWillBeRemoved...)")
-        
+
         # Use layersAdded (batch) instead of layerWasAdded (per layer)
         if self._on_layers_added and self._manage_task:
             map_layer_store.layersAdded.connect(self._on_layers_added)
             map_layer_store.layersWillBeRemoved.connect(lambda layers: self._manage_task('remove_layers', layers))
             map_layer_store.allLayersRemoved.connect(lambda: self._manage_task('remove_all_layers'))
-        
+
         if self._set_signals_connected:
             self._set_signals_connected(True)
         logger.debug("Layer store signals connected successfully")
-    
+
     def _connect_dockwidget_signals(self):
         """Connect dockwidget signals for task management."""
         dockwidget_signals_connected = self._get_dockwidget_signals_connected() if self._get_dockwidget_signals_connected else False
-        
+
         if dockwidget_signals_connected:
             return  # Already connected
-        
+
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         project = self._get_project() if self._get_project else QgsProject.instance()
-        
+
         if not dockwidget:
             logger.warning("Cannot connect dockwidget signals: dockwidget is None")
             return
-        
+
         # Connect task launching signal
         if self._manage_task:
             dockwidget.launchingTask.connect(lambda x: self._manage_task(x))
-        
+
         # Connect current layer changed signal
         if self._update_undo_redo_buttons:
             dockwidget.currentLayerChanged.connect(self._update_undo_redo_buttons)
-        
+
         # Connect variable management signals
         if self._save_variables_from_layer and self._remove_variables_from_layer:
             dockwidget.resettingLayerVariableOnError.connect(
@@ -678,24 +676,24 @@ class AppInitializer:
             dockwidget.resettingLayerVariable.connect(
                 lambda layer, properties: self._safe_layer_operation(layer, properties, self._remove_variables_from_layer)
             )
-        
+
         # Connect project variables signal
         if self._save_project_variables:
             dockwidget.settingProjectVariables.connect(self._save_project_variables)
             project.fileNameChanged.connect(lambda: self._save_project_variables())
-        
+
         if self._set_dockwidget_signals_connected:
             self._set_dockwidget_signals_connected(True)
-        
+
         logger.debug("Dockwidget signals connected successfully")
-    
+
     def _safe_layer_operation(self, layer: QgsVectorLayer, properties: Any, operation: Callable):
         """
         Safely execute a layer operation by deferring to Qt event loop.
-        
+
         CRASH FIX: Signal handlers receive layer objects that may become invalid.
         This wrapper defers execution to let Qt stabilize.
-        
+
         Args:
             layer: Layer object from signal (may be stale)
             properties: Properties to pass to operation
@@ -703,19 +701,19 @@ class AppInitializer:
         """
         if not layer:
             return
-        
+
         # Extract layer ID immediately
         layer_id = layer.id()
-        
+
         def deferred_operation():
             # Re-fetch fresh layer reference
             project = self._get_project() if self._get_project else QgsProject.instance()
             fresh_layer = project.mapLayer(layer_id)
-            
+
             if fresh_layer and fresh_layer.isValid() and not sip.isdeleted(fresh_layer):
                 operation(fresh_layer, properties)
             else:
                 logger.warning(f"Layer {layer_id} no longer valid in deferred operation")
-        
+
         # Defer to event loop
         QTimer.singleShot(0, deferred_operation)

@@ -17,26 +17,26 @@ Ports:
 - HistoryRepositoryPort: Interface for history persistence
 - CachePort: Interface for caching services
 """
-from .backend_port import (
+from .backend_port import (  # noqa: F401
     BackendPort,
     BackendInfo,
     BackendCapability,
 )
-from .repository_port import (
+from .repository_port import (  # noqa: F401
     RepositoryPort,
     LayerRepositoryPort,
     FavoritesRepositoryPort,
     ConfigRepositoryPort,
     HistoryRepositoryPort,
 )
-from .cache_port import (
+from .cache_port import (  # noqa: F401
     CachePort,
     CacheStats,
     CacheEntry,
     ResultCachePort,
     GeometryCachePort,
 )
-from .filter_executor_port import (
+from .filter_executor_port import (  # noqa: F401
     FilterExecutorPort,
     FilterExecutionResult,
     FilterStatus,
@@ -46,12 +46,12 @@ from .filter_executor_port import (
 )
 
 # Geometric Filter Port (v4.1.0 - legacy API compatibility)
-from .geometric_filter_port import (
+from .geometric_filter_port import (  # noqa: F401
     GeometricFilterPort,
 )
 
 # Backend Services Facade (EPIC-1 Phase E13)
-from .backend_services import (
+from .backend_services import (  # noqa: F401
     BackendServices,
     get_backend_services,
     get_postgresql_available,
@@ -59,7 +59,7 @@ from .backend_services import (
 )
 
 # Materialized View Port (v4.2 - unified MV/temp table interface)
-from .materialized_view_port import (
+from .materialized_view_port import (  # noqa: F401
     MaterializedViewPort,
     ViewType,
     ViewInfo,

@@ -16,32 +16,32 @@ Created: January 2026 (EPIC-1 Phase E3)
 """
 
 # Expression builders
-from .expression_builder import (
+from .expression_builder import (  # noqa: F401
     build_feature_id_expression,
     build_combined_filter_expression,
 )
 
 # Expression sanitizers
-from .expression_sanitizer import (
+from .expression_sanitizer import (  # noqa: F401
     sanitize_subset_string,
     optimize_duplicate_in_clauses,
 )
 
 # PK formatters
-from .pk_formatter import (
+from .pk_formatter import (  # noqa: F401
     is_pk_numeric,
     format_pk_values_for_sql,
 )
 
 # Expression combiners
-from .expression_combiner import (
+from .expression_combiner import (  # noqa: F401
     apply_combine_operator,
     combine_with_old_subset,
     CombineOperator,
 )
 
 # Source filter builders (Phase E5)
-from .source_filter_builder import (
+from .source_filter_builder import (  # noqa: F401
     should_skip_source_subset,
     get_primary_key_field,
     get_source_table_name,

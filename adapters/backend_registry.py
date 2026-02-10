@@ -9,17 +9,15 @@ The registry is instantiated in filter_mate_app.py and injected into
 FilterEngineTask, eliminating direct imports from core/ to adapters/.
 """
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from ..core.ports.filter_executor_port import (
     FilterExecutorPort,
-    FilterExecutionResult,
-    FilterStatus,
     BackendRegistryPort,
 )
 
 if TYPE_CHECKING:
-    from qgis.core import QgsVectorLayer
+    pass
 
 logger = logging.getLogger('FilterMate')
 
@@ -27,25 +25,25 @@ logger = logging.getLogger('FilterMate')
 class BackendRegistry(BackendRegistryPort):
     """
     Central registry for filter backends.
-    
+
     Provides backend selection based on layer type without requiring
     core/ to know about concrete backend implementations.
-    
+
     Usage:
         # In filter_mate_app.py (initialization)
         registry = BackendRegistry()
-        
+
         # In FilterEngineTask (usage)
         executor = self.backend_registry.get_executor(layer_info)
         result = executor.execute_filter(...)
     """
-    
+
     def __init__(self):
         """Initialize the backend registry with available backends."""
         self._executors: Dict[str, FilterExecutorPort] = {}
         self._postgresql_available = False
         self._initialize_backends()
-    
+
     def _initialize_backends(self):
         """Initialize available backends lazily."""
         # Check PostgreSQL availability
@@ -55,19 +53,19 @@ class BackendRegistry(BackendRegistryPort):
         except ImportError:
             self._postgresql_available = False
             logger.debug("PostgreSQL backend not available (psycopg2 not installed)")
-    
+
     def get_executor(self, layer_info: Dict[str, Any]) -> FilterExecutorPort:
         """
         Get appropriate filter executor for a layer.
-        
+
         Args:
             layer_info: Layer metadata including 'layer_provider_type'
-            
+
         Returns:
             FilterExecutorPort implementation suitable for the layer
         """
         provider_type = layer_info.get('layer_provider_type', 'unknown')
-        
+
         # Map provider types to backends
         if provider_type == 'postgresql' and self._postgresql_available:
             return self._get_postgresql_executor()
@@ -78,7 +76,7 @@ class BackendRegistry(BackendRegistryPort):
         else:
             # Default to OGR (universal fallback)
             return self._get_ogr_executor()
-    
+
     def get_executor_by_name(self, backend_name: str) -> Optional[FilterExecutorPort]:
         """Get a specific backend by name."""
         if backend_name == 'postgresql':
@@ -92,7 +90,7 @@ class BackendRegistry(BackendRegistryPort):
         elif backend_name == 'memory':
             return self._get_memory_executor()
         return None
-    
+
     def is_available(self, backend_name: str) -> bool:
         """Check if a specific backend is available."""
         if backend_name == 'postgresql':
@@ -100,12 +98,12 @@ class BackendRegistry(BackendRegistryPort):
         elif backend_name in ('spatialite', 'ogr', 'memory'):
             return True
         return False
-    
+
     @property
     def postgresql_available(self) -> bool:
         """Return True if PostgreSQL backend is available."""
         return self._postgresql_available
-    
+
     # Lazy loading of backend executors
     def _get_postgresql_executor(self) -> FilterExecutorPort:
         """Get or create PostgreSQL executor."""
@@ -113,21 +111,21 @@ class BackendRegistry(BackendRegistryPort):
             from .backends.postgresql import PostgreSQLFilterExecutor
             self._executors['postgresql'] = PostgreSQLFilterExecutor()
         return self._executors['postgresql']
-    
+
     def _get_spatialite_executor(self) -> FilterExecutorPort:
         """Get or create Spatialite executor."""
         if 'spatialite' not in self._executors:
             from .backends.spatialite import SpatialiteFilterExecutor
             self._executors['spatialite'] = SpatialiteFilterExecutor()
         return self._executors['spatialite']
-    
+
     def _get_ogr_executor(self) -> FilterExecutorPort:
         """Get or create OGR executor."""
         if 'ogr' not in self._executors:
             from .backends.ogr import OGRFilterExecutor
             self._executors['ogr'] = OGRFilterExecutor()
         return self._executors['ogr']
-    
+
     def _get_memory_executor(self) -> FilterExecutorPort:
         """Get or create Memory executor."""
         if 'memory' not in self._executors:
@@ -135,7 +133,7 @@ class BackendRegistry(BackendRegistryPort):
             from .backends.ogr import OGRFilterExecutor
             self._executors['memory'] = OGRFilterExecutor()
         return self._executors['memory']
-    
+
     def cleanup_all(self) -> None:
         """Clean up all backend resources."""
         for name, executor in self._executors.items():
@@ -148,26 +146,26 @@ class BackendRegistry(BackendRegistryPort):
     def update_project_context(self, layers: list) -> None:
         """
         Update backend selection context based on project layers.
-        
+
         When all project layers are PostgreSQL and the configuration enables
         prefer_native_for_postgresql_project, this ensures PostgreSQL backend
         is used even for small datasets (avoids inconsistent backend switching).
-        
+
         Args:
             layers: List of QgsVectorLayer objects in the project
         """
         # Check if all layers are PostgreSQL
         all_postgresql = self._check_all_layers_postgresql(layers)
-        
+
         if all_postgresql and self._postgresql_available:
             logger.info(
                 "All project layers are PostgreSQL - backend will use native "
                 "PostgreSQL even for small datasets"
             )
-        
+
         # Store context for use by executors
         self._all_layers_postgresql = all_postgresql
-        
+
         # v4.1.1: Also update BackendFactory singleton if it exists
         # This ensures BackendFactory.get_backend() also respects the context
         try:
@@ -179,29 +177,29 @@ class BackendRegistry(BackendRegistryPort):
             pass
         except Exception as e:
             logger.warning(f"Could not update BackendFactory: {e}")
-    
+
     def _check_all_layers_postgresql(self, layers: list) -> bool:
         """
         Check if all provided layers are PostgreSQL.
-        
+
         Args:
             layers: List of QgsVectorLayer objects
-            
+
         Returns:
             True if all layers are PostgreSQL provider type
         """
         if not layers:
             return False
-        
+
         for layer in layers:
             if layer is None:
                 continue
             provider_type = layer.providerType() if hasattr(layer, 'providerType') else None
             if provider_type != 'postgres':
                 return False
-        
+
         return True
-    
+
     @property
     def all_layers_postgresql(self) -> bool:
         """Return whether all project layers are PostgreSQL."""
@@ -215,7 +213,7 @@ _registry_instance: Optional[BackendRegistry] = None
 def get_backend_registry() -> BackendRegistry:
     """
     Get the global backend registry instance.
-    
+
     This is a convenience function for code that cannot use DI.
     Prefer injecting BackendRegistry directly when possible.
     """

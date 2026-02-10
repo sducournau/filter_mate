@@ -18,13 +18,12 @@ Usage:
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Optional
 
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsGeometry,
-    QgsPointXY,
     QgsProject,
     QgsUnitTypes
 )
@@ -38,10 +37,10 @@ DEFAULT_METRIC_CRS = "EPSG:3857"
 def is_geographic_crs(crs: Optional[QgsCoordinateReferenceSystem]) -> bool:
     """
     Check if CRS uses geographic coordinates (degrees).
-    
+
     Args:
         crs: Coordinate reference system to check
-        
+
     Returns:
         bool: True if CRS is geographic (lat/lon)
     """
@@ -53,16 +52,16 @@ def is_geographic_crs(crs: Optional[QgsCoordinateReferenceSystem]) -> bool:
 def is_metric_crs(crs: Optional[QgsCoordinateReferenceSystem]) -> bool:
     """
     Check if CRS uses metric units (meters, km).
-    
+
     Args:
         crs: Coordinate reference system to check
-        
+
     Returns:
         bool: True if CRS uses metric units
     """
     if crs is None or not crs.isValid():
         return False
-    
+
     units = crs.mapUnits()
     return units in (
         QgsUnitTypes.DistanceMeters,
@@ -75,16 +74,16 @@ def is_metric_crs(crs: Optional[QgsCoordinateReferenceSystem]) -> bool:
 def get_crs_units(crs: Optional[QgsCoordinateReferenceSystem]) -> str:
     """
     Get human-readable unit name for CRS.
-    
+
     Args:
         crs: Coordinate reference system
-        
+
     Returns:
         str: Unit name (e.g., "meters", "degrees")
     """
     if crs is None or not crs.isValid():
         return "unknown"
-    
+
     units = crs.mapUnits()
     unit_names = {
         QgsUnitTypes.DistanceMeters: "meters",
@@ -106,64 +105,64 @@ def get_optimal_metric_crs(
 ) -> QgsCoordinateReferenceSystem:
     """
     Get optimal metric CRS for a geometry or location.
-    
+
     Attempts to select an appropriate UTM zone based on geometry centroid.
     Falls back to Web Mercator (EPSG:3857) if UTM cannot be determined.
-    
+
     Args:
         geometry: Optional geometry to determine location
         source_crs: CRS of the geometry (needed for reprojection)
-        
+
     Returns:
         QgsCoordinateReferenceSystem: Metric CRS (UTM zone or Web Mercator)
     """
     # Default fallback
     default_crs = QgsCoordinateReferenceSystem(DEFAULT_METRIC_CRS)
-    
+
     if geometry is None or geometry.isEmpty():
         return default_crs
-    
+
     try:
         # Get centroid in WGS84
         centroid = geometry.centroid().asPoint()
-        
+
         # If source CRS is provided and not WGS84, transform centroid
         if source_crs is not None and source_crs.isValid():
             wgs84 = QgsCoordinateReferenceSystem("EPSG:4326")
             if source_crs.authid() != "EPSG:4326":
                 transform = QgsCoordinateTransform(source_crs, wgs84, QgsProject.instance())
                 centroid = transform.transform(centroid)
-        
+
         lon = centroid.x()
         lat = centroid.y()
-        
+
         # Calculate UTM zone
         utm_zone = int((lon + 180) / 6) + 1
-        
+
         # Determine hemisphere
         if lat >= 0:
             epsg_code = 32600 + utm_zone  # Northern hemisphere
         else:
             epsg_code = 32700 + utm_zone  # Southern hemisphere
-        
+
         utm_crs = QgsCoordinateReferenceSystem(f"EPSG:{epsg_code}")
         if utm_crs.isValid():
             logger.debug(f"Selected UTM zone: EPSG:{epsg_code}")
             return utm_crs
-            
+
     except Exception as e:
         logger.warning(f"Could not determine optimal UTM zone: {e}")
-    
+
     return default_crs
 
 
 def get_layer_crs_info(layer) -> dict:
     """
     Get CRS information for a layer.
-    
+
     Args:
         layer: QgsVectorLayer or QgsRasterLayer
-        
+
     Returns:
         dict: CRS info with keys: authid, is_geographic, is_metric, units
     """
@@ -189,10 +188,10 @@ def get_layer_crs_info(layer) -> dict:
 class CRSTransformer:
     """
     Utility class for CRS transformations.
-    
+
     Caches transforms for efficiency when processing many features.
     """
-    
+
     def __init__(
         self,
         source_crs: QgsCoordinateReferenceSystem,
@@ -201,7 +200,7 @@ class CRSTransformer:
     ):
         """
         Initialize transformer.
-        
+
         Args:
             source_crs: Source coordinate reference system
             dest_crs: Destination coordinate reference system
@@ -210,27 +209,27 @@ class CRSTransformer:
         self.source_crs = source_crs
         self.dest_crs = dest_crs
         self.project = project or QgsProject.instance()
-        
+
         self._forward_transform = QgsCoordinateTransform(
             source_crs, dest_crs, self.project
         )
         self._reverse_transform = QgsCoordinateTransform(
             dest_crs, source_crs, self.project
         )
-    
+
     def transform(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
         """
         Transform geometry from source to destination CRS.
-        
+
         Args:
             geometry: Geometry to transform
-            
+
         Returns:
             QgsGeometry or None if transformation fails
         """
         if geometry is None or geometry.isEmpty():
             return None
-            
+
         try:
             result = QgsGeometry(geometry)
             result.transform(self._forward_transform)
@@ -238,20 +237,20 @@ class CRSTransformer:
         except Exception as e:
             logger.error(f"CRS transformation failed: {e}")
             return None
-    
+
     def transform_back(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
         """
         Transform geometry from destination back to source CRS.
-        
+
         Args:
             geometry: Geometry to transform back
-            
+
         Returns:
             QgsGeometry or None if transformation fails
         """
         if geometry is None or geometry.isEmpty():
             return None
-            
+
         try:
             result = QgsGeometry(geometry)
             result.transform(self._reverse_transform)
@@ -269,39 +268,39 @@ def create_metric_buffer(
 ) -> Optional[QgsGeometry]:
     """
     Create buffer with metric distance, auto-handling CRS.
-    
+
     Args:
         geometry: Geometry to buffer
         distance_meters: Buffer distance in meters
         source_crs: CRS of the geometry
         segments: Number of segments for round corners
-        
+
     Returns:
         QgsGeometry buffer in original CRS or None
     """
     if geometry is None or geometry.isEmpty():
         return None
-    
+
     try:
         if is_metric_crs(source_crs):
             # Already metric, buffer directly
             return geometry.buffer(distance_meters, segments)
-        
+
         # Need to transform to metric CRS
         metric_crs = get_optimal_metric_crs(geometry, source_crs)
         transformer = CRSTransformer(source_crs, metric_crs)
-        
+
         # Transform -> buffer -> transform back
         projected = transformer.transform(geometry)
         if projected is None:
             return None
-            
+
         buffered = projected.buffer(distance_meters, segments)
         if buffered is None or buffered.isEmpty():
             return None
-            
+
         return transformer.transform_back(buffered)
-        
+
     except Exception as e:
         logger.error(f"create_metric_buffer failed: {e}")
         return None

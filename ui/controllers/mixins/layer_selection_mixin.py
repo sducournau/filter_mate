@@ -21,7 +21,7 @@ except ImportError:
 
 # Import centralized provider detection (v4.0.4 - eliminate duplication)
 try:
-    from ....infrastructure.utils import detect_provider_type, ProviderType
+    from ....infrastructure.utils import detect_provider_type
     _HAS_PROVIDER_UTILS = True
 except ImportError:
     _HAS_PROVIDER_UTILS = False
@@ -32,6 +32,7 @@ try:
     _HAS_VALIDATION_UTILS = True
 except ImportError:
     _HAS_VALIDATION_UTILS = False
+
 
 class LayerSelectionMixin:
     """
@@ -99,23 +100,23 @@ class LayerSelectionMixin:
         # v4.0.10: Delegate to centralized validation (includes SIP check)
         if _HAS_VALIDATION_UTILS:
             return _is_layer_valid_util(layer)
-        
+
         # Fallback for testing or import issues
         if layer is None:
             return False
-        
+
         if not QGIS_AVAILABLE:
             # For testing, just check it's not None
             return layer is not None
-        
+
         # Check it's a QgsVectorLayer
         if not isinstance(layer, QgsVectorLayer):
             return False
-        
+
         # Check layer is valid
         if not layer.isValid():
             return False
-        
+
         return True
 
     def get_layer_provider_type(self, layer: QgsVectorLayer) -> str:
@@ -139,16 +140,16 @@ class LayerSelectionMixin:
         if _HAS_PROVIDER_UTILS:
             provider_type = detect_provider_type(layer)
             return str(provider_type) if provider_type else 'unknown'
-        
+
         # Fallback to local mapping
         if layer is None:
             return 'unknown'
-        
+
         try:
             provider = layer.providerType()
         except (AttributeError, RuntimeError):
             return 'unknown'
-        
+
         return self.PROVIDER_TYPE_MAP.get(provider, 'unknown')
 
     def get_all_vector_layers(self) -> List[QgsVectorLayer]:
@@ -160,15 +161,15 @@ class LayerSelectionMixin:
         """
         if not QGIS_AVAILABLE:
             return []
-        
+
         try:
             project = QgsProject.instance()
             layers = []
-            
+
             for layer in project.mapLayers().values():
                 if layer.type() == QgsMapLayerType.VectorLayer:
                     layers.append(layer)
-            
+
             return layers
         except (RuntimeError, AttributeError):
             return []
@@ -185,14 +186,14 @@ class LayerSelectionMixin:
         """
         if not layer_id:
             return None
-        
+
         if not QGIS_AVAILABLE:
             return None
-        
+
         try:
             project = QgsProject.instance()
             layer = project.mapLayer(layer_id)
-            
+
             if isinstance(layer, QgsVectorLayer):
                 return layer
             return None
@@ -211,14 +212,14 @@ class LayerSelectionMixin:
         """
         if not name:
             return None
-        
+
         if not QGIS_AVAILABLE:
             return None
-        
+
         try:
             project = QgsProject.instance()
             layers = project.mapLayersByName(name)
-            
+
             for layer in layers:
                 if isinstance(layer, QgsVectorLayer):
                     return layer
@@ -255,11 +256,11 @@ class LayerSelectionMixin:
                 'is_valid': False,
                 'has_geometry': False
             }
-        
+
         try:
             geometry_type = self._get_geometry_type_name(layer)
             has_geometry = geometry_type not in ('NoGeometry', 'unknown')
-            
+
             return {
                 'id': layer.id(),
                 'name': layer.name(),
@@ -294,10 +295,10 @@ class LayerSelectionMixin:
         """
         if not QGIS_AVAILABLE:
             return 'unknown'
-        
+
         try:
             geom_type = layer.geometryType()
-            
+
             # Map QGIS geometry types to readable names
             type_names = {
                 QgsWkbTypes.PointGeometry: 'Point',
@@ -306,7 +307,7 @@ class LayerSelectionMixin:
                 QgsWkbTypes.UnknownGeometry: 'Unknown',
                 QgsWkbTypes.NullGeometry: 'NoGeometry',
             }
-            
+
             return type_names.get(geom_type, 'unknown')
         except (AttributeError, RuntimeError):
             return 'unknown'
@@ -323,7 +324,7 @@ class LayerSelectionMixin:
         """
         if layer is None:
             return []
-        
+
         try:
             fields = []
             for field in layer.fields():

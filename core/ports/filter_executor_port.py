@@ -27,7 +27,7 @@ class FilterStatus(Enum):
 class FilterExecutionResult:
     """
     Result of a filter execution operation.
-    
+
     Attributes:
         status: Execution status
         feature_ids: List of matching feature IDs
@@ -48,9 +48,9 @@ class FilterExecutionResult:
     error_message: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
-    
+
     @classmethod
-    def success(cls, feature_ids: List[int], expression: str = None, 
+    def success(cls, feature_ids: List[int], expression: str = None,
                 backend: str = "", execution_time: float = 0.0) -> 'FilterExecutionResult':
         """Create a successful result."""
         return cls(
@@ -61,7 +61,7 @@ class FilterExecutionResult:
             execution_time_ms=execution_time,
             backend_used=backend
         )
-    
+
     @classmethod
     def failed(cls, error: str, backend: str = "") -> 'FilterExecutionResult':
         """Create a failed result."""
@@ -70,12 +70,12 @@ class FilterExecutionResult:
             error_message=error,
             backend_used=backend
         )
-    
+
     @classmethod
     def cancelled(cls) -> 'FilterExecutionResult':
         """Create a cancelled result."""
         return cls(status=FilterStatus.CANCELLED)
-    
+
     @classmethod
     def no_results(cls, backend: str = "") -> 'FilterExecutionResult':
         """Create a no-results result."""
@@ -85,20 +85,20 @@ class FilterExecutionResult:
 class FilterExecutorPort(ABC):
     """
     Abstract interface for filter execution.
-    
+
     This port defines the contract for executing spatial and attribute
     filters. Concrete implementations are provided by adapters.
-    
+
     Usage in core/:
         # Instead of:
         #   from adapters.backends.postgresql import PostgreSQLGeometricFilter
         #   backend = PostgreSQLGeometricFilter()
-        
+
         # Use:
         #   executor: FilterExecutorPort = backend_registry.get_executor(layer)
         #   result = executor.execute_filter(params)
     """
-    
+
     @abstractmethod
     def execute_filter(
         self,
@@ -114,7 +114,7 @@ class FilterExecutorPort(ABC):
     ) -> FilterExecutionResult:
         """
         Execute a filter operation.
-        
+
         Args:
             source_layer_info: Source layer metadata dict
             target_layers_info: Target layers metadata list
@@ -125,11 +125,11 @@ class FilterExecutorPort(ABC):
             use_centroids: Use centroids instead of full geometries
             combine_operator: How to combine filters ("AND" or "OR")
             is_canceled_callback: Callback to check if operation is cancelled
-            
+
         Returns:
             FilterExecutionResult with matched features or error
         """
-    
+
     @abstractmethod
     def prepare_source_geometry(
         self,
@@ -140,17 +140,17 @@ class FilterExecutorPort(ABC):
     ) -> Tuple[Any, Optional[str]]:
         """
         Prepare source geometry for spatial filtering.
-        
+
         Args:
             layer_info: Layer metadata dict
             feature_ids: Optional list of specific feature IDs
             buffer_value: Buffer to apply
             use_centroids: Use centroids
-            
+
         Returns:
             Tuple of (geometry_data, error_message)
         """
-    
+
     @abstractmethod
     def apply_subset_string(
         self,
@@ -159,29 +159,29 @@ class FilterExecutorPort(ABC):
     ) -> bool:
         """
         Apply a subset string (filter) to a layer.
-        
+
         Args:
             layer: QGIS vector layer
             expression: Filter expression
-            
+
         Returns:
             True if applied successfully
         """
-    
+
     @abstractmethod
     def cleanup_resources(self) -> None:
         """Clean up any temporary resources (MVs, temp tables, etc.)."""
-    
+
     @property
     @abstractmethod
     def backend_name(self) -> str:
         """Return the name of this backend."""
-    
+
     @property
     @abstractmethod
     def supports_spatial_index(self) -> bool:
         """Return True if backend supports spatial indexing."""
-    
+
     @property
     @abstractmethod
     def supports_materialized_views(self) -> bool:
@@ -191,40 +191,40 @@ class FilterExecutorPort(ABC):
 class BackendRegistryPort(ABC):
     """
     Abstract interface for backend registry.
-    
+
     Provides backend selection based on layer type and capabilities.
     This allows core/ to get appropriate backends without knowing
     the concrete implementations.
     """
-    
+
     @abstractmethod
     def get_executor(self, layer_info: Dict[str, Any]) -> FilterExecutorPort:
         """
         Get appropriate filter executor for a layer.
-        
+
         Args:
             layer_info: Layer metadata including provider_type
-            
+
         Returns:
             FilterExecutorPort implementation suitable for the layer
         """
-    
+
     @abstractmethod
     def get_executor_by_name(self, backend_name: str) -> Optional[FilterExecutorPort]:
         """
         Get a specific backend by name.
-        
+
         Args:
             backend_name: 'postgresql', 'spatialite', 'ogr', 'memory'
-            
+
         Returns:
             FilterExecutorPort or None if not available
         """
-    
+
     @abstractmethod
     def is_available(self, backend_name: str) -> bool:
         """Check if a specific backend is available."""
-    
+
     @property
     @abstractmethod
     def postgresql_available(self) -> bool:
@@ -234,9 +234,11 @@ class BackendRegistryPort(ABC):
 # Protocol for callbacks (type hints without runtime cost)
 class CancellationCallback(Protocol):
     """Protocol for cancellation check callbacks."""
+
     def __call__(self) -> bool: ...
 
 
 class ProgressCallback(Protocol):
     """Protocol for progress update callbacks."""
+
     def __call__(self, progress: float) -> None: ...

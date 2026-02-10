@@ -17,10 +17,19 @@ Author: FilterMate Team
 Date: January 2026
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Optional, List, Dict, Callable
+from typing import TYPE_CHECKING, Optional, List, Dict, Callable
 
 from .base_task import BaseFilterMateTask, TaskResult, TaskStatus
+
+if TYPE_CHECKING:
+    from ....core.domain.filter_expression import FilterExpression
+    from ....core.domain.filter_result import FilterResult
+    from ....core.domain.layer_info import LayerInfo
+    from ....core.services.filter_service import FilterService
+    from ....core.ports.backend_port import BackendPort
 
 logger = logging.getLogger('FilterMate.Tasks.Filter')
 

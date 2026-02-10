@@ -32,7 +32,7 @@ class MultiStepStrategy(Enum):
 class FilterStep:
     """
     Single step in a multi-step filter operation.
-    
+
     Attributes:
         expression: Filter expression for this step
         target_layer_ids: Layers to filter in this step
@@ -49,7 +49,7 @@ class FilterStep:
 class MultiStepRequest:
     """
     Request for multi-step filter operation.
-    
+
     Attributes:
         steps: List of filter steps to execute
         source_layer_id: Initial source layer
@@ -68,7 +68,7 @@ class MultiStepRequest:
 class MultiStepResponse:
     """
     Response from multi-step filter operation.
-    
+
     Attributes:
         step_results: Results for each step
         final_feature_ids: Final set of matching feature IDs
@@ -83,17 +83,17 @@ class MultiStepResponse:
     completed_steps: int
     stopped_early: bool = False
     stop_reason: str = ""
-    
+
     @property
     def is_success(self) -> bool:
         """Check if all completed steps succeeded."""
         return all(r.is_success for r in self.step_results)
-    
+
     @property
     def total_steps(self) -> int:
         """Total number of steps in the request."""
         return len(self.step_results)
-    
+
     @property
     def final_count(self) -> int:
         """Number of features in final result."""
@@ -104,7 +104,7 @@ class MultiStepResponse:
 class FilterRequest:
     """
     Request for a filter operation.
-    
+
     Attributes:
         expression: The filter expression to apply
         source_layer_id: ID of the source layer
@@ -123,7 +123,7 @@ class FilterRequest:
 class FilterResponse:
     """
     Response from a filter operation.
-    
+
     Attributes:
         results: Dictionary mapping layer_id to FilterResult
         total_matches: Total matching features across all layers
@@ -170,8 +170,8 @@ class FilterResponse:
     def error_messages(self) -> List[str]:
         """Get all error messages."""
         return [
-            r.error_message 
-            for r in self.results.values() 
+            r.error_message
+            for r in self.results.values()
             if r.error_message
         ]
 
@@ -213,23 +213,23 @@ class FilterService:
             cache=result_cache,
             layer_repository=layer_repo
         )
-        
+
         expression = FilterExpression.create(
             raw="intersects($geometry, @source)",
             provider=ProviderType.POSTGRESQL,
             source_layer_id="layer_123"
         )
-        
+
         request = FilterRequest(
             expression=expression,
             source_layer_id="layer_123",
             target_layer_ids=["layer_456", "layer_789"]
         )
-        
+
         response = service.apply_filter(request)
-        
+
         for layer_id, result in response.results.items():
-          
+
     """
 
     def __init__(
@@ -256,7 +256,7 @@ class FilterService:
         self._expression_service = expression_service or ExpressionService()
         self._default_optimization = default_optimization or OptimizationConfig.default()
         self._is_cancelled = False
-        
+
         # Statistics
         self._stats = {
             'total_filters': 0,
@@ -355,7 +355,7 @@ class FilterService:
     ) -> FilterResult:
         """
         Filter a single layer.
-        
+
         Handles cache lookup, backend selection, and execution.
         """
         # Check cache first
@@ -425,7 +425,7 @@ class FilterService:
     def _select_backend(self, layer: LayerInfo) -> Optional['BackendPort']:
         """
         Select the best backend for a layer.
-        
+
         Priority:
         1. Exact provider match
         2. Any supporting backend by priority
@@ -446,8 +446,8 @@ class FilterService:
         return None
 
     def _build_cache_key(
-        self, 
-        expression: FilterExpression, 
+        self,
+        expression: FilterExpression,
         target_layer_id: str
     ) -> str:
         """Build cache key for expression + target combination."""
@@ -480,7 +480,7 @@ class FilterService:
     def cancel(self) -> None:
         """
         Cancel ongoing filter operation.
-        
+
         Sets cancellation flag that is checked between layer processing.
         """
         self._is_cancelled = True
@@ -493,7 +493,7 @@ class FilterService:
     def clear_cache(self) -> int:
         """
         Clear filter result cache.
-        
+
         Returns:
             Number of entries cleared
         """
@@ -502,12 +502,12 @@ class FilterService:
     def invalidate_layer_cache(self, layer_id: str) -> int:
         """
         Invalidate cache entries for a specific layer.
-        
+
         Called when layer data changes.
-        
+
         Args:
             layer_id: Layer ID to invalidate
-            
+
         Returns:
             Number of entries invalidated
         """
@@ -520,22 +520,22 @@ class FilterService:
     def get_available_backends(self) -> Dict[str, ProviderType]:
         """
         Get available backends.
-        
+
         Returns:
             Dict mapping backend name to provider type
         """
         return {
-            b.name: provider_type 
+            b.name: provider_type
             for provider_type, b in self._backends.items()
         }
 
     def get_backend_for_layer(self, layer_id: str) -> Optional[str]:
         """
         Get backend name that would handle a layer.
-        
+
         Args:
             layer_id: Layer ID
-            
+
         Returns:
             Backend name or None if no backend available
         """
@@ -548,10 +548,10 @@ class FilterService:
     def validate_expression(self, expression: str) -> bool:
         """
         Quick validation of expression syntax.
-        
+
         Args:
             expression: Expression string
-            
+
         Returns:
             True if expression is syntactically valid
         """
@@ -560,16 +560,16 @@ class FilterService:
     def get_statistics(self) -> Dict:
         """
         Get filter service statistics.
-        
+
         Returns:
             Dictionary with execution statistics
         """
         total = self._stats['cache_hits'] + self._stats['cache_misses']
         cache_rate = (
-            self._stats['cache_hits'] / total 
+            self._stats['cache_hits'] / total
             if total > 0 else 0.0
         )
-        
+
         return {
             **self._stats,
             'cache_hit_rate': cache_rate,
@@ -590,26 +590,26 @@ class FilterService:
     # =========================================================================
 
     def apply_multi_step_filter(
-        self, 
+        self,
         request: 'MultiStepRequest'
     ) -> 'MultiStepResponse':
         """
         Apply a multi-step filter sequence.
-        
+
         Multi-step filtering allows chaining multiple filter operations
         where the output of one step can be used as input to the next.
-        
+
         This is particularly useful for:
         - Progressive narrowing of results
         - Complex spatial relationships
         - Step-by-step user workflows
-        
+
         Args:
             request: MultiStepRequest with steps to execute
-            
+
         Returns:
             MultiStepResponse with results for each step
-            
+
         Example:
             >>> steps = [
             ...     FilterStep(expr1, ["layer1", "layer2"]),
@@ -626,15 +626,15 @@ class FilterService:
         current_feature_ids: Set[int] = set()
         stopped_early = False
         stop_reason = ""
-        
+
         total_steps = len(request.steps)
-        
+
         for step_index, step in enumerate(request.steps):
             if self._is_cancelled:
                 stopped_early = True
                 stop_reason = "Cancelled by user"
                 break
-            
+
             # Report progress
             if request.progress_callback:
                 try:
@@ -645,18 +645,18 @@ class FilterService:
                     )
                 except Exception as e:
                     logger.warning(f"Progress callback failed: {e}")
-            
+
             # Build request for this step
             step_request = self._build_step_request(
                 step=step,
                 source_layer_id=request.source_layer_id,
                 previous_feature_ids=current_feature_ids if step.use_previous_result else None
             )
-            
+
             # Execute step
             step_response = self.apply_filter(step_request)
             step_results.append(step_response)
-            
+
             # Update current feature IDs
             if step_response.is_success:
                 current_feature_ids = step_response.all_feature_ids
@@ -665,17 +665,17 @@ class FilterService:
                 logger.warning(
                     f"Step {step_index + 1} failed: {step_response.error_messages}"
                 )
-            
+
             # Check for early stop
             if request.stop_on_empty and len(current_feature_ids) == 0:
                 stopped_early = True
                 stop_reason = f"Step {step_index + 1} returned no features"
                 logger.info(f"Multi-step stopped early: {stop_reason}")
                 break
-        
+
         # Calculate total execution time
         execution_time = (datetime.now() - start_time).total_seconds() * 1000
-        
+
         return MultiStepResponse(
             step_results=step_results,
             final_feature_ids=current_feature_ids,
@@ -693,12 +693,12 @@ class FilterService:
     ) -> FilterRequest:
         """
         Build a FilterRequest for a single step.
-        
+
         If previous_feature_ids is provided, modifies the expression
         to include a filter on those IDs.
         """
         expression = step.expression
-        
+
         # If using previous result, we need to modify the source
         # This is handled by the backend through the expression
         if previous_feature_ids is not None and len(previous_feature_ids) > 0:
@@ -707,7 +707,7 @@ class FilterService:
             logger.debug(
                 f"Step using {len(previous_feature_ids)} features from previous step"
             )
-        
+
         return FilterRequest(
             expression=expression,
             source_layer_id=source_layer_id,
@@ -724,15 +724,15 @@ class FilterService:
     ) -> 'MultiStepRequest':
         """
         Convenience method to create a multi-step request from expressions.
-        
+
         Args:
             source_layer_id: ID of the source layer
             expressions: List of (expression_string, target_layer_ids) tuples
             provider_type: Provider type for expression conversion
-            
+
         Returns:
             Configured MultiStepRequest
-            
+
         Example:
             >>> request = service.create_multi_step_request(
             ...     "source",
@@ -755,7 +755,7 @@ class FilterService:
                 use_previous_result=(i > 0),  # Chain after first step
                 step_name=f"Step {i + 1}"
             ))
-        
+
         return MultiStepRequest(
             steps=steps,
             source_layer_id=source_layer_id,
@@ -765,7 +765,7 @@ class FilterService:
     def get_multi_step_statistics(self) -> Dict:
         """
         Get statistics specific to multi-step operations.
-        
+
         Returns:
             Dictionary with multi-step statistics
         """

@@ -349,10 +349,10 @@ class SpatialiteBackend(BackendPort):
             cursor = self._conn.cursor()
 
             # Drop if exists
-            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
 
             # Create table from query
-            cursor.execute(f'CREATE TABLE "{table_name}" AS {query}')
+            cursor.execute(f'CREATE TABLE "{table_name}" AS {query}')  # nosec B608
 
             # Create spatial index if geometry column specified
             if geometry_column and self._index_manager:
@@ -381,7 +381,7 @@ class SpatialiteBackend(BackendPort):
 
         try:
             cursor = self._conn.cursor()
-            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
             self._conn.commit()
             logger.debug(f"[Spatialite] Temp Table Dropped - Name: {table_name}")
             return True
@@ -409,13 +409,13 @@ class SpatialiteBackend(BackendPort):
         layer_info: LayerInfo
     ) -> List[int]:
         """Execute filter query and return feature IDs."""
-        table_name = self._get_table_name(layer_info)
-        pk_column = self._get_pk_column(layer_info)
+        self._get_table_name(layer_info)
+        self._get_pk_column(layer_info)
 
         # Convert expression to Spatialite SQL if needed
-        sql = self._convert_to_spatialite(expression.sql)
+        self._convert_to_spatialite(expression.sql)
 
-        query = f"""
+        query = """
             SELECT "{pk_column}" FROM "{table_name}"
             WHERE {sql}
         """

@@ -28,7 +28,7 @@ from qgis.PyQt.QtWidgets import (QAction, QMessageBox, QCheckBox, QDialog,
 import weakref
 
 # Initialize Qt resources from file resources.py
-from .resources import *  # Qt resources must be imported with wildcard
+from .resources import *  # noqa: F401 - Qt resources must be imported with wildcard
 import os
 import os.path
 from .filter_mate_app import FilterMateApp
@@ -36,6 +36,7 @@ from .config.config import reload_config
 from .infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
+
 
 class FilterMate:
     """QGIS Plugin Implementation."""
@@ -72,7 +73,7 @@ class FilterMate:
                     )
         except Exception as e:
             logger.warning(f"Could not load language from config: {e}")
-        
+
         # Determine locale: use config if not 'auto', otherwise use QGIS setting
         if config_language and config_language != 'auto':
             locale = config_language
@@ -84,9 +85,9 @@ class FilterMate:
                 locale = locale_setting.split('_')[0] if '_' in locale_setting else locale_setting[0:2]
             else:
                 locale = 'en'
-        
+
         logger.debug(f"Language detection: config_language={config_language}, locale_setting={QSettings().value('locale/userLocale')}, final locale={locale}")
-        
+
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
@@ -108,7 +109,7 @@ class FilterMate:
         self.toolbar = self.iface.addToolBar(u'FilterMate')
         self.toolbar.setObjectName(u'FilterMate')
 
-        #print "** INITIALIZING FilterMate"
+        # print "** INITIALIZING FilterMate"
 
         # v4.4: Initialize QGIS factory BEFORE creating app (required by hexagonal architecture)
         # This must happen in __init__ so AppInitializer can use it
@@ -116,7 +117,7 @@ class FilterMate:
         try:
             from .core.ports.qgis_port import set_qgis_factory
             from .adapters.qgis.factory import QGISFactory
-            
+
             factory = QGISFactory()
             set_qgis_factory(factory)
             logger.debug("FilterMate: QGIS factory initialized in __init__")
@@ -130,8 +131,8 @@ class FilterMate:
         self._project_read_connection = None
         self._new_project_connection = None
 
-
     # noinspection PyMethodMayBeStatic
+
     def tr(self, message):
         """Get the translation for a string using Qt translation API.
 
@@ -145,7 +146,6 @@ class FilterMate:
         """
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('FilterMate', message)
-
 
     def add_action(
         self,
@@ -220,10 +220,9 @@ class FilterMate:
 
         return action
 
-
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
-        
+
         try:
             # v4.4: QGIS factory already initialized in __init__ (required by AppInitializer)
             # This section kept for backward compatibility verification only
@@ -243,26 +242,26 @@ class FilterMate:
                     logger.debug("FilterMate: QGIS factory initialized as fallback in initGui")
                 except Exception as fallback_error:
                     logger.error(f"FilterMate: Could not initialize QGIS factory: {fallback_error}")
-            
+
             # Install message log filter to suppress known QGIS warnings about missing form dependencies
             logger.debug("FilterMate.initGui: Starting _install_message_filter")
             self._install_message_filter()
-            
+
             # Force reload configuration from disk to get latest user changes
             logger.debug("FilterMate.initGui: Starting reload_config")
             reload_config()
-            
+
             # Auto-migrate configuration if needed
             logger.debug("FilterMate.initGui: Starting _auto_migrate_config")
             self._auto_migrate_config()
-            
+
             # Check and warn about invalid geometry filtering settings
             logger.debug("FilterMate.initGui: Starting _check_geometry_validation_settings")
             self._check_geometry_validation_settings()
 
             logger.debug("FilterMate.initGui: Creating actions")
             icon_path = ':/plugins/filter_mate/icon.png'
-            
+
             # Main action to open FilterMate
             self.add_action(
                 icon_path,
@@ -270,7 +269,7 @@ class FilterMate:
                 callback=self.run,
                 parent=self.iface.mainWindow(),
                 status_tip=self.tr(u'Open FilterMate panel'))
-            
+
             # Action to reset configuration and database
             reset_icon_path = ':/plugins/filter_mate/icons/parameters.png'
             self.add_action(
@@ -280,13 +279,13 @@ class FilterMate:
                 parent=self.iface.mainWindow(),
                 add_to_toolbar=False,
                 status_tip=self.tr(u'Reset the default configuration and delete the SQLite database'))
-            
+
             # Connect signals to handle project changes and automatically reload layers
             # Note: layersAdded signal is NOT connected to avoid freeze issues
             logger.debug("FilterMate.initGui: Connecting auto-activation signals")
             self._connect_auto_activation_signals()
             logger.debug("FilterMate.initGui: Completed successfully")
-            
+
         except Exception as e:
             import traceback
             error_msg = f"Error in initGui: {str(e)}"
@@ -300,12 +299,12 @@ class FilterMate:
             # Re-raise to prevent partial initialization
             raise
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def onClosePlugin(self):
         """Cleanup necessary items here when plugin dockwidget is closed"""
 
-        #print "** CLOSING FilterMate"
+        # print "** CLOSING FilterMate"
 
         # disconnects
         if self.app and self.app.dockwidget:
@@ -316,10 +315,9 @@ class FilterMate:
         # Commented next statement since it causes QGIS crashe
         # when closing the docked window:
         # self.dockwidget = None
-        #self.app = None
+        # self.app = None
 
         self.pluginIsActive = False
-
 
     def resources_path(self, *args):
             """Get the path to our resources folder.
@@ -335,18 +333,16 @@ class FilterMate:
             for item in args:
                 path = path + os.sep + item
 
-
-
             return path
-    
+
     def _confirm_config_reset(self, reason: str, version: str) -> bool:
         """
         Ask user for confirmation before resetting configuration.
-        
+
         Args:
             reason: Reason for reset ('obsolete', 'corrupted')
             version: Detected version (may be None)
-        
+
         Returns:
             True if user confirms reset, False otherwise
         """
@@ -373,7 +369,7 @@ class FilterMate:
                 "The configuration needs to be reset.\n\n"
                 "Do you want to continue?"
             )
-        
+
         reply = QMessageBox.question(
             self.iface.mainWindow(),
             title,
@@ -381,25 +377,25 @@ class FilterMate:
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
-        
+
         return reply == QMessageBox.Yes
-    
+
     def _auto_migrate_config(self):
         """Auto-migrate configuration to latest version if needed.
-        
+
         If an obsolete or corrupted configuration is detected, asks the user
         for confirmation before resetting to default values.
         """
         try:
             from .infrastructure.config.config_migration import ConfigMigration
-            
+
             migrator = ConfigMigration()
-            
+
             # Pass the confirmation callback for reset operations
             result = migrator.auto_migrate_if_needed(
                 confirm_reset_callback=self._confirm_config_reset
             )
-            
+
             # Defensive: ensure result is a tuple with 2 elements
             if result is None:
                 logger.warning("auto_migrate_if_needed returned None, using defaults")
@@ -409,11 +405,11 @@ class FilterMate:
                 performed, warnings = False, []
             else:
                 performed, warnings = result
-            
+
             # Ensure warnings is a list (defensive programming)
             if warnings is None:
                 warnings = []
-            
+
             # Check if user declined reset
             if any("user declined" in str(w).lower() for w in warnings):
                 logger.info("User declined configuration reset")
@@ -422,10 +418,10 @@ class FilterMate:
                     self.tr("Configuration not reset. Some features may not work correctly.")
                 )
                 return
-            
+
             if performed:
                 logger.info("Configuration migrated to latest version")
-                
+
                 # Determine the type of action performed
                 if any("missing" in str(w).lower() for w in warnings):
                     msg = self.tr("Configuration created with default values")
@@ -443,7 +439,7 @@ class FilterMate:
                         if w.startswith("config_updated:"):
                             added_sections = w.replace("config_updated:", "").split(",")
                             break
-                    
+
                     # Build user-friendly message
                     section_names = {
                         "GEOMETRY_SIMPLIFICATION": self.tr("Geometry Simplification"),
@@ -451,13 +447,13 @@ class FilterMate:
                     }
                     friendly_names = [section_names.get(s, s) for s in added_sections]
                     sections_str = ", ".join(friendly_names)
-                    
+
                     msg = self.tr("Configuration updated: new settings available ({sections}). Access via Options menu.").format(sections=sections_str)
                     msg_type = "info"
                 else:
                     msg = self.tr("Configuration updated to latest version")
                     msg_type = "success"
-                
+
                 # Display appropriate message
                 if msg_type == "success":
                     self.iface.messageBar().pushSuccess("FilterMate", msg)
@@ -465,11 +461,11 @@ class FilterMate:
                     self.iface.messageBar().pushWarning("FilterMate", msg)
                 else:
                     self.iface.messageBar().pushInfo("FilterMate", msg)
-            
+
             if warnings:
                 for warning in warnings:
                     logger.warning(f"Config migration: {warning}")
-        
+
         except Exception as e:
             import traceback
             logger.error(f"Error during config migration: {e}")
@@ -479,73 +475,73 @@ class FilterMate:
                 self.tr("Error during configuration migration: {}").format(str(e))
             )
             # Don't block plugin initialization if migration fails
-    
+
     def _install_message_filter(self):
         """Check for layers with missing ValueRelation dependencies and optionally clear warnings.
-        
+
         QGIS emits individual warnings for each missing layer form dependency.
         This method detects affected layers, clears the message bar after a delay,
         and shows a single consolidated informational message instead.
-        
+
         The check is triggered:
         1. At plugin initialization (for already loaded projects)
         2. When a project is read/loaded (via readProject signal)
         """
         self._form_dependency_warning_shown = False
         self._missing_dependency_layers = set()
-        
+
         try:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
-            
+
             def check_and_clear_warnings():
                 """Check all layers for missing ValueRelation dependencies and clear message bar."""
                 if self._form_dependency_warning_shown:
                     return
-                
+
                 try:
                     from .infrastructure.field_utils import get_value_relation_info
-                    
+
                     project = QgsProject.instance()
-                    
+
                     for layer_id, layer in project.mapLayers().items():
                         if not hasattr(layer, 'fields'):
                             continue
-                        
+
                         for field in layer.fields():
                             vr_info = get_value_relation_info(layer, field.name(), check_layer_availability=False)
                             if vr_info and not vr_info.get('layer_available', True):
                                 ref_name = vr_info.get('layer_name', 'unknown')
                                 self._missing_dependency_layers.add(ref_name)
-                    
+
                     if self._missing_dependency_layers and not self._form_dependency_warning_shown:
                         self._form_dependency_warning_shown = True
-                        
+
                         # Clear the message bar to remove QGIS's individual warnings
                         try:
                             self.iface.messageBar().clearWidgets()
                         except Exception:
                             pass
-                        
+
                         # Show a single consolidated info message
                         count = len(self._missing_dependency_layers)
                         layers_list = ', '.join(list(self._missing_dependency_layers)[:3])
                         if count > 3:
                             layers_list += f" (+{count - 3} more)"
-                        
+
                         self.iface.messageBar().pushInfo(
                             "FilterMate",
                             self.tr(f"{count} referenced layer(s) not loaded ({layers_list}). Using fallback display.")
                         )
-                        
+
                         logger.info(
                             f"FilterMate: {count} referenced layer(s) not loaded. "
                             f"ValueRelation fallback active: {', '.join(self._missing_dependency_layers)}"
                         )
-                
+
                 except Exception as e:
                     logger.debug(f"FilterMate: Dependency check error (non-critical): {e}")
-            
+
             def on_project_read(*args):
                 """Handler for project read signal - reset state and schedule check."""
                 # Reset state for new project
@@ -553,37 +549,37 @@ class FilterMate:
                 self._missing_dependency_layers = set()
                 # Schedule check after QGIS warnings have appeared (project load is async)
                 QTimer.singleShot(2000, check_and_clear_warnings)
-            
+
             # Connect to project read signal for future project loads
             # Store reference to avoid garbage collection and allow disconnection
             self._on_project_read_handler = on_project_read
             QgsProject.instance().readProject.connect(on_project_read)
-            
+
             # Also check now for already loaded project (e.g., plugin activated after project load)
             QTimer.singleShot(1500, check_and_clear_warnings)
-            
+
         except Exception as e:
             logger.debug(f"FilterMate: Message filter setup note: {e}")
-    
+
     def _check_geometry_validation_settings(self):
         """Check QGIS geometry validation settings and warn user if not disabled.
-        
+
         FilterMate works best when QGIS's invalid geometry filtering is disabled
         (set to "Off"). When enabled, QGIS may filter out features with invalid
         geometries before FilterMate can process them, leading to missing features
         in exports and filters.
-        
+
         This method checks the current setting and offers to disable it if needed,
         with an explanation of why this is recommended.
         """
         try:
             from qgis.core import QgsSettings
-            
+
             # Get current geometry validation setting
             # Values: 0 = Off, 1 = QGIS validation, 2 = GEOS validation
             settings = QgsSettings()
             current_value = settings.value("qgis/digitizing/validate_geometries", 0, type=int)
-            
+
             if current_value != 0:
                 # Setting is not "Off" - need to warn user
                 validation_modes = {
@@ -591,9 +587,9 @@ class FilterMate:
                     2: "GEOS"
                 }
                 current_mode = validation_modes.get(current_value, str(current_value))
-                
+
                 title = self.tr("Geometry validation setting")
-                
+
                 message = self.tr(
                     "The QGIS setting 'Invalid features filtering' is currently "
                     "set to '{mode}'.\n\n"
@@ -609,7 +605,7 @@ class FilterMate:
                     "• Yes: Disable filtering (recommended for FilterMate)\n"
                     "• No: Keep current setting"
                 ).format(mode=current_mode)
-                
+
                 reply = QMessageBox.question(
                     self.iface.mainWindow(),
                     title,
@@ -617,7 +613,7 @@ class FilterMate:
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.Yes
                 )
-                
+
                 if reply == QMessageBox.Yes:
                     # Disable geometry validation
                     settings.setValue("qgis/digitizing/validate_geometries", 0)
@@ -636,21 +632,21 @@ class FilterMate:
                     )
             else:
                 logger.debug("Geometry validation already disabled (Off) - no action needed")
-                
+
         except Exception as e:
             logger.warning(f"Error checking geometry validation settings: {e}")
             # Don't block plugin initialization if check fails
-    
+
     def _connect_auto_activation_signals(self):
         """Connect signals to handle project changes and reload layers.
-        
+
         Connects projectRead, newProjectCreated, cleared, and layersAdded signals to automatically
         activate the plugin when layers are available. The layersAdded signal is now
         connected with proper guards to avoid freeze issues when the plugin is already active.
-        
+
         The cleared signal is connected to handle project close/clear events, which ensures
         proper cleanup of plugin state when user creates a new project or closes current one.
-        
+
         This behavior can be disabled by setting APP.AUTO_ACTIVATE.value to false in the configuration.
         """
         # Check if auto-activation is enabled in configuration
@@ -660,50 +656,50 @@ class FilterMate:
         app_config = config_data.get('APP', config_data.get('app', {}))
         auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
         auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
-        
+
         if not auto_activate_enabled:
             logger.info("FilterMate: Auto-activation disabled in configuration")
             # CRITICAL: If signals were previously connected, disconnect them
             self._disconnect_auto_activation_signals()
             return
-        
+
         if not self._auto_activation_signals_connected:
             from qgis.core import QgsProject
             from qgis.PyQt.QtCore import QTimer
-            
+
             # Store weakref and safe callbacks for proper disconnection
             # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
             weak_self = weakref.ref(self)
-            
+
             def safe_auto_activate():
                 strong_self = weak_self()
                 if strong_self is not None:
                     strong_self._auto_activate_plugin()
-            
+
             def safe_project_cleared():
                 strong_self = weak_self()
                 if strong_self is not None:
                     strong_self._handle_project_cleared()
-            
+
             def safe_layers_added(layers):
                 strong_self = weak_self()
                 if strong_self is not None:
                     strong_self._auto_activate_for_new_layers(layers)
-            
+
             # _auto_activate_plugin handles both inactive (activates) and active (reinitializes) states
             self._project_read_connection = lambda: QTimer.singleShot(100, safe_auto_activate)
             self._new_project_connection = lambda: QTimer.singleShot(100, safe_auto_activate)
-            
+
             # NEW: Connect to cleared signal for proper cleanup on project close/new
             # This ensures plugin state is properly reset when project is cleared
             self._project_cleared_connection = safe_project_cleared
-            
-            # NEW: Connect layersAdded to handle the case where user loads a layer 
+
+            # NEW: Connect layersAdded to handle the case where user loads a layer
             # into an empty project (no projectRead signal in that case)
             # The guard in _auto_activate_for_new_layers ensures this only triggers
             # when plugin is NOT active, avoiding freeze issues
             self._layers_added_connection = safe_layers_added
-            
+
             # Auto-reload when a project is opened
             self.iface.projectRead.connect(self._project_read_connection)
             # Auto-reload when a new project is created
@@ -712,19 +708,19 @@ class FilterMate:
             QgsProject.instance().layersAdded.connect(self._layers_added_connection)
             # NEW: Handle project cleared/closed
             QgsProject.instance().cleared.connect(self._project_cleared_connection)
-            
+
             self._auto_activation_signals_connected = True
             logger.debug("FilterMate: Auto-activation signals connected (projectRead, newProjectCreated, layersAdded, cleared)")
 
     def _disconnect_auto_activation_signals(self):
         """Disconnect auto-activation signals if they were connected.
-        
+
         Called when AUTO_ACTIVATE is disabled or when unloading the plugin.
         """
         if self._auto_activation_signals_connected:
             try:
                 from qgis.core import QgsProject
-                
+
                 if self._project_read_connection:
                     self.iface.projectRead.disconnect(self._project_read_connection)
                     self._project_read_connection = None
@@ -741,7 +737,7 @@ class FilterMate:
                     except (TypeError, RuntimeError):
                         pass  # Signal may already be disconnected
                     self._project_cleared_connection = None
-                
+
                 self._auto_activation_signals_connected = False
                 logger.debug("FilterMate: Auto-activation signals disconnected")
             except Exception as e:
@@ -749,35 +745,35 @@ class FilterMate:
 
     def _handle_project_cleared(self):
         """Handle project cleared signal.
-        
+
         Called when the current project is cleared (new project created, project closed).
         This ensures proper cleanup of plugin state to prevent stale references.
         """
         logger.info("FilterMate: Project cleared signal received - cleaning up plugin state")
-        
+
         if not self.app:
             return
-        
+
         try:
             # Reset all protection flags
             if hasattr(self.app, '_set_loading_flag'):
                 self.app._set_loading_flag(False)
             if hasattr(self.app, '_set_initializing_flag'):
                 self.app._set_initializing_flag(False)
-            
+
             # Cancel pending tasks
             if hasattr(self.app, '_safe_cancel_all_tasks'):
                 self.app._safe_cancel_all_tasks()
-            
+
             # Clear the add_layers queue
             if hasattr(self.app, '_add_layers_queue'):
                 self.app._add_layers_queue.clear()
                 self.app._pending_add_layers_tasks = 0
-            
+
             # Clear PROJECT_LAYERS
             if hasattr(self.app, 'PROJECT_LAYERS'):
                 self.app.PROJECT_LAYERS = {}
-            
+
             # Reset dockwidget state
             if self.app.dockwidget:
                 self.app.dockwidget.current_layer = None
@@ -785,7 +781,7 @@ class FilterMate:
                 self.app.dockwidget.PROJECT_LAYERS = {}
                 self.app.dockwidget._plugin_busy = False
                 self.app.dockwidget._updating_layers = False
-                
+
                 # Clear combobox safely
                 try:
                     if hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer'):
@@ -793,7 +789,7 @@ class FilterMate:
                         self.app.dockwidget.comboBox_filtering_current_layer.clear()
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox on project cleared: {e}")
-                
+
                 # CRITICAL FIX: Clear QgsFeaturePickerWidget to prevent access violation
                 # The widget has an internal timer that triggers scheduledReload which
                 # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
@@ -804,7 +800,7 @@ class FilterMate:
                         self.app.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
                 except Exception as e:
                     logger.debug(f"Error clearing FeaturePickerWidget on project cleared: {e}")
-                
+
                 # Update indicator to show waiting state
                 if hasattr(self.app.dockwidget, 'backend_indicator_label') and self.app.dockwidget.backend_indicator_label:
                     self.app.dockwidget.backend_indicator_label.setText("...")
@@ -819,21 +815,21 @@ class FilterMate:
                             background-color: #ecf0f1;
                         }
                     """)
-                
+
                 # Disable UI while waiting for new layers
                 if hasattr(self.app.dockwidget, 'set_widgets_enabled_state'):
                     self.app.dockwidget.set_widgets_enabled_state(False)
-                    
+
         except Exception as e:
             logger.warning(f"FilterMate: Error during project cleared cleanup: {e}")
 
     def _auto_activate_for_new_layers(self, layers):
         """Handle layersAdded signal specifically for auto-activation.
-        
+
         This method is called when layers are added to the project. It only
         activates the plugin if it's not already active, avoiding the freeze
         issues that occurred when processing layersAdded during active state.
-        
+
         Args:
             layers: List of QgsMapLayer that were just added
         """
@@ -844,57 +840,58 @@ class FilterMate:
         app_config = config_data.get('APP', config_data.get('app', {}))
         auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
         auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
-        
+
         if not auto_activate_enabled:
             logger.debug("FilterMate: Auto-activation disabled, skipping layersAdded auto-activation")
             return
-        
+
         from qgis.core import QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
-        
+
         # CRITICAL: Only handle this signal when plugin is NOT active
         # When plugin is active, project changes are handled by projectRead/newProjectCreated
         # This avoids the freeze issues documented in known_issues_bugs memory
         if self.pluginIsActive:
             logger.debug("FilterMate: Plugin already active, skipping layersAdded auto-activation")
             return
-        
+
         # Check if any of the added layers are vector layers
         vector_layers = [layer for layer in layers if isinstance(layer, QgsVectorLayer)]
-        
+
         if not vector_layers:
             logger.debug("FilterMate: No vector layers in added layers, skipping auto-activation")
             return
-        
+
         # Plugin not active and vector layers were added - activate it
         # Use QTimer to ensure QGIS is in a stable state before activation
         logger.info(f"FilterMate: Auto-activating plugin via layersAdded ({len(vector_layers)} vector layer(s))")
-        
+
         # STABILITY: Increased delay to 400ms for better stability
         # Especially important for PostgreSQL layers which need time to initialize connections
         # and for projects with multiple layers being added simultaneously
         # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
         weak_self = weakref.ref(self)
+
         def safe_run_from_layers_added():
             strong_self = weak_self()
             if strong_self is not None:
                 strong_self.run()
         QTimer.singleShot(400, safe_run_from_layers_added)
-    
+
     def _auto_activate_plugin(self, layers=None):
         """Auto-activate plugin if not already active.
-        
+
         When called with the plugin inactive:
             - Checks for vector layers in the project
             - If found, activates the plugin by calling run()
-            
+
         When called with the plugin already active but dockwidget hidden:
             - Shows the dockwidget and processes new layers
-            
+
         When called with the plugin already active and dockwidget visible:
             - Triggers project reinitialization via FilterMateApp
               to handle project switch (clear old data, load new layers)
-        
+
         Args:
             layers: Optional list of layers that were just added (from layersAdded signal)
         """
@@ -905,18 +902,18 @@ class FilterMate:
         app_config = config_data.get('APP', config_data.get('app', {}))
         auto_activate_config = app_config.get('AUTO_ACTIVATE', app_config.get('auto_activate', {}))
         auto_activate_enabled = auto_activate_config.get('value', False)  # Default to False to prevent auto-open
-        
+
         if not auto_activate_enabled:
             logger.debug("FilterMate: Auto-activation disabled, skipping auto-activation")
             return
-        
+
         from qgis.core import QgsProject, QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
-        
+
         # If plugin is already active, handle project change
         if self.pluginIsActive:
             if self.app and hasattr(self.app, 'dockwidget') and self.app.dockwidget:
-                # CRITICAL: Skip if app is already initializing a project 
+                # CRITICAL: Skip if app is already initializing a project
                 # This prevents multiple calls from projectRead + layersAdded signals
                 if hasattr(self.app, '_initializing_project') and self.app._initializing_project:
                     logger.debug("FilterMate: Skipping _auto_activate_plugin - already initializing project")
@@ -924,13 +921,14 @@ class FilterMate:
                 if hasattr(self.app, '_loading_new_project') and self.app._loading_new_project:
                     logger.debug("FilterMate: Skipping _auto_activate_plugin - loading new project")
                     return
-                    
+
                 # CRITICAL: When a new project is loaded while plugin is active,
                 # we need to reinitialize the app with the new project data.
                 # Use QTimer to defer and avoid blocking during project load.
                 logger.info("FilterMate: Project changed while plugin active - deferring reinitialization")
                 # STABILITY FIX: Use weakref to prevent access violations
                 weak_self = weakref.ref(self)
+
                 def safe_handle_project_change():
                     strong_self = weak_self()
                     if strong_self is not None:
@@ -938,24 +936,25 @@ class FilterMate:
                 QTimer.singleShot(200, safe_handle_project_change)
                 return
             return
-        
+
         # Plugin not active - check if there are vector layers to activate for
         project = QgsProject.instance()
-        vector_layers = [layer for layer in project.mapLayers().values() 
+        vector_layers = [layer for layer in project.mapLayers().values()
                         if isinstance(layer, QgsVectorLayer)]
-        
+
         if not vector_layers:
             logger.debug("FilterMate: No vector layers found - plugin will not auto-activate")
             return  # No vector layers to process
-        
+
         # Plugin not active and we have vector layers - activate it
         # Use QTimer to ensure QGIS is in a stable state before activation
         logger.info(f"FilterMate: Auto-activating plugin ({len(vector_layers)} vector layer(s) detected)")
         # Message bar notification removed - too verbose for UX
-        
+
         # Defer activation to next event loop iteration for stability
         # STABILITY FIX: Use weakref to prevent access violations
         weak_self = weakref.ref(self)
+
         def safe_run_from_auto_activate():
             strong_self = weak_self()
             if strong_self is not None:
@@ -964,84 +963,84 @@ class FilterMate:
 
     def _handle_project_change(self):
         """Handle project change when plugin is already active.
-        
+
         Reinitializes FilterMateApp with new project data without recreating
         the dockwidget. This is called when projectRead signal is emitted
         while the plugin is already active.
-        
+
         STABILITY IMPROVEMENT: This method now performs a more thorough cleanup
         before reinitializing to prevent stale state issues.
         """
         from qgis.core import QgsProject, QgsVectorLayer
         from qgis.PyQt.QtCore import QTimer
-        
+
         if not self.app:
             return
-        
+
         logger.info("FilterMate: _handle_project_change triggered - starting project reinitialization")
-        
+
         # STABILITY FIX: Check and reset stale flags before processing
         if hasattr(self.app, '_check_and_reset_stale_flags'):
             self.app._check_and_reset_stale_flags()
-        
+
         # CRITICAL: Check if app is already initializing a project
         if hasattr(self.app, '_initializing_project') and self.app._initializing_project:
             logger.debug("FilterMate: Skipping _handle_project_change - already initializing")
             return
-        
+
         # CRITICAL: Also check if loading is in progress
         if hasattr(self.app, '_loading_new_project') and self.app._loading_new_project:
             logger.debug("FilterMate: Skipping _handle_project_change - loading new project")
             return
-        
+
         project = QgsProject.instance()
         if not project:
             return
-        
+
         # STABILITY IMPROVEMENT: Force cleanup of old project state BEFORE reinitializing
         # This prevents stale data from the previous project lingering
         try:
             logger.info("FilterMate: Forcing cleanup of previous project state")
-            
+
             # 1. Cancel any pending tasks
             if hasattr(self.app, '_safe_cancel_all_tasks'):
                 self.app._safe_cancel_all_tasks()
-            
+
             # 2. Clear the add_layers queue to prevent stale operations
             if hasattr(self.app, '_add_layers_queue'):
                 self.app._add_layers_queue.clear()
                 self.app._pending_add_layers_tasks = 0
-            
+
             # 3. Reset all state flags using the proper methods
             if hasattr(self.app, '_set_loading_flag'):
                 self.app._set_loading_flag(False)
             if hasattr(self.app, '_set_initializing_flag'):
                 self.app._set_initializing_flag(False)
-            
+
             # 4. Clear PROJECT_LAYERS immediately to prevent stale references
             if hasattr(self.app, 'PROJECT_LAYERS'):
                 self.app.PROJECT_LAYERS = {}
-            
+
             # 5. Clear the combobox to prevent access violations
-            if (self.app.dockwidget and 
-                hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer')):
+            if (self.app.dockwidget and
+                    hasattr(self.app.dockwidget, 'comboBox_filtering_current_layer')):
                 try:
                     self.app.dockwidget.comboBox_filtering_current_layer.setLayer(None)
                     self.app.dockwidget.comboBox_filtering_current_layer.clear()
                 except Exception as e:
                     logger.debug(f"Error clearing layer combobox: {e}")
-            
+
             # 5b. CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
             # The widget has an internal timer that triggers scheduledReload which
             # creates QgsVectorLayerFeatureSource - if the layer is invalid/destroyed,
             # this causes a Windows fatal exception (access violation).
-            if (self.app.dockwidget and 
-                hasattr(self.app.dockwidget, 'mFeaturePickerWidget_exploring_single_selection')):
+            if (self.app.dockwidget and
+                    hasattr(self.app.dockwidget, 'mFeaturePickerWidget_exploring_single_selection')):
                 try:
                     self.app.dockwidget.mFeaturePickerWidget_exploring_single_selection.setLayer(None)
                 except Exception as e:
                     logger.debug(f"Error clearing FeaturePickerWidget: {e}")
-            
+
             # 6. Reset dockwidget layer references
             if self.app.dockwidget:
                 self.app.dockwidget.current_layer = None
@@ -1049,31 +1048,31 @@ class FilterMate:
                 self.app.dockwidget.PROJECT_LAYERS = {}
                 self.app.dockwidget._plugin_busy = False
                 self.app.dockwidget._updating_layers = False
-                
+
         except Exception as e:
             logger.warning(f"FilterMate: Error during pre-change cleanup: {e}")
-        
+
         # Check if there are vector layers in the new project
-        vector_layers = [layer for layer in project.mapLayers().values() 
+        vector_layers = [layer for layer in project.mapLayers().values()
                         if isinstance(layer, QgsVectorLayer)]
-        
+
         if not vector_layers:
             logger.info("FilterMate: New project has no vector layers")
             # Only access dockwidget if it exists and has widgets_initialized
-            if (self.app.dockwidget and 
-                hasattr(self.app.dockwidget, 'widgets_initialized') and 
-                self.app.dockwidget.widgets_initialized):
+            if (self.app.dockwidget and
+                hasattr(self.app.dockwidget, 'widgets_initialized') and
+                    self.app.dockwidget.widgets_initialized):
                 self.app.dockwidget.set_widgets_enabled_state(False)
             return
-        
+
         logger.info(f"FilterMate: Reinitializing for new project with {len(vector_layers)} vector layers")
-        
+
         # STABILITY IMPROVEMENT: Use a longer delay for project reinitialization
         # This gives QGIS time to fully load the project and all layers
         # especially important for PostgreSQL layers
         # STABILITY FIX: Use weakref to prevent access violations when timer fires after object destruction
         weak_self = weakref.ref(self)
-        
+
         def perform_reinitialization():
             strong_self = weak_self()
             if strong_self is None or strong_self.app is None:
@@ -1089,20 +1088,19 @@ class FilterMate:
                     strong_self.app._set_loading_flag(False)
                 if hasattr(strong_self.app, '_set_initializing_flag'):
                     strong_self.app._set_initializing_flag(False)
-        
+
         # STABILITY IMPROVEMENT: Increased delay from immediate to 300ms
         # This ensures all QGIS signals have been processed before we reinitialize
         QTimer.singleShot(300, perform_reinitialization)
 
-
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
 
-        #print "** UNLOAD FilterMate"
-        
+        # print "** UNLOAD FilterMate"
+
         # Disconnect project change signals using dedicated method
         self._disconnect_auto_activation_signals()
-        
+
         # Disconnect project read signal for form dependency warnings
         try:
             from qgis.core import QgsProject
@@ -1112,7 +1110,7 @@ class FilterMate:
                 logger.debug("FilterMate: readProject signal disconnected")
         except Exception as e:
             logger.debug(f"FilterMate: Error disconnecting readProject signal: {e}")
-        
+
         # PERFORMANCE v2.4.0: Clean up PostgreSQL connection pools
         try:
             from .infrastructure.database.connection_pool import cleanup_pools
@@ -1122,7 +1120,7 @@ class FilterMate:
             pass  # Connection pool module not available
         except Exception as e:
             logger.debug(f"FilterMate: Error cleaning up connection pools: {e}")
-        
+
         # CRITICAL: Clear QgsMapLayerComboBox before cleanup to prevent access violations
         if self.app and self.app.dockwidget:
             try:
@@ -1132,7 +1130,7 @@ class FilterMate:
                     logger.debug("FilterMate: Layer combo box cleared during unload")
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing layer combo during unload: {e}")
-            
+
             # CRITICAL: Clear QgsFeaturePickerWidget to prevent access violation
             # The widget has an internal timer that triggers scheduledReload
             try:
@@ -1141,7 +1139,7 @@ class FilterMate:
                     logger.debug("FilterMate: FeaturePickerWidget cleared during unload")
             except Exception as e:
                 logger.debug(f"FilterMate: Error clearing FeaturePickerWidget during unload: {e}")
-        
+
         # Nettoyer les ressources de l'application FilterMate
         if self.app:
             self.app.cleanup()
@@ -1154,11 +1152,11 @@ class FilterMate:
         # remove the toolbar
         del self.toolbar
 
-    #--------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     def reset_configuration(self):
         """Reset the configuration to default values and optionally delete the SQLite database.
-        
+
         This method:
         1. Copies config.default.json to config.json
         2. Optionally deletes the SQLite database file
@@ -1166,7 +1164,7 @@ class FilterMate:
         """
         from qgis.PyQt.QtWidgets import QMessageBox
         import shutil
-        
+
         # Ask for confirmation
         reply = QMessageBox.question(
             self.iface.mainWindow(),
@@ -1179,15 +1177,15 @@ class FilterMate:
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if reply != QMessageBox.Yes:
             return
-        
+
         try:
             config_dir = os.path.join(self.plugin_dir, 'config')
             config_file = os.path.join(config_dir, 'config.json')
             default_config_file = os.path.join(config_dir, 'config.default.json')
-            
+
             # Copy default config to config.json
             if os.path.exists(default_config_file):
                 shutil.copy2(default_config_file, config_file)
@@ -1201,15 +1199,15 @@ class FilterMate:
                     self.tr("Default configuration file not found.")
                 )
                 return
-            
+
             # Try to delete SQLite database
             from .config.config import ENV_VARS, init_env_vars
-            
+
             # Re-initialize to get current paths
             try:
                 init_env_vars()
                 plugin_config_dir = ENV_VARS.get("PLUGIN_CONFIG_DIRECTORY", "")
-                
+
                 if plugin_config_dir and os.path.isdir(plugin_config_dir):
                     # Look for SQLite files
                     for filename in os.listdir(plugin_config_dir):
@@ -1226,10 +1224,10 @@ class FilterMate:
                                     "FilterMate",
                                     self.tr(f"Unable to delete {filename}: {e}")
                                 )
-            except Exception as e:
+            except Exception:
                 # Non-critical error, config was already reset
                 pass
-            
+
             # Prompt to restart QGIS
             QMessageBox.information(
                 self.iface.mainWindow(),
@@ -1237,13 +1235,12 @@ class FilterMate:
                 self.tr('The configuration has been reset.\n\n'
                        'Please restart QGIS to apply the changes.')
             )
-            
+
         except Exception as e:
             self.iface.messageBar().pushCritical(
                 "FilterMate",
                 self.tr(f"Error during reset: {str(e)}")
             )
-
 
     def _show_discord_welcome(self):
         """Show a one-time welcome dialog inviting the user to join the Discord server."""
@@ -1328,7 +1325,7 @@ class FilterMate:
         if not self.pluginIsActive:
             self.pluginIsActive = True
 
-            #print "** STARTING FilterMate"
+            # print "** STARTING FilterMate"
 
             try:
                 # dockwidget may not exist if:
@@ -1362,7 +1359,3 @@ class FilterMate:
                 import traceback
                 logger.error(f"Error loading plugin: {traceback.format_exc()}")
                 self.pluginIsActive = False
-            
-
-
-

@@ -466,7 +466,7 @@ class AutoOptimizer:
             estimated_speedup=estimated_speedup,
             reason=(
                 f"Layer '{target.layer_name}' has {target.feature_count} features. "
-                f"Using centroids will significantly reduce processing time."
+                "Using centroids will significantly reduce processing time."
             ),
             auto_applicable=user_requested is None or user_requested,
             parameters={'mode': CENTROID_MODE_DEFAULT}
@@ -495,7 +495,7 @@ class AutoOptimizer:
             priority=2,
             estimated_speedup=1.5,
             reason=(
-                f"Layer has high geometry complexity "
+                "Layer has high geometry complexity "
                 f"({target.avg_vertices_per_feature:.0f} avg vertices)"
             ),
             auto_applicable=False,  # Requires user consent
@@ -525,7 +525,7 @@ class AutoOptimizer:
             estimated_speedup=2.0,
             reason=(
                 f"Large dataset ({target.feature_count} features) with buffer. "
-                f"Simplifying before buffer improves performance."
+                "Simplifying before buffer improves performance."
             ),
             auto_applicable=True,
             parameters={
@@ -551,7 +551,7 @@ class AutoOptimizer:
             priority=3,
             estimated_speedup=1.3,
             reason=(
-                f"Reducing buffer segments for large dataset "
+                "Reducing buffer segments for large dataset "
                 f"({target.feature_count} features)"
             ),
             auto_applicable=True,

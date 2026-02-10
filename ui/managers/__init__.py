@@ -8,7 +8,7 @@ Part of FilterMate v4.0 refactoring - Sprint 6.
 v5.0 Phase 2: Added DockwidgetSignalManager for signal management extraction.
 """
 
-from .configuration_manager import ConfigurationManager
-from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChangeError
+from .configuration_manager import ConfigurationManager  # noqa: F401
+from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChangeError  # noqa: F401
 
 __all__ = ['ConfigurationManager', 'DockwidgetSignalManager', 'SignalStateChangeError']

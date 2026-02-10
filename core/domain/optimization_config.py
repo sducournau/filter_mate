@@ -31,7 +31,7 @@ class OptimizationConfig:
         batch_size: Batch size for feature processing
         parallel_execution: Enable parallel processing
         max_workers: Maximum parallel workers
-        
+
     Example:
         >>> config = OptimizationConfig.performance()
         >>> config.should_use_mv(50000)
@@ -60,7 +60,7 @@ class OptimizationConfig:
     batch_size: int = 5000
     parallel_execution: bool = False
     max_workers: int = 4
-    
+
     # Memory settings
     max_geometry_cache_mb: float = 100.0
     streaming_threshold: int = 50000
@@ -82,7 +82,7 @@ class OptimizationConfig:
     def default(cls) -> 'OptimizationConfig':
         """
         Create configuration with default values.
-        
+
         Returns:
             OptimizationConfig with balanced defaults
         """
@@ -92,9 +92,9 @@ class OptimizationConfig:
     def performance(cls) -> 'OptimizationConfig':
         """
         Create configuration optimized for maximum performance.
-        
+
         Uses more memory and enables all optimizations.
-        
+
         Returns:
             OptimizationConfig for high performance
         """
@@ -119,9 +119,9 @@ class OptimizationConfig:
     def memory_efficient(cls) -> 'OptimizationConfig':
         """
         Create configuration optimized for low memory usage.
-        
+
         Reduces cache sizes and disables memory-intensive features.
-        
+
         Returns:
             OptimizationConfig for memory efficiency
         """
@@ -144,9 +144,9 @@ class OptimizationConfig:
     def disabled(cls) -> 'OptimizationConfig':
         """
         Create configuration with all optimizations disabled.
-        
+
         Useful for debugging or testing baseline performance.
-        
+
         Returns:
             OptimizationConfig with no optimizations
         """
@@ -163,10 +163,10 @@ class OptimizationConfig:
     def for_layer_count(cls, feature_count: int) -> 'OptimizationConfig':
         """
         Create configuration optimized for a specific layer size.
-        
+
         Args:
             feature_count: Number of features in the layer
-            
+
         Returns:
             OptimizationConfig appropriate for the layer size
         """
@@ -178,17 +178,17 @@ class OptimizationConfig:
             return cls.memory_efficient()
 
     def should_use_mv(
-        self, 
-        feature_count: int, 
+        self,
+        feature_count: int,
         expression_complexity: int = 1
     ) -> bool:
         """
         Determine if materialized view should be used.
-        
+
         Args:
             feature_count: Number of features in source layer
             expression_complexity: Estimated expression complexity (1-10)
-            
+
         Returns:
             True if MV should be used
         """
@@ -202,10 +202,10 @@ class OptimizationConfig:
     def should_use_spatial_index(self, feature_count: int) -> bool:
         """
         Determine if spatial index should be preferred.
-        
+
         Args:
             feature_count: Number of features in layer
-            
+
         Returns:
             True if spatial index should be used
         """
@@ -216,12 +216,12 @@ class OptimizationConfig:
     def should_use_streaming(self, feature_count: int) -> bool:
         """
         Determine if streaming mode should be used.
-        
+
         Streaming mode processes features in batches to reduce memory.
-        
+
         Args:
             feature_count: Number of features to process
-            
+
         Returns:
             True if streaming should be used
         """
@@ -230,10 +230,10 @@ class OptimizationConfig:
     def should_use_parallel(self, feature_count: int) -> bool:
         """
         Determine if parallel execution should be used.
-        
+
         Args:
             feature_count: Number of features to process
-            
+
         Returns:
             True if parallel execution should be used
         """
@@ -245,10 +245,10 @@ class OptimizationConfig:
     def get_batch_count(self, feature_count: int) -> int:
         """
         Calculate number of batches for a given feature count.
-        
+
         Args:
             feature_count: Total features to process
-            
+
         Returns:
             Number of batches
         """
@@ -257,10 +257,10 @@ class OptimizationConfig:
     def with_cache_ttl(self, ttl_seconds: float) -> 'OptimizationConfig':
         """
         Return new config with modified cache TTL.
-        
+
         Args:
             ttl_seconds: New cache TTL in seconds
-            
+
         Returns:
             New OptimizationConfig with updated TTL
         """
@@ -269,27 +269,27 @@ class OptimizationConfig:
     def with_batch_size(self, size: int) -> 'OptimizationConfig':
         """
         Return new config with modified batch size.
-        
+
         Args:
             size: New batch size
-            
+
         Returns:
             New OptimizationConfig with updated batch size
         """
         return replace(self, batch_size=size)
 
     def with_parallel(
-        self, 
-        enabled: bool, 
+        self,
+        enabled: bool,
         max_workers: Optional[int] = None
     ) -> 'OptimizationConfig':
         """
         Return new config with modified parallel settings.
-        
+
         Args:
             enabled: Whether to enable parallel execution
             max_workers: Optional new max workers value
-            
+
         Returns:
             New OptimizationConfig with updated parallel settings
         """
@@ -304,12 +304,12 @@ class OptimizationConfig:
     ) -> 'OptimizationConfig':
         """
         Return new config with modified caching settings.
-        
+
         Args:
             enabled: Whether to enable caching
             ttl_seconds: Optional new TTL
             max_entries: Optional new max entries
-            
+
         Returns:
             New OptimizationConfig with updated cache settings
         """
@@ -328,5 +328,5 @@ class OptimizationConfig:
             features.append("SpatialIdx")
         if self.parallel_execution:
             features.append(f"Parallel({self.max_workers})")
-        
+
         return f"OptimizationConfig({', '.join(features) or 'disabled'})"

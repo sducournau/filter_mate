@@ -28,19 +28,19 @@ Migration History:
 """
 
 # Main filter task (EPIC-1 migration - January 2026)
-from .filter_task import FilterEngineTask
+from .filter_task import FilterEngineTask  # noqa: F401
 
-from .expression_evaluation_task import (
+from .expression_evaluation_task import (  # noqa: F401
     ExpressionEvaluationSignals,
     ExpressionEvaluationTask,
     ExpressionEvaluationManager,
     get_expression_manager
 )
 
-from .layer_management_task import LayersManagementEngineTask
+from .layer_management_task import LayersManagementEngineTask  # noqa: F401
 
 # E6: Task completion handler functions
-from .task_completion_handler import (
+from .task_completion_handler import (  # noqa: F401
     display_warning_messages,
     should_skip_subset_application,
     apply_pending_subset_requests,

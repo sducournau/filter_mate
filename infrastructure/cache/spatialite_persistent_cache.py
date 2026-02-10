@@ -32,7 +32,7 @@ Architecture:
 
 Usage:
     from infrastructure.cache.spatialite_persistent_cache import SpatialitePersistentCache
-    
+
     cache = SpatialitePersistentCache.get_instance()
     cache.store_filter_result(layer, fids, source_wkt, predicates)
     cached_fids = cache.get_cached_fids(layer, source_wkt, predicates)
@@ -77,7 +77,7 @@ CACHE_CLEANUP_THRESHOLD = 500  # Cleanup when more than this many expired entrie
 def _get_cache_db_path() -> str:
     """
     Get the path to the FilterMate cache database.
-    
+
     Returns:
         str: Absolute path to filtermate_cache.db
     """
@@ -94,11 +94,11 @@ def _get_cache_db_path() -> str:
         except ImportError:
             # Fallback for testing
             plugin_dir = os.path.join(os.path.expanduser("~"), ".filtermate")
-    
+
     # Ensure directory exists
     if not os.path.exists(plugin_dir):
         os.makedirs(plugin_dir, exist_ok=True)
-    
+
     return os.path.join(plugin_dir, CACHE_DB_NAME)
 
 
@@ -111,14 +111,14 @@ def _compute_cache_key(
 ) -> str:
     """
     Compute a unique cache key for filter parameters.
-    
+
     Args:
         layer_id: QGIS layer ID
         source_geom_hash: Hash of source geometry WKT
         predicates: List of spatial predicates
         buffer_value: Buffer distance in meters
         use_centroids: Whether centroids are used
-    
+
     Returns:
         str: SHA256 hash of filter parameters (32 chars)
     """
@@ -136,25 +136,25 @@ def _compute_cache_key(
 def _hash_geometry(wkt: str, precision: int = 1) -> str:
     """
     Create a hash of geometry WKT with reduced precision for cache matching.
-    
+
     This allows cache hits even when geometry coordinates have minor differences.
-    
+
     Args:
         wkt: WKT string
         precision: Decimal places to round coordinates
-    
+
     Returns:
         str: SHA256 hash of normalized WKT (16 chars)
     """
     if not wkt:
         return "empty"
-    
+
     import re
-    
+
     def round_coord(match):
         num = float(match.group(0))
         return str(round(num, precision))
-    
+
     # Round all numbers in WKT
     normalized = re.sub(r'-?\d+\.?\d*', round_coord, wkt)
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
@@ -167,74 +167,74 @@ def _hash_geometry(wkt: str, precision: int = 1) -> str:
 class SpatialitePersistentCache:
     """
     Spatialite-based persistent cache for FilterMate filter results.
-    
+
     This class provides disk-based caching of filter FID results,
     enabling efficient multi-step filtering across sessions.
-    
+
     Thread-safe with connection pooling and proper locking.
-    
+
     Example:
         cache = SpatialitePersistentCache.get_instance()
-        
+
         # Store filter result
         cache_key = cache.store_filter_result(
             layer, fids, source_wkt, predicates
         )
-        
+
         # Retrieve cached result
         cached_fids = cache.get_cached_fids(
             layer, source_wkt, predicates
         )
-        
+
         # Multi-step filtering
         intersected, step = cache.intersect_with_previous(
             layer, new_fids, source_wkt
         )
     """
-    
+
     # Class-level lock for thread safety
     _lock = threading.Lock()
     _instance: Optional['SpatialitePersistentCache'] = None
-    
+
     def __new__(cls):
         """Singleton pattern for cache database."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     @classmethod
     def get_instance(cls) -> 'SpatialitePersistentCache':
         """Get singleton instance."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     @classmethod
     def reset_instance(cls) -> None:
         """Reset singleton instance (for testing)."""
         with cls._lock:
             if cls._instance is not None:
                 cls._instance = None
-    
+
     def __init__(self):
         """Initialize the cache database."""
         if getattr(self, '_initialized', False):
             return
-        
+
         self.db_path = _get_cache_db_path()
         self._init_database()
         self._initialized = True
-        
+
         logger.info(f"✓ SpatialitePersistentCache initialized at: {self.db_path}")
-    
+
     def _init_database(self):
         """Create cache database and tables if they don't exist."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Create main cache table
-            cursor.execute(f'''
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS {CACHE_TABLE_NAME} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     layer_id TEXT NOT NULL,
@@ -253,18 +253,18 @@ class SpatialitePersistentCache:
                     UNIQUE(layer_id, cache_key)
                 )
             ''')
-            
+
             # Create indexes for fast lookups
-            cursor.execute(f'''
-                CREATE INDEX IF NOT EXISTS idx_cache_layer_key 
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_cache_layer_key
                 ON {CACHE_TABLE_NAME} (layer_id, cache_key)
             ''')
-            
-            cursor.execute(f'''
-                CREATE INDEX IF NOT EXISTS idx_cache_expires 
+
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_cache_expires
                 ON {CACHE_TABLE_NAME} (expires_at)
             ''')
-            
+
             # Create multi-step tracking table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS filter_steps (
@@ -279,7 +279,7 @@ class SpatialitePersistentCache:
                     UNIQUE(session_id, layer_id, step_number)
                 )
             ''')
-            
+
             # Create session table for tracking filter sessions
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS filter_sessions (
@@ -292,14 +292,14 @@ class SpatialitePersistentCache:
                     is_active INTEGER DEFAULT 1
                 )
             ''')
-            
+
             conn.commit()
-    
+
     @contextmanager
     def _get_connection(self):
         """
         Get a thread-safe database connection.
-        
+
         Yields:
             sqlite3.Connection: Database connection
         """
@@ -315,11 +315,11 @@ class SpatialitePersistentCache:
         finally:
             if conn:
                 conn.close()
-    
+
     # =========================================================================
     # Cache Operations
     # =========================================================================
-    
+
     def store_filter_result(
         self,
         layer: QgsVectorLayer,
@@ -334,7 +334,7 @@ class SpatialitePersistentCache:
     ) -> str:
         """
         Store filter results in cache.
-        
+
         Args:
             layer: Filtered layer
             fids: List of matching FIDs
@@ -345,7 +345,7 @@ class SpatialitePersistentCache:
             ttl_hours: Cache time-to-live in hours
             step_number: Multi-step filter step number
             session_id: Session ID for multi-step tracking
-        
+
         Returns:
             str: Cache key for this result
         """
@@ -353,30 +353,30 @@ class SpatialitePersistentCache:
             layer_id = layer.id()
             layer_source = layer.source()
             layer_name = layer.name()
-            
+
             # Compute cache key
             source_geom_hash = _hash_geometry(source_geom_wkt)
             cache_key = _compute_cache_key(
                 layer_id, source_geom_hash, predicates, buffer_value, use_centroids
             )
-            
+
             # Prepare data
             now = datetime.now(timezone.utc)
             expires = now + timedelta(hours=ttl_hours)
             fids_str = ",".join(str(f) for f in sorted(fids))
             predicates_str = json.dumps(predicates)
-            
+
             metadata = {
                 "use_centroids": use_centroids,
                 "session_id": session_id,
                 "created_by": "spatialite_backend"
             }
-            
+
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 # Upsert cache entry
-                cursor.execute(f'''
+                cursor.execute('''
                     INSERT OR REPLACE INTO {CACHE_TABLE_NAME} (
                         layer_id, layer_source, layer_name, cache_key,
                         fids, fid_count, created_at, expires_at,
@@ -389,7 +389,7 @@ class SpatialitePersistentCache:
                     step_number, source_geom_hash, predicates_str,
                     buffer_value, json.dumps(metadata)
                 ))
-                
+
                 # Track step if session is provided
                 if session_id:
                     cursor.execute('''
@@ -401,16 +401,16 @@ class SpatialitePersistentCache:
                         session_id, layer_id, step_number, cache_key,
                         len(fids), now.isoformat()
                     ))
-                
+
                 conn.commit()
-            
+
             logger.debug(
                 f"Cache stored: {layer_name} → {len(fids)} FIDs "
                 f"(step {step_number}, key={cache_key[:8]})"
             )
-            
+
             return cache_key
-    
+
     def get_cached_fids(
         self,
         layer: QgsVectorLayer,
@@ -421,14 +421,14 @@ class SpatialitePersistentCache:
     ) -> Optional[Set[int]]:
         """
         Get cached FIDs for a layer with given filter parameters.
-        
+
         Args:
             layer: Layer to get cache for
             source_geom_wkt: Source geometry WKT
             predicates: Spatial predicates
             buffer_value: Buffer distance
             use_centroids: Whether centroids are used
-        
+
         Returns:
             Set of FIDs if cache hit, None if cache miss
         """
@@ -437,16 +437,16 @@ class SpatialitePersistentCache:
         cache_key = _compute_cache_key(
             layer_id, source_geom_hash, predicates, buffer_value, use_centroids
         )
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
+
             now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(f'''
+            cursor.execute('''
                 SELECT fids, fid_count FROM {CACHE_TABLE_NAME}
                 WHERE layer_id = ? AND cache_key = ? AND expires_at > ?
             ''', (layer_id, cache_key, now))
-            
+
             row = cursor.fetchone()
             if row:
                 fids_str = row['fids']
@@ -455,11 +455,11 @@ class SpatialitePersistentCache:
                     f"Cache HIT: {layer.name()} → {len(fids)} FIDs (key={cache_key[:8]})"
                 )
                 return fids
-        
+
         return None
-    
+
     def get_previous_fids(
-        self, 
+        self,
         layer: QgsVectorLayer,
         current_source_geom_wkt: Optional[str] = None,
         current_buffer_value: Optional[float] = None,
@@ -467,48 +467,48 @@ class SpatialitePersistentCache:
     ) -> Optional[Set[int]]:
         """
         Get the most recent cached FIDs for a layer (for multi-step filtering).
-        
+
         Only returns previous FIDs if all filter parameters match:
         - Source geometry hash must match
         - Buffer value must match
         - Predicates must match
-        
+
         This prevents incorrect intersection when filter parameters change.
-        
+
         Args:
             layer: Layer to get previous FIDs for
             current_source_geom_wkt: Current source geometry WKT
             current_buffer_value: Current buffer value
             current_predicates: Current predicates list
-        
+
         Returns:
             Set of FIDs from most recent cache, None if no cache or parameter mismatch
         """
         layer_id = layer.id()
-        
+
         # Compute current geometry hash if WKT provided
         current_geom_hash = None
         if current_source_geom_wkt:
             current_geom_hash = _hash_geometry(current_source_geom_wkt)
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
+
             now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(f'''
-                SELECT fids, fid_count, step_number, source_geom_hash, buffer_value, predicates 
+            cursor.execute('''
+                SELECT fids, fid_count, step_number, source_geom_hash, buffer_value, predicates
                 FROM {CACHE_TABLE_NAME}
                 WHERE layer_id = ? AND expires_at > ?
                 ORDER BY created_at DESC
                 LIMIT 1
             ''', (layer_id, now))
-            
+
             row = cursor.fetchone()
             if row:
                 cached_geom_hash = row['source_geom_hash']
                 cached_buffer_value = row['buffer_value']
                 cached_predicates_str = row['predicates']
-                
+
                 # Check geometry hash match
                 if current_geom_hash and cached_geom_hash:
                     if current_geom_hash != cached_geom_hash:
@@ -516,7 +516,7 @@ class SpatialitePersistentCache:
                             f"Cache SKIP: {layer.name()} → source geometry changed"
                         )
                         return None
-                
+
                 # Check buffer_value match
                 if current_buffer_value is not None and cached_buffer_value is not None:
                     if abs(current_buffer_value - cached_buffer_value) > 0.001:
@@ -525,7 +525,7 @@ class SpatialitePersistentCache:
                             f"({cached_buffer_value} → {current_buffer_value})"
                         )
                         return None
-                
+
                 # Check predicates match
                 if current_predicates is not None and cached_predicates_str:
                     try:
@@ -537,7 +537,7 @@ class SpatialitePersistentCache:
                             return None
                     except (json.JSONDecodeError, TypeError):
                         pass
-                
+
                 fids_str = row['fids']
                 fids = set(int(f) for f in fids_str.split(',') if f)
                 step = row['step_number']
@@ -545,9 +545,9 @@ class SpatialitePersistentCache:
                     f"Previous FIDs: {layer.name()} → {len(fids)} FIDs (step {step})"
                 )
                 return fids
-        
+
         return None
-    
+
     def intersect_with_previous(
         self,
         layer: QgsVectorLayer,
@@ -558,31 +558,31 @@ class SpatialitePersistentCache:
     ) -> Tuple[Set[int], int]:
         """
         Intersect new FIDs with previously cached FIDs for multi-step filtering.
-        
+
         Only intersects if all filter parameters match to prevent incorrect results.
-        
+
         Args:
             layer: Layer being filtered
             new_fids: New FIDs from current filter operation
             current_source_geom_wkt: Current source geometry WKT
             current_buffer_value: Current buffer value
             current_predicates: Current predicates
-        
+
         Returns:
             Tuple of (intersected FIDs, step number)
         """
         previous_fids = self.get_previous_fids(
             layer, current_source_geom_wkt, current_buffer_value, current_predicates
         )
-        
+
         if previous_fids is not None:
             # Intersect with previous results
             intersected = new_fids & previous_fids
-            
+
             # Get previous step number
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'''
+                cursor.execute('''
                     SELECT step_number FROM {CACHE_TABLE_NAME}
                     WHERE layer_id = ?
                     ORDER BY created_at DESC
@@ -590,33 +590,33 @@ class SpatialitePersistentCache:
                 ''', (layer.id(),))
                 row = cursor.fetchone()
                 prev_step = row['step_number'] if row else 0
-            
+
             logger.debug(
                 f"Multi-step intersection: {len(previous_fids)} ∩ {len(new_fids)} = {len(intersected)}"
             )
-            
+
             return intersected, prev_step + 1
-        
+
         return new_fids, 1
-    
+
     # =========================================================================
     # Session Management
     # =========================================================================
-    
+
     def start_session(self, source_layer_id: str) -> str:
         """
         Start a new filter session for multi-step tracking.
-        
+
         Args:
             source_layer_id: ID of the source layer
-        
+
         Returns:
             str: New session ID
         """
         import uuid
         session_id = str(uuid.uuid4())[:8]
         now = datetime.now(timezone.utc).isoformat()
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
@@ -625,9 +625,9 @@ class SpatialitePersistentCache:
                 ) VALUES (?, ?, ?, 0)
             ''', (session_id, source_layer_id, now))
             conn.commit()
-        
+
         return session_id
-    
+
     def end_session(self, session_id: str):
         """Mark a filter session as inactive."""
         with self._get_connection() as conn:
@@ -636,104 +636,104 @@ class SpatialitePersistentCache:
                 UPDATE filter_sessions SET is_active = 0 WHERE session_id = ?
             ''', (session_id,))
             conn.commit()
-    
+
     # =========================================================================
     # Cleanup Operations
     # =========================================================================
-    
+
     def cleanup_expired(self) -> int:
         """
         Remove expired cache entries.
-        
+
         Returns:
             int: Number of entries removed
         """
         with self._lock:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                
+
                 now = datetime.now(timezone.utc).isoformat()
-                cursor.execute(f'''
+                cursor.execute('''
                     DELETE FROM {CACHE_TABLE_NAME} WHERE expires_at < ?
                 ''', (now,))
-                
+
                 deleted = cursor.rowcount
                 conn.commit()
-                
+
                 if deleted > 0:
                     logger.info(f"Cache cleanup: removed {deleted} expired entries")
-                
+
                 return deleted
-    
+
     def clear_layer_cache(self, layer_id: str) -> int:
         """
         Clear all cache entries for a specific layer.
-        
+
         Args:
             layer_id: QGIS layer ID
-        
+
         Returns:
             int: Number of entries removed
         """
         with self._lock:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'''
+                cursor.execute('''
                     DELETE FROM {CACHE_TABLE_NAME} WHERE layer_id = ?
                 ''', (layer_id,))
                 deleted = cursor.rowcount
                 conn.commit()
                 return deleted
-    
+
     def clear_all_cache(self) -> int:
         """
         Clear all cache entries.
-        
+
         Returns:
             int: Number of entries removed
         """
         with self._lock:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'DELETE FROM {CACHE_TABLE_NAME}')
+                cursor.execute(f'DELETE FROM {CACHE_TABLE_NAME}')  # nosec B608
                 deleted = cursor.rowcount
                 cursor.execute('DELETE FROM filter_steps')
                 cursor.execute('DELETE FROM filter_sessions')
                 conn.commit()
-                
+
                 logger.info(f"Cache cleared: removed {deleted} entries")
-                
+
                 return deleted
-    
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """
         Get cache statistics.
-        
+
         Returns:
             dict: Cache statistics
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            
-            cursor.execute(f'SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}')
+
+            cursor.execute(f'SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}')  # nosec B608
             total_entries = cursor.fetchone()['count']
-            
-            cursor.execute(f'''
+
+            cursor.execute('''
                 SELECT SUM(fid_count) as total_fids FROM {CACHE_TABLE_NAME}
             ''')
             row = cursor.fetchone()
             total_fids = row['total_fids'] or 0 if row else 0
-            
+
             now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(f'''
+            cursor.execute('''
                 SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}
                 WHERE expires_at < ?
             ''', (now,))
             expired_entries = cursor.fetchone()['count']
-            
+
             # Get database file size
             db_size = os.path.getsize(self.db_path) if os.path.exists(self.db_path) else 0
-            
+
             return {
                 "db_path": self.db_path,
                 "total_entries": total_entries,

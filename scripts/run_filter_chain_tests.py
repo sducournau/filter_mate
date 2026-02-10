@@ -27,16 +27,16 @@ if __name__ == '__main__':
     # Create test suite
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-    
+
     # Add all test classes
     suite.addTests(loader.loadTestsFromTestCase(TestFilterType))
     suite.addTests(loader.loadTestsFromTestCase(TestFilter))
     suite.addTests(loader.loadTestsFromTestCase(TestFilterChain))
     suite.addTests(loader.loadTestsFromTestCase(TestRealWorldScenarios))
-    
+
     # Run tests with verbose output
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
-    
+
     # Exit with appropriate code
     sys.exit(0 if result.wasSuccessful() else 1)

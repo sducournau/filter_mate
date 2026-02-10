@@ -1,9 +1,7 @@
 from qgis.PyQt import QtGui, QtCore, QtWidgets
-import sys
 from . import delegate
 from . import themes
-from .datatypes import match_type, TypeRole, StrType
-
+from .datatypes import TypeRole
 
 
 class JsonView(QtWidgets.QTreeView):
@@ -14,25 +12,25 @@ class JsonView(QtWidgets.QTreeView):
         super(JsonView, self).__init__(parent)
         self.model = model
         self.plugin_dir = plugin_dir
-        
+
         # CRITICAL: Set model IMMEDIATELY to avoid Qt crashes
         if model is not None:
             self.setModel(model)
-        
+
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu)
         self.setItemDelegate(delegate.JsonDelegate())
-        
+
         # Amélioration de la visibilité avec support du thème dark
         self._apply_theme_stylesheet()
-        
+
         # Configuration additionnelle pour la lisibilité
         self.setAlternatingRowColors(True)
         self.setUniformRowHeights(False)
         font = self.font()
         font.setPointSize(9)
         self.setFont(font)
-        
+
         # Configuration des colonnes pour meilleure visibilité
         header = self.header()
         header.setStretchLastSection(False)
@@ -61,7 +59,7 @@ class JsonView(QtWidgets.QTreeView):
                 is_dark = bg_color.lightness() < 128
             except (ImportError, AttributeError):
                 is_dark = False
-        
+
         if is_dark:
             # Thème sombre optimisé
             self.setStyleSheet("""
@@ -151,7 +149,6 @@ class JsonView(QtWidgets.QTreeView):
     # def leaveEvent(self, QEvent):
     #     self.onLeaveEvent.emit()
 
-    
     def _menu(self, position):
         """Show the actions of the DataType (if any)."""
         menu = QtWidgets.QMenu()
@@ -191,12 +188,10 @@ class JsonView(QtWidgets.QTreeView):
                 self.model.addData(item)
 
             if action.text() == "Insert sibling up":
-                self.model.addData(item,'up')
-
+                self.model.addData(item, 'up')
 
             if action.text() == "Insert sibling down":
-                self.model.addData(item,'down')
-
+                self.model.addData(item, 'down')
 
             if action.text() == "Remove":
 
@@ -205,10 +200,10 @@ class JsonView(QtWidgets.QTreeView):
     def set_theme(self, theme_name):
         """
         Change the color theme for the JSON view.
-        
+
         Args:
             theme_name (str): Name of the theme to apply (e.g., 'monokai', 'nord')
-        
+
         Returns:
             bool: True if theme was changed successfully
         """
@@ -217,55 +212,55 @@ class JsonView(QtWidgets.QTreeView):
             self.refresh_colors()
             return True
         return False
-    
+
     def get_current_theme_name(self):
         """
         Get the name of the currently active theme.
-        
+
         Returns:
             str: Name of the current theme
         """
         return themes.get_current_theme().name
-    
+
     def get_available_themes(self):
         """
         Get list of available theme names.
-        
+
         Returns:
             dict: Dictionary mapping theme keys to display names
         """
         return themes.get_theme_display_names()
-    
+
     def refresh_colors(self):
         """
         Refresh all item colors in the view based on the current theme.
         """
         if not self.model:
             return
-        
+
         # Recursively update colors for all items
         def update_item_colors(item):
             if item is None:
                 return
-            
+
             # Update the item's color if it has a DataType
             data_type = item.data(TypeRole)
             if data_type is not None:
                 item.setData(QtGui.QBrush(data_type.get_color()), QtCore.Qt.ForegroundRole)
-            
+
             # Update children
             for row in range(item.rowCount()):
                 for col in range(item.columnCount()):
                     child = item.child(row, col)
                     if child:
                         update_item_colors(child)
-        
+
         # Update all root items
         for row in range(self.model.rowCount()):
             for col in range(self.model.columnCount()):
                 item = self.model.item(row, col)
                 if item:
                     update_item_colors(item)
-        
+
         # Force view update
         self.viewport().update()

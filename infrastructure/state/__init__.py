@@ -7,7 +7,7 @@ including flags for coordinating asynchronous operations.
 Migrated from before_migration/modules/flag_manager.py (January 2026)
 """
 
-from .flag_manager import (
+from .flag_manager import (  # noqa: F401
     FlagState,
     FlagStats,
     TimedFlag,

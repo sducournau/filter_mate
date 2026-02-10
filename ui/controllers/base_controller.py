@@ -13,14 +13,13 @@ from qgis.PyQt.QtCore import QObject
 # by creating a combined metaclass
 try:
     from sip import wrappertype
+
     class QObjectABCMeta(wrappertype, ABCMeta):
         """Combined metaclass for QObject + ABC compatibility."""
-        pass
 except ImportError:
     # Fallback for different sip versions
     class QObjectABCMeta(type(QObject), ABCMeta):
         """Combined metaclass for QObject + ABC compatibility."""
-        pass
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -42,7 +41,7 @@ class BaseController(QObject, metaclass=QObjectABCMeta):
     Usage:
         class MyController(BaseController):
             my_signal = pyqtSignal(str)  # Can use signals!
-            
+
             def setup(self) -> None:
                 self._connect_signal(widget, 'clicked', self._on_click)
 

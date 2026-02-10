@@ -9,7 +9,7 @@ replacing the old ui.elements imports.
 
 # Re-export from legacy module for now (will be migrated later)
 try:
-    from ui.elements import (
+    from ui.elements import (  # noqa: F401
         get_spacer_size,
         LAYOUTS,
     )
@@ -18,7 +18,7 @@ except ImportError:
     def get_spacer_size(size_name: str = "medium"):
         sizes = {"small": 5, "medium": 10, "large": 20}
         return sizes.get(size_name, 10)
-    
+
     LAYOUTS = {}
 
 __all__ = [

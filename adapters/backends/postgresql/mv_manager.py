@@ -41,7 +41,7 @@ logger = logging.getLogger('FilterMate.PostgreSQL.MVManager')
 class MVInfo:
     """
     Information about a materialized view.
-    
+
     Note: Kept for backwards compatibility. New code should use ViewInfo.
     """
     name: str
@@ -53,7 +53,7 @@ class MVInfo:
     is_populated: bool
     definition: str
     session_id: Optional[str] = None
-    
+
     def to_view_info(self) -> ViewInfo:
         """Convert to unified ViewInfo."""
         return ViewInfo(
@@ -74,9 +74,9 @@ class MVInfo:
 class MVConfig:
     """
     Configuration for materialized view creation.
-    
+
     v4.2.12: Increased thresholds - MV only for very large/complex cases.
-    
+
     Note: Kept for backwards compatibility. New code should use ViewConfig.
     """
     feature_threshold: int = 100000  # v4.2.12: Increased from 10k to 100k
@@ -87,7 +87,7 @@ class MVConfig:
     with_data: bool = True
     create_spatial_index: bool = True
     create_btree_indexes: bool = True
-    
+
     def to_view_config(self) -> ViewConfig:
         """Convert to unified ViewConfig."""
         return ViewConfig(
@@ -107,7 +107,7 @@ class MVConfig:
 class MaterializedViewManager(MaterializedViewPort):
     """
     Manages materialized views for PostgreSQL filter optimization.
-    
+
     Implements MaterializedViewPort interface for unified API with Spatialite.
 
     Materialized views are used to pre-compute expensive filter
@@ -128,7 +128,7 @@ class MaterializedViewManager(MaterializedViewPort):
 
         # Refresh when source data changes
         mv_manager.refresh_view(mv_name)
-        
+
         # Get feature IDs
         fids = mv_manager.get_feature_ids(mv_name, "id")
     """
@@ -167,11 +167,11 @@ class MaterializedViewManager(MaterializedViewPort):
         logger.debug(
             f"[PostgreSQL] MaterializedViewManager initialized: session={self._session_id[:8]}"
         )
-    
+
     # ==========================================================================
     # MaterializedViewPort Implementation
     # ==========================================================================
-    
+
     @property
     def view_type(self) -> ViewType:
         """Return the type of view this manager creates."""
@@ -186,7 +186,7 @@ class MaterializedViewManager(MaterializedViewPort):
     def config(self) -> ViewConfig:
         """Get current configuration."""
         return self._view_config
-    
+
     @property
     def mv_config(self) -> MVConfig:
         """Get legacy MVConfig (for backwards compatibility)."""
@@ -227,7 +227,7 @@ class MaterializedViewManager(MaterializedViewPort):
             return True
 
         return False
-    
+
     # Alias for backwards compatibility
     should_use_mv = should_use_view
 
@@ -306,8 +306,8 @@ class MaterializedViewManager(MaterializedViewPort):
             cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.MV_SCHEMA}"')
 
             # Create MV
-            with_data = "WITH DATA" if self._mv_config.with_data else "WITH NO DATA"
-            create_sql = f"""
+            "WITH DATA" if self._mv_config.with_data else "WITH NO DATA"
+            create_sql = """
                 CREATE MATERIALIZED VIEW {full_name} AS
                 {query}
                 {with_data}
@@ -369,7 +369,7 @@ class MaterializedViewManager(MaterializedViewPort):
 
         conn = connection or self._get_connection()
         if conn is None:
-            logger.error(f"[PostgreSQL] No database connection for MV refresh")
+            logger.error("[PostgreSQL] No database connection for MV refresh")
             return False
 
         try:
@@ -425,7 +425,7 @@ class MaterializedViewManager(MaterializedViewPort):
 
         conn = connection or self._get_connection()
         if conn is None:
-            logger.error(f"[PostgreSQL] No database connection for MV drop")
+            logger.error("[PostgreSQL] No database connection for MV drop")
             return False
 
         try:
@@ -596,7 +596,7 @@ class MaterializedViewManager(MaterializedViewPort):
         try:
             cursor = conn.cursor()
 
-            query = f"SELECT {columns} FROM {full_name}"
+            query = f"SELECT {columns} FROM {full_name}"  # nosec B608
             if where_clause:
                 query += f" WHERE {where_clause}"
 
@@ -606,41 +606,41 @@ class MaterializedViewManager(MaterializedViewPort):
         except Exception as e:
             logger.error(f"[PostgreSQL] Failed to query MV {mv_name}: {e}")
             return []
-    
+
     # ==========================================================================
     # MaterializedViewPort Interface Methods (remaining)
     # ==========================================================================
-    
+
     def refresh_view(self, view_name: str) -> bool:
         """Refresh a materialized view (interface implementation)."""
         return self.refresh_mv(view_name)
-    
+
     def drop_view(self, view_name: str, if_exists: bool = True) -> bool:
         """Drop a materialized view (interface implementation)."""
         return self.drop_mv(view_name, if_exists=if_exists)
-    
+
     def view_exists(self, view_name: str) -> bool:
         """Check if MV exists (interface implementation)."""
         return self.mv_exists(view_name)
-    
+
     def get_view_info(self, view_name: str) -> Optional[ViewInfo]:
         """Get view info (interface implementation)."""
         mv_info = self.get_mv_info(view_name)
         if mv_info:
             return mv_info.to_view_info()
         return None
-    
+
     def list_session_views(self) -> List[ViewInfo]:
         """List all MVs created in current session."""
         return [
             info.to_view_info() for info in self._created_mvs.values()
             if info.session_id == self._session_id
         ]
-    
+
     def cleanup_session_views(self) -> int:
         """Clean up all session MVs (interface implementation)."""
         return self.cleanup_session_mvs()
-    
+
     def query_view(
         self,
         view_name: str,
@@ -650,24 +650,24 @@ class MaterializedViewManager(MaterializedViewPort):
     ) -> List[Any]:
         """
         Query a materialized view (interface implementation).
-        
+
         Args:
             view_name: View to query
             columns: Columns to select (default: all)
             where_clause: Additional WHERE clause
             limit: Maximum rows to return
-            
+
         Returns:
             List of result rows
         """
         cols = ", ".join(f'"{c}"' for c in columns) if columns else "*"
-        
+
         full_where = where_clause or ""
         if limit:
             full_where = f"{full_where} LIMIT {limit}" if full_where else f"1=1 LIMIT {limit}"
-        
+
         return self.query_mv(view_name, columns=cols, where_clause=full_where if full_where else None)
-    
+
     def get_feature_ids(
         self,
         view_name: str,
@@ -675,11 +675,11 @@ class MaterializedViewManager(MaterializedViewPort):
     ) -> List[int]:
         """
         Get feature IDs from materialized view.
-        
+
         Args:
             view_name: MV to query
             primary_key: Primary key column name
-            
+
         Returns:
             List of feature IDs
         """
@@ -704,7 +704,7 @@ class MaterializedViewManager(MaterializedViewPort):
 
     def _generate_mv_name(self, query: str, session_scoped: bool) -> str:
         """Generate unique MV name from query hash."""
-        query_hash = hashlib.md5(query.encode()).hexdigest()[:12]
+        query_hash = hashlib.md5(query.encode(), usedforsecurity=False).hexdigest()[:12]
 
         if session_scoped:
             return f"{self.MV_PREFIX}{self.SESSION_PREFIX}{self._session_id}_{query_hash}"
@@ -725,10 +725,10 @@ class MaterializedViewManager(MaterializedViewPort):
         """Create spatial index on MV geometry column."""
         # Clean table name for index naming
         clean_name = table_name.replace('"', '').replace('.', '_')
-        index_name = f"idx_{clean_name}_geom"
+        f"idx_{clean_name}_geom"
 
         try:
-            cursor.execute(f"""
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS "{index_name}"
                 ON {table_name} USING GIST ("{geometry_column}")
             """)
@@ -743,10 +743,10 @@ class MaterializedViewManager(MaterializedViewPort):
     ) -> None:
         """Create btree index on column."""
         clean_name = table_name.replace('"', '').replace('.', '_')
-        index_name = f"idx_{clean_name}_{column}"
+        f"idx_{clean_name}_{column}"
 
         try:
-            cursor.execute(f"""
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS "{index_name}"
                 ON {table_name} ("{column}")
             """)

@@ -10,7 +10,7 @@ Usage:
         PSYCOPG2_AVAILABLE,
         POSTGRESQL_AVAILABLE
     )
-    
+
     if PSYCOPG2_AVAILABLE:
         conn = psycopg2.connect(...)
 

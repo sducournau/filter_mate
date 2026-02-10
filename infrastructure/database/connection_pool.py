@@ -17,13 +17,13 @@ Usage:
     from ...infrastructure.database.connection_pool import (        get_pool_manager,
         pooled_connection_from_layer
     )
-    
+
     # Get the global pool manager
     pool_manager = get_pool_manager()
-    
+
     # Get a connection from pool (auto-creates pool if needed)
     conn = pool_manager.get_connection(host, port, dbname, username, password)
-    
+
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT ...")
@@ -31,12 +31,12 @@ Usage:
     finally:
         # Return connection to pool (don't close!)
         pool_manager.release_connection(conn, host, port, dbname)
-    
+
     # Or use context manager:
     with pool_manager.connection(host, port, dbname, username, password) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT ...")
-    
+
     # Or from a layer:
     with pooled_connection_from_layer(layer) as (conn, uri):
         if conn:
@@ -60,7 +60,7 @@ from dataclasses import dataclass
 logger = logging.getLogger('FilterMate.ConnectionPool')
 
 # Import psycopg2 availability
-from .postgresql_support import psycopg2, PSYCOPG2_AVAILABLE, POSTGRESQL_AVAILABLE
+from .postgresql_support import psycopg2, POSTGRESQL_AVAILABLE
 
 
 @dataclass
@@ -72,7 +72,7 @@ class PoolStats:
     peak_pool_size: int = 0
     total_wait_time_ms: float = 0.0
     cache_hit_rate: float = 0.0
-    
+
     def update_hit_rate(self):
         """Update the cache hit rate."""
         total = self.total_connections_created + self.total_connections_reused
@@ -83,16 +83,16 @@ class PoolStats:
 class PostgreSQLConnectionPool:
     """
     Thread-safe connection pool for a single PostgreSQL database.
-    
+
     This pool manages a set of reusable connections to avoid the
     ~50-100ms overhead of establishing new connections.
-    
+
     PERFORMANCE IMPROVEMENTS (v2.6.0):
     - Increased max connections from 10 to 15
     - Reduced idle timeout from 300s to 180s
     - Added periodic health check thread
     - Integrated with circuit breaker for failure protection
-    
+
     Features:
     - Thread-safe connection management
     - Automatic connection health checking
@@ -101,14 +101,14 @@ class PostgreSQLConnectionPool:
     - Connection timeout handling
     - Statistics tracking for monitoring
     """
-    
+
     # Default configuration - OPTIMIZED v2.6.0
     DEFAULT_MIN_CONNECTIONS = 2
     DEFAULT_MAX_CONNECTIONS = 15    # Increased from 10 for better parallelism
     DEFAULT_CONNECTION_TIMEOUT = 30  # seconds
     DEFAULT_IDLE_TIMEOUT = 180       # Reduced from 300 for faster cleanup
     DEFAULT_HEALTH_CHECK_INTERVAL = 60  # New: periodic health check
-    
+
     def __init__(
         self,
         host: str,
@@ -123,7 +123,7 @@ class PostgreSQLConnectionPool:
     ):
         """
         Initialize PostgreSQL connection pool.
-        
+
         Args:
             host: Database host
             port: Database port
@@ -137,46 +137,46 @@ class PostgreSQLConnectionPool:
         """
         if not POSTGRESQL_AVAILABLE:
             raise RuntimeError("psycopg2 not available - cannot create connection pool")
-        
+
         self.host = host
         self.port = port
         self.database = database
         self.user = user
         self.password = password
         self.sslmode = sslmode
-        
+
         self.min_connections = min_connections or self.DEFAULT_MIN_CONNECTIONS
         self.max_connections = max_connections or self.DEFAULT_MAX_CONNECTIONS
-        
+
         # Connection pool (queue for thread-safety)
         self._pool: Queue = Queue(maxsize=self.max_connections)
         self._active_connections: int = 0
         self._lock = threading.RLock()
-        
+
         # Connection tracking for health checks
         self._connection_timestamps: Dict[int, float] = {}
-        
+
         # Health check thread management
         self._health_check_enabled = enable_health_check
         self._health_check_thread: Optional[threading.Thread] = None
         self._shutdown_event = threading.Event()
-        
+
         # Statistics
         self.stats = PoolStats()
-        
+
         # Pool key for identification
         self._pool_key = f"{host}:{port}/{database}"
-        
+
         logger.info(f"✓ PostgreSQL connection pool created for {self._pool_key} "
                    f"(min={self.min_connections}, max={self.max_connections})")
-        
+
         # Pre-create minimum connections
         self._initialize_pool()
-        
+
         # Start health check thread if enabled
         if self._health_check_enabled:
             self._start_health_check_thread()
-    
+
     def _initialize_pool(self):
         """Pre-create minimum connections."""
         for _ in range(self.min_connections):
@@ -188,7 +188,7 @@ class PostgreSQLConnectionPool:
             except Exception as e:
                 logger.warning(f"Failed to pre-create connection: {e}")
                 break
-    
+
     def _create_connection(self):
         """Create a new database connection."""
         try:
@@ -201,28 +201,28 @@ class PostgreSQLConnectionPool:
             }
             if self.sslmode:
                 connect_args['sslmode'] = self.sslmode
-            
+
             conn = psycopg2.connect(**connect_args)
-            
+
             with self._lock:
                 self._active_connections += 1
                 self.stats.total_connections_created += 1
                 self.stats.peak_pool_size = max(
-                    self.stats.peak_pool_size, 
+                    self.stats.peak_pool_size,
                     self._active_connections
                 )
-            
+
             self._connection_timestamps[id(conn)] = time.time()
             logger.debug(f"Created new connection for {self._pool_key}")
             return conn
-            
+
         except Exception as e:
             logger.error(f"Failed to create connection to {self._pool_key}: {e}")
             return None
-    
+
     def _start_health_check_thread(self):
         """Start background thread for periodic health checks.
-        
+
         CRASH FIX (v2.8.6): Added additional safety checks to detect QGIS shutdown
         and prevent the thread from causing access violations when QGIS exits.
         """
@@ -237,15 +237,15 @@ class PostgreSQLConnectionPool:
                 except Exception:
                     # If we can't check QGIS state, assume it's shutting down
                     break
-                
+
                 try:
                     self._perform_health_check()
                 except Exception as e:
                     logger.debug(f"Health check error: {e}")
-                
+
                 # Wait for interval or shutdown
                 self._shutdown_event.wait(self.DEFAULT_HEALTH_CHECK_INTERVAL)
-        
+
         self._health_check_thread = threading.Thread(
             target=health_check_loop,
             name=f"PoolHealthCheck-{self._pool_key}",
@@ -253,11 +253,11 @@ class PostgreSQLConnectionPool:
         )
         self._health_check_thread.start()
         logger.debug(f"Health check thread started for {self._pool_key}")
-    
+
     def _perform_health_check(self):
         """Perform health check on pooled connections."""
         removed_count = 0
-        
+
         # Get all connections from pool
         connections_to_check = []
         while True:
@@ -266,11 +266,11 @@ class PostgreSQLConnectionPool:
                 connections_to_check.append(conn)
             except Empty:
                 break
-        
+
         # Check each connection
         for conn in connections_to_check:
             should_keep = True
-            
+
             # Check health
             if not self._is_connection_healthy(conn):
                 should_keep = False
@@ -281,7 +281,7 @@ class PostgreSQLConnectionPool:
                     if self._active_connections > self.min_connections:
                         should_keep = False
                         removed_count += 1
-            
+
             if should_keep:
                 try:
                     self._pool.put_nowait(conn)
@@ -290,10 +290,10 @@ class PostgreSQLConnectionPool:
                     self._close_connection(conn)  # Pool is full
             else:
                 self._close_connection(conn)
-        
+
         if removed_count > 0:
             logger.debug(f"Health check: removed {removed_count} connections from {self._pool_key}")
-        
+
         # Ensure minimum connections
         with self._lock:
             while self._active_connections < self.min_connections:
@@ -304,22 +304,22 @@ class PostgreSQLConnectionPool:
                         self.stats.current_pool_size += 1
                 except Exception:
                     break
-    
+
     def _is_connection_healthy(self, conn) -> bool:
         """Check if a connection is healthy."""
         try:
             if conn is None or conn.closed:
                 return False
-            
+
             # Quick ping test
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
-            
+
             return True
-            
+
         except Exception:
             return False
-    
+
     def _is_connection_idle_too_long(self, conn) -> bool:
         """Check if connection has been idle beyond timeout."""
         conn_id = id(conn)
@@ -327,31 +327,31 @@ class PostgreSQLConnectionPool:
             idle_time = time.time() - self._connection_timestamps[conn_id]
             return idle_time > self.DEFAULT_IDLE_TIMEOUT
         return False
-    
+
     def get_connection(self, timeout: float = None):
         """
         Get a connection from the pool.
-        
+
         If no connection is available and pool isn't at max capacity,
         creates a new connection. Otherwise waits for available connection.
-        
+
         Args:
             timeout: Seconds to wait for available connection
-        
+
         Returns:
             psycopg2 connection
-        
+
         Raises:
             TimeoutError: If no connection available within timeout
         """
         timeout = timeout or self.DEFAULT_CONNECTION_TIMEOUT
         start_time = time.time()
-        
+
         while True:
             # Try to get from pool first
             try:
                 conn = self._pool.get_nowait()
-                
+
                 # Check connection health
                 if self._is_connection_healthy(conn):
                     # Update timestamp and return
@@ -364,17 +364,17 @@ class PostgreSQLConnectionPool:
                     # Connection is bad, close it and try again
                     self._close_connection(conn)
                     continue
-                    
+
             except Empty:
                 pass
-            
+
             # No connection in pool, try to create new one
             with self._lock:
                 if self._active_connections < self.max_connections:
                     conn = self._create_connection()
                     if conn:
                         return conn
-            
+
             # Pool is at max capacity, wait for release
             elapsed = time.time() - start_time
             if elapsed >= timeout:
@@ -382,37 +382,37 @@ class PostgreSQLConnectionPool:
                     f"Timeout waiting for connection to {self._pool_key} "
                     f"(waited {elapsed:.1f}s, pool size: {self._active_connections})"
                 )
-            
+
             # Wait a bit before retrying
             wait_time = min(0.1, timeout - elapsed)
             time.sleep(wait_time)
             self.stats.total_wait_time_ms += wait_time * 1000
-    
+
     def release_connection(self, conn):
         """
         Return a connection to the pool.
-        
+
         Connection will be reused if healthy, otherwise closed.
-        
+
         Args:
             conn: psycopg2 connection to release
         """
         if conn is None:
             return
-        
+
         try:
             # Check if connection is still usable
             if conn.closed:
                 with self._lock:
                     self._active_connections -= 1
                 return
-            
+
             # Rollback any uncommitted transaction
             try:
                 conn.rollback()
             except Exception:
                 pass
-            
+
             # Check health and return to pool
             if self._is_connection_healthy(conn):
                 try:
@@ -423,44 +423,44 @@ class PostgreSQLConnectionPool:
                 except Exception:
                     # Pool is full, close the connection
                     pass
-            
+
             # Close the connection
             self._close_connection(conn)
-            
+
         except Exception as e:
             logger.warning(f"Error releasing connection: {e}")
             self._close_connection(conn)
-    
+
     def _close_connection(self, conn):
         """Close a connection and update counters."""
         try:
             if conn and not conn.closed:
                 conn.close()
-            
+
             # Remove from tracking
             conn_id = id(conn)
             self._connection_timestamps.pop(conn_id, None)
-            
+
             with self._lock:
                 self._active_connections = max(0, self._active_connections - 1)
                 self.stats.current_pool_size = max(0, self.stats.current_pool_size - 1)
-                
+
         except Exception as e:
             logger.debug(f"Error closing connection: {e}")
-    
+
     @contextmanager
     def connection(self, timeout: float = None) -> Generator:
         """
         Context manager for getting a pooled connection.
-        
+
         Usage:
             with pool.connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT ...")
-        
+
         Args:
             timeout: Connection timeout in seconds
-        
+
         Yields:
             psycopg2 connection
         """
@@ -471,22 +471,22 @@ class PostgreSQLConnectionPool:
         finally:
             if conn:
                 self.release_connection(conn)
-    
+
     def shutdown(self):
         """Gracefully shutdown the pool."""
         logger.info(f"Shutting down connection pool {self._pool_key}")
-        
+
         # Stop health check thread
         self._shutdown_event.set()
         if self._health_check_thread and self._health_check_thread.is_alive():
             self._health_check_thread.join(timeout=5)
-        
+
         self.close_all()
-    
+
     def close_all(self):
         """Close all connections in the pool."""
         logger.info(f"Closing connection pool for {self._pool_key}")
-        
+
         # Close all pooled connections
         while True:
             try:
@@ -494,15 +494,15 @@ class PostgreSQLConnectionPool:
                 self._close_connection(conn)
             except Empty:
                 break
-        
+
         self._connection_timestamps.clear()
-        
+
         with self._lock:
             self._active_connections = 0
             self.stats.current_pool_size = 0
-        
+
         logger.info(f"✓ Connection pool closed for {self._pool_key}")
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get pool statistics."""
         self.stats.update_hit_rate()
@@ -521,26 +521,26 @@ class PostgreSQLConnectionPool:
 class PostgreSQLPoolManager:
     """
     Global manager for PostgreSQL connection pools.
-    
+
     Maintains one pool per unique database connection (host:port/database).
     Thread-safe singleton pattern ensures pools are shared across the application.
-    
+
     Usage:
         manager = get_pool_manager()
-        
+
         # Get connection using layer
         with manager.connection_from_layer(layer) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT ...")
-        
+
         # Or with explicit parameters
         with manager.connection(host, port, db, user, pwd) as conn:
             ...
     """
-    
+
     _instance = None
     _lock = threading.Lock()
-    
+
     def __new__(cls):
         """Singleton pattern."""
         if cls._instance is None:
@@ -549,22 +549,22 @@ class PostgreSQLPoolManager:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         """Initialize pool manager (only once)."""
         if self._initialized:
             return
-        
+
         self._pools: Dict[str, PostgreSQLConnectionPool] = {}
         self._pools_lock = threading.RLock()
         self._initialized = True
-        
+
         logger.info("✓ PostgreSQL Pool Manager initialized")
-    
+
     def _get_pool_key(self, host: str, port: str, database: str) -> str:
         """Generate unique key for pool identification."""
         return f"{host}:{port}/{database}"
-    
+
     def get_pool(
         self,
         host: str,
@@ -576,7 +576,7 @@ class PostgreSQLPoolManager:
     ) -> PostgreSQLConnectionPool:
         """
         Get or create a connection pool for the specified database.
-        
+
         Args:
             host: Database host
             port: Database port
@@ -584,17 +584,17 @@ class PostgreSQLPoolManager:
             user: Username (required for new pools)
             password: Password (required for new pools)
             sslmode: SSL mode (optional)
-        
+
         Returns:
             PostgreSQLConnectionPool instance
         """
         pool_key = self._get_pool_key(host, port, database)
-        
+
         with self._pools_lock:
             if pool_key not in self._pools:
                 if user is None:
                     raise ValueError(f"Credentials required to create new pool for {pool_key}")
-                
+
                 self._pools[pool_key] = PostgreSQLConnectionPool(
                     host=host,
                     port=port,
@@ -603,9 +603,9 @@ class PostgreSQLPoolManager:
                     password=password,
                     sslmode=sslmode
                 )
-            
+
             return self._pools[pool_key]
-    
+
     def get_connection(
         self,
         host: str,
@@ -618,28 +618,28 @@ class PostgreSQLPoolManager:
     ):
         """
         Get a connection from the appropriate pool.
-        
+
         Args:
             host, port, database, user, password: Connection parameters
             sslmode: SSL mode
             timeout: Connection timeout
-        
+
         Returns:
             psycopg2 connection
         """
         pool = self.get_pool(host, port, database, user, password, sslmode)
         return pool.get_connection(timeout)
-    
+
     def release_connection(self, conn, host: str, port: str, database: str):
         """
         Release a connection back to its pool.
-        
+
         Args:
             conn: Connection to release
             host, port, database: Pool identification
         """
         pool_key = self._get_pool_key(host, port, database)
-        
+
         with self._pools_lock:
             if pool_key in self._pools:
                 self._pools[pool_key].release_connection(conn)
@@ -650,7 +650,7 @@ class PostgreSQLPoolManager:
                         conn.close()
                 except Exception:
                     pass
-    
+
     @contextmanager
     def connection(
         self,
@@ -664,7 +664,7 @@ class PostgreSQLPoolManager:
     ) -> Generator:
         """
         Context manager for getting a pooled connection.
-        
+
         Usage:
             with manager.connection(host, port, db, user, pwd) as conn:
                 cursor = conn.cursor()
@@ -673,28 +673,28 @@ class PostgreSQLPoolManager:
         pool = self.get_pool(host, port, database, user, password, sslmode)
         with pool.connection(timeout) as conn:
             yield conn
-    
+
     @contextmanager
     def connection_from_uri(self, source_uri, timeout: float = None) -> Generator:
         """
         Context manager for connection using QgsDataSourceUri.
-        
+
         Args:
             source_uri: QgsDataSourceUri from layer
             timeout: Connection timeout
-        
+
         Yields:
             psycopg2 connection
         """
         from qgis.core import QgsApplication, QgsAuthMethodConfig
-        
+
         host = source_uri.host()
         port = source_uri.port()
         database = source_uri.database()
         user = source_uri.username()
         password = source_uri.password()
         ssl_mode = source_uri.sslMode()
-        
+
         # Handle authcfg authentication
         authcfg_id = source_uri.param('authcfg')
         if authcfg_id:
@@ -703,24 +703,24 @@ class PostgreSQLPoolManager:
                 QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, auth_config, True)
                 user = auth_config.config("username")
                 password = auth_config.config("password")
-        
+
         sslmode = None
         if ssl_mode is not None:
             sslmode = source_uri.encodeSslMode(ssl_mode)
-        
+
         with self.connection(host, port, database, user, password, sslmode, timeout) as conn:
             yield conn
-    
+
     def close_pool(self, host: str, port: str, database: str):
         """Close a specific connection pool."""
         pool_key = self._get_pool_key(host, port, database)
-        
+
         with self._pools_lock:
             if pool_key in self._pools:
                 self._pools[pool_key].shutdown()
                 del self._pools[pool_key]
                 logger.info(f"Closed pool: {pool_key}")
-    
+
     def close_all_pools(self):
         """Close all connection pools (call on plugin unload)."""
         with self._pools_lock:
@@ -729,10 +729,10 @@ class PostgreSQLPoolManager:
                     pool.shutdown()
                 except Exception as e:
                     logger.warning(f"Error closing pool {pool_key}: {e}")
-            
+
             self._pools.clear()
             logger.info("✓ All connection pools closed")
-    
+
     def get_all_stats(self) -> Dict[str, Dict]:
         """Get statistics for all pools."""
         with self._pools_lock:
@@ -740,7 +740,7 @@ class PostgreSQLPoolManager:
                 pool_key: pool.get_stats()
                 for pool_key, pool in self._pools.items()
             }
-    
+
     def log_stats(self):
         """Log statistics for all pools."""
         stats = self.get_all_stats()
@@ -763,37 +763,37 @@ _pool_manager: Optional[PostgreSQLPoolManager] = None
 def get_pool_manager() -> PostgreSQLPoolManager:
     """
     Get the global PostgreSQL pool manager.
-    
+
     Returns:
         PostgreSQLPoolManager singleton instance
-    
+
     Raises:
         RuntimeError: If psycopg2 is not available
     """
     global _pool_manager
-    
+
     if not POSTGRESQL_AVAILABLE:
         raise RuntimeError("psycopg2 not available - connection pooling disabled")
-    
+
     if _pool_manager is None:
         _pool_manager = PostgreSQLPoolManager()
-    
+
     return _pool_manager
 
 
 def get_pooled_connection_from_layer(layer) -> Tuple[Optional[Any], Optional[Any]]:
     """
     Get a pooled connection for a PostgreSQL layer.
-    
+
     This is a drop-in replacement for get_datasource_connexion_from_layer()
     that uses connection pooling for better performance.
-    
+
     Args:
         layer: QgsVectorLayer (must be PostgreSQL provider)
-    
+
     Returns:
         tuple: (connection, source_uri) or (None, None) if not PostgreSQL
-    
+
     Usage:
         conn, uri = get_pooled_connection_from_layer(layer)
         if conn:
@@ -806,21 +806,21 @@ def get_pooled_connection_from_layer(layer) -> Tuple[Optional[Any], Optional[Any
     """
     if not POSTGRESQL_AVAILABLE:
         return None, None
-    
+
     if layer.providerType() != 'postgres':
         return None, None
-    
+
     from qgis.core import QgsDataSourceUri, QgsApplication, QgsAuthMethodConfig
-    
+
     source_uri = QgsDataSourceUri(layer.source())
-    
+
     host = source_uri.host()
     port = source_uri.port()
     database = source_uri.database()
     user = source_uri.username()
     password = source_uri.password()
     ssl_mode = source_uri.sslMode()
-    
+
     # Handle authcfg
     authcfg_id = source_uri.param('authcfg')
     if authcfg_id:
@@ -829,11 +829,11 @@ def get_pooled_connection_from_layer(layer) -> Tuple[Optional[Any], Optional[Any
             QgsApplication.authManager().loadAuthenticationConfig(authcfg_id, auth_config, True)
             user = auth_config.config("username")
             password = auth_config.config("password")
-    
+
     sslmode = None
     if ssl_mode is not None:
         sslmode = source_uri.encodeSslMode(ssl_mode)
-    
+
     try:
         manager = get_pool_manager()
         conn = manager.get_connection(host, port, database, user, password, sslmode)
@@ -846,16 +846,16 @@ def get_pooled_connection_from_layer(layer) -> Tuple[Optional[Any], Optional[Any
 def release_pooled_connection(conn, source_uri) -> None:
     """
     Release a pooled connection back to the pool.
-    
+
     CRITICAL: Always call this after using a pooled connection!
-    
+
     Args:
         conn: psycopg2 connection from get_pooled_connection_from_layer()
         source_uri: QgsDataSourceUri from get_pooled_connection_from_layer()
     """
     if conn is None or source_uri is None:
         return
-    
+
     try:
         manager = get_pool_manager()
         manager.release_connection(
@@ -878,17 +878,17 @@ def release_pooled_connection(conn, source_uri) -> None:
 def pooled_connection_from_layer(layer, timeout: float = None) -> Generator:
     """
     Context manager for getting a pooled connection from a layer.
-    
+
     This is the recommended way to use pooled connections as it
     automatically handles release back to the pool.
-    
+
     Args:
         layer: QgsVectorLayer (PostgreSQL)
         timeout: Connection timeout in seconds
-    
+
     Yields:
         tuple: (connection, source_uri) or (None, None)
-    
+
     Usage:
         with pooled_connection_from_layer(layer) as (conn, uri):
             if conn:
@@ -897,7 +897,7 @@ def pooled_connection_from_layer(layer, timeout: float = None) -> Generator:
     """
     conn = None
     source_uri = None
-    
+
     try:
         conn, source_uri = get_pooled_connection_from_layer(layer)
         yield conn, source_uri
@@ -909,11 +909,11 @@ def pooled_connection_from_layer(layer, timeout: float = None) -> Generator:
 def cleanup_pools() -> None:
     """
     Clean up all connection pools.
-    
+
     Call this when the plugin is unloaded to properly close all connections.
     """
     global _pool_manager
-    
+
     if _pool_manager is not None:
         _pool_manager.log_stats()
         _pool_manager.close_all_pools()
@@ -928,10 +928,10 @@ _pools: Dict[str, Any] = {}
 def get_pool(name: str) -> Optional[Any]:
     """
     Get a named connection pool.
-    
+
     Args:
         name: Pool name
-    
+
     Returns:
         Connection pool or None if not found
     """
@@ -941,7 +941,7 @@ def get_pool(name: str) -> Optional[Any]:
 def register_pool(name: str, pool: Any) -> None:
     """
     Register a connection pool.
-    
+
     Args:
         name: Pool name
         pool: Pool instance (psycopg2.pool.SimpleConnectionPool, etc.)
@@ -953,7 +953,7 @@ def register_pool(name: str, pool: Any) -> None:
 def unregister_pool(name: str) -> None:
     """
     Unregister a connection pool.
-    
+
     Args:
         name: Pool name
     """

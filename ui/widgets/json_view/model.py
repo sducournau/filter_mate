@@ -2,15 +2,15 @@ from qgis.PyQt import QtGui, QtWidgets, QtCore
 import json
 from .datatypes import set_plugin_dir, match_type, TypeRole, ListType, DictType
 
+
 class InputWindow(QtWidgets.QDialog):
     """Main Window."""
+
     def __init__(self):
         """Initializer."""
         super().__init__()
         self.setWindowTitle("Python Menus & Toolbars")
         self.resize(400, 200)
-
-
 
         self.layout = QtWidgets.QGridLayout(self)
 

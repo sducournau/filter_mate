@@ -11,11 +11,11 @@ Spatialite/GeoPackage specific implementations including:
 
 Part of Phase 4 Backend Refactoring (ARCH-040 through ARCH-043).
 """
-from .backend import SpatialiteBackend, create_spatialite_backend, spatialite_connect
-from .cache import SpatialiteCache, CacheStats, create_cache
-from .index_manager import RTreeIndexManager, IndexInfo, create_index_manager
-from .executor_wrapper import SpatialiteFilterExecutor
-from .filter_executor import (
+from .backend import SpatialiteBackend, create_spatialite_backend, spatialite_connect  # noqa: F401
+from .cache import SpatialiteCache, CacheStats, create_cache  # noqa: F401
+from .index_manager import RTreeIndexManager, IndexInfo, create_index_manager  # noqa: F401
+from .executor_wrapper import SpatialiteFilterExecutor  # noqa: F401
+from .filter_executor import (  # noqa: F401
     # EPIC-1 Phase E4-S8: Source geometry preparation
     SpatialiteSourceContext,
     SpatialiteSourceResult,
@@ -36,13 +36,13 @@ from .filter_executor import (
     cleanup_session_temp_tables,
     normalize_column_names_for_spatialite,
 )
-from .filter_actions import (
+from .filter_actions import (  # noqa: F401
     # Phase 1 v4.1: Backend actions (reset/unfilter)
     execute_reset_action_spatialite,
     execute_unfilter_action_spatialite,
     cleanup_spatialite_session_tables,
 )
-from .interruptible_query import (
+from .interruptible_query import (  # noqa: F401
     # v4.1.0: Interruptible SQLite queries (migrated from before_migration)
     InterruptibleSQLiteQuery,
     BatchedSQLiteQuery,
@@ -53,10 +53,10 @@ from .interruptible_query import (
 )
 
 # v4.1.0: Expression Builder (migrated from before_migration)
-from .expression_builder import SpatialiteExpressionBuilder
+from .expression_builder import SpatialiteExpressionBuilder  # noqa: F401
 
 # v4.2: Temp Table Manager (Spatialite equivalent to PostgreSQL materialized views)
-from .temp_table_manager import (
+from .temp_table_manager import (  # noqa: F401
     SpatialiteTempTableManager,
     create_temp_table_manager,
 )

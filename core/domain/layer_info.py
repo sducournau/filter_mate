@@ -16,7 +16,7 @@ from .filter_expression import ProviderType
 class GeometryType(Enum):
     """
     Geometry types supported.
-    
+
     Maps to QGIS geometry types but defined here
     to maintain domain independence.
     """
@@ -29,15 +29,15 @@ class GeometryType(Enum):
     GEOMETRY_COLLECTION = "GeometryCollection"
     NO_GEOMETRY = "NoGeometry"
     UNKNOWN = "Unknown"
-    
+
     @classmethod
     def from_qgis_wkb_type(cls, wkb_type: int) -> 'GeometryType':
         """
         Convert QGIS WKB type to GeometryType.
-        
+
         Args:
             wkb_type: QGIS QgsWkbTypes value
-            
+
         Returns:
             Corresponding GeometryType enum value
         """
@@ -80,7 +80,7 @@ class LayerInfo:
         table_name: Database table name
         pk_attr: Primary key attribute name (e.g., "id", "fid")
         geometry_column: Geometry column name (e.g., "geom", "geometry")
-        
+
     Example:
         >>> layer = LayerInfo.create(
         ...     layer_id="layer_abc123",
@@ -107,7 +107,7 @@ class LayerInfo:
     def __eq__(self, other: object) -> bool:
         """
         Equality based on layer_id (entity semantics).
-        
+
         Two LayerInfo entities with the same layer_id are considered
         equal, even if other attributes differ.
         """
@@ -147,7 +147,7 @@ class LayerInfo:
 
         Returns:
             LayerInfo instance
-            
+
         Example:
             >>> info = LayerInfo.create(
             ...     layer_id="abc123",
@@ -237,7 +237,7 @@ class LayerInfo:
     def qualified_table_name(self) -> str:
         """
         Get fully qualified table name for database layers.
-        
+
         Returns:
             schema.table for PostgreSQL, table for others
         """

@@ -188,7 +188,7 @@ class BackendController(BaseController):
         backend_type = self._detect_backend_for_layer(
             layer, postgresql_connection_available, actual_backend
         )
-        
+
         # Check if forced
         is_forced = (actual_backend is not None) or (layer.id() in self._forced_backends)
 
@@ -208,7 +208,7 @@ class BackendController(BaseController):
             List of tuples: (backend_type, backend_name, backend_icon)
         """
         from ...adapters.backends import POSTGRESQL_AVAILABLE
-        
+
         available = []
         provider_type = layer.providerType()
 
@@ -301,7 +301,7 @@ class BackendController(BaseController):
 
         project = QgsProject.instance()
         layers = project.mapLayers().values()
-        
+
         count = 0
         for layer in layers:
             if isinstance(layer, QgsVectorLayer) and layer.isValid():
@@ -314,9 +314,9 @@ class BackendController(BaseController):
     def auto_select_optimal_backends(self) -> int:
         """
         Auto-select optimal backend for each layer based on characteristics.
-        
+
         v4.0 Sprint 1: Full implementation migrated from dockwidget.
-        
+
         Analyzes each layer's characteristics and sets the most appropriate backend:
         - PostgreSQL for large server-side datasets
         - Spatialite for SQLite/GeoPackage with > 5000 features
@@ -329,30 +329,30 @@ class BackendController(BaseController):
 
         project = QgsProject.instance()
         layers = project.mapLayers().values()
-        
+
         optimized_count = 0
         skipped_count = 0
         backend_stats = {'postgresql': 0, 'spatialite': 0, 'ogr': 0, 'auto': 0}
-        
+
         logger.info("=" * 60)
         logger.debug("AUTO-SELECTING OPTIMAL BACKENDS FOR ALL LAYERS")
         logger.info("=" * 60)
-        
+
         for layer in layers:
             # Skip non-vector layers
             if not isinstance(layer, QgsVectorLayer):
                 continue
-            
+
             if not layer.isValid():
                 skipped_count += 1
                 continue
-            
+
             layer_name = layer.name()
             logger.info(f"\nAnalyzing layer: {layer_name}")
-            
+
             # Get optimal backend for this layer
             optimal_backend = self._get_optimal_backend_for_layer(layer)
-            
+
             if optimal_backend:
                 # Verify backend supports layer
                 if self._verify_backend_supports_layer(layer, optimal_backend):
@@ -365,61 +365,60 @@ class BackendController(BaseController):
                     logger.info(f"  ⚠ Backend {optimal_backend.upper()} not compatible - using auto")
             else:
                 backend_stats['auto'] += 1
-                logger.info(f"  → Using auto-selection")
-        
+                logger.info("  → Using auto-selection")
+
         logger.info("\n" + "=" * 60)
         logger.info("AUTO-SELECTION COMPLETE")
         logger.info(f"Optimized: {optimized_count} layers")
         logger.info(f"Skipped: {skipped_count} invalid layers")
-        logger.info(f"Backend distribution:")
+        logger.info("Backend distribution:")
         for backend, count in backend_stats.items():
             if count > 0:
                 logger.info(f"  - {backend.upper()}: {count} layer(s)")
         logger.info("=" * 60)
-        
+
         # Emit signal with summary (requires 2 args: layer_id, backend_type)
         self.backend_changed.emit("batch_optimization", f"Optimized {optimized_count} layers")
-        
+
         return optimized_count
-    
+
     def _get_optimal_backend_for_layer(self, layer: QgsVectorLayer) -> Optional[str]:
         """
         Determine optimal backend for a layer based on characteristics.
-        
+
         Args:
             layer: QgsVectorLayer instance
-            
+
         Returns:
             Optimal backend ('postgresql', 'spatialite', 'ogr') or None for auto
         """
         try:
             from ...adapters.backends import POSTGRESQL_AVAILABLE
-            from ...adapters.backends.factory import should_use_memory_optimization
             from ...infrastructure.utils import detect_layer_provider_type
         except ImportError:
             logger.warning("Could not import backend detection functions")
             return None
-        
+
         if not layer or not layer.isValid():
             return None
-        
+
         provider_type = detect_layer_provider_type(layer)
         feature_count = layer.featureCount()
         source = layer.source().lower()
-        
+
         logger.debug(f"  Provider: {provider_type}, Features: {feature_count:,}")
         logger.debug(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
-        
+
         # PostgreSQL layers - ALWAYS use PostgreSQL backend (v4.1.4)
         # FIX v4.1.4: QGIS native API (setSubsetString) works without psycopg2
         # Never fallback to OGR for PostgreSQL layers
         if provider_type == 'postgresql':
             if not POSTGRESQL_AVAILABLE:
-                logger.debug(f"  → PostgreSQL (QGIS native API) - psycopg2 not available for advanced features")
+                logger.debug("  → PostgreSQL (QGIS native API) - psycopg2 not available for advanced features")
             else:
                 logger.debug(f"  → PostgreSQL ({feature_count:,} features) - Full backend")
             return 'postgresql'
-        
+
         # SQLite/Spatialite layers
         elif provider_type == 'spatialite':
             if feature_count > 5000:
@@ -428,7 +427,7 @@ class BackendController(BaseController):
             else:
                 logger.debug(f"  → Small SQLite ({feature_count}) - OGR sufficient")
                 return 'ogr'
-        
+
         # OGR layers
         elif provider_type == 'ogr':
             if 'gpkg' in source or 'sqlite' in source:
@@ -438,21 +437,21 @@ class BackendController(BaseController):
                 else:
                     logger.debug(f"  → Small GeoPackage ({feature_count}) - OGR sufficient")
                     return 'ogr'
-            
+
             logger.debug(f"  → OGR format ({feature_count}) - OGR sufficient")
             return 'ogr'
-        
+
         logger.debug(f"  → Unknown provider '{provider_type}' - auto-selection")
         return None
-    
+
     def _verify_backend_supports_layer(self, layer: QgsVectorLayer, backend: str) -> bool:
         """
         Verify that a backend can actually process the layer.
-        
+
         Args:
             layer: Layer to check
             backend: Backend type to verify
-            
+
         Returns:
             True if backend supports this layer
         """
@@ -460,9 +459,9 @@ class BackendController(BaseController):
             from ...infrastructure.utils import detect_layer_provider_type, POSTGRESQL_AVAILABLE
         except ImportError:
             return True  # Assume compatible if can't check
-        
+
         provider_type = detect_layer_provider_type(layer)
-        
+
         if backend == 'postgresql':
             # PostgreSQL backend only for PostgreSQL layers
             return provider_type == 'postgresql' and POSTGRESQL_AVAILABLE
@@ -473,7 +472,7 @@ class BackendController(BaseController):
         elif backend == 'ogr':
             # OGR is universal fallback
             return True
-        
+
         return False
 
     def handle_indicator_clicked(self) -> None:
@@ -482,11 +481,11 @@ class BackendController(BaseController):
 
         Shows backend selection menu or triggers reload if no layers.
         """
-        
+
         # Lazy initialization fallback
         if not self._initialized:
             self.setup()
-        
+
         # Check if in waiting state (no layers)
         if self._indicator_label:
             text = self._indicator_label.text()
@@ -583,7 +582,7 @@ class BackendController(BaseController):
         # Try to find indicator label if not set
         if not self._indicator_label:
             self._find_indicator_label()
-        
+
         # Still no indicator label? Try direct access to dockwidget's label
         if not self._indicator_label:
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
@@ -594,7 +593,7 @@ class BackendController(BaseController):
                 return
 
         style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
-        
+
         # Build text with forced indicator
         text = style['text']
         if is_forced:
@@ -603,7 +602,7 @@ class BackendController(BaseController):
         self._indicator_label.setText(text)
 
         # Build stylesheet - v4.0: Soft "mousse" style with smoother appearance
-        stylesheet = f"""
+        stylesheet = """
             QLabel#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
@@ -632,22 +631,22 @@ class BackendController(BaseController):
     def _refresh_indicator_for_current_layer(self) -> None:
         """
         Refresh the backend indicator for the current layer.
-        
+
         This method ensures the indicator is updated after batch operations
         (like force_backend_for_all_layers or auto_select_optimal_backends).
         """
         current_layer = self.dockwidget.current_layer
         if not current_layer or not current_layer.isValid():
             return
-        
+
         # Get the backend for current layer (may have been changed by batch operation)
         backend_type = self._detect_backend_for_layer(
             current_layer, self._current_postgresql_available
         )
-        
+
         # Check if forced
         is_forced = current_layer.id() in self._forced_backends
-        
+
         # Update the display
         self._update_indicator_display(backend_type, is_forced, current_layer)
         logger.debug(f"Refreshed indicator for layer {current_layer.name()}: {backend_type} (forced: {is_forced})")
@@ -662,7 +661,7 @@ class BackendController(BaseController):
         from ...infrastructure.feedback import show_info, show_success, show_warning
 
         available = self.get_available_backends_for_layer(layer)
-        
+
         if not available:
             show_warning("FilterMate", self._tr("No alternative backends available for this layer"))
             return
@@ -720,13 +719,13 @@ class BackendController(BaseController):
 
         # Cleanup Temp Tables submenu
         cleanup_menu = menu.addMenu("🧹 Clear Temp Tables")
-        
+
         # Project cleanup
         project_cleanup_action = cleanup_menu.addAction(self._tr("📁 Current Project"))
         project_cleanup_action.setData('__CLEANUP_PROJECT__')
         project_cleanup_action.setToolTip(self._tr("Clear temporary tables for the current project only"))
-        
-        # Global cleanup  
+
+        # Global cleanup
         global_cleanup_action = cleanup_menu.addAction(self._tr("🌐 All Projects (Global)"))
         global_cleanup_action.setData('__CLEANUP_GLOBAL__')
         global_cleanup_action.setToolTip(self._tr("Clear ALL FilterMate temporary tables from all databases"))
@@ -811,22 +810,22 @@ class BackendController(BaseController):
     def get_pg_session_context(self):
         """
         Get PostgreSQL session context for maintenance operations.
-        
+
         v4.0 Sprint 13: Migrated from dockwidget._get_pg_session_context()
         v4.3.8 (2026-01-23): Also search QGIS project layers for connection
-        
+
         Returns:
             tuple: (app, session_id, schema, connexion)
         """
         from ...adapters.backends import POSTGRESQL_AVAILABLE
         if not POSTGRESQL_AVAILABLE:
             return None, None, None, None
-        
+
         try:
             from ...infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
         except ImportError:
             from ...infrastructure.utils.layer_utils import get_datasource_connexion_from_layer
-        
+
         # Get app reference
         app = getattr(self.dockwidget, '_app_ref', None)
         if not app:
@@ -836,13 +835,13 @@ class BackendController(BaseController):
                     app = parent
                     break
                 parent = parent.parent() if hasattr(parent, 'parent') else None
-        
+
         session_id = getattr(app, 'session_id', None) if app else None
         schema = getattr(app, 'app_postgresql_temp_schema', 'filter_mate_temp') if app else 'filter_mate_temp'
-        
+
         # Find a PostgreSQL connection
         connexion = None
-        
+
         # 1. First try PROJECT_LAYERS (registered layers)
         project_layers = getattr(app, 'PROJECT_LAYERS', {}) if app else {}
         for layer_info in project_layers.values():
@@ -851,7 +850,7 @@ class BackendController(BaseController):
                 connexion, _ = get_datasource_connexion_from_layer(layer)
                 if connexion:
                     break
-        
+
         # 2. FIX v4.3.8: If no connection found, search ALL QGIS project layers
         # This handles cases where PostgreSQL layers exist but aren't in PROJECT_LAYERS
         if not connexion:
@@ -863,7 +862,7 @@ class BackendController(BaseController):
                         if connexion:
                             logger.debug(f"Got PostgreSQL connection from QGIS layer: {layer.name()}")
                             break
-        
+
         return app, session_id, schema, connexion
 
     @property
@@ -881,9 +880,9 @@ class BackendController(BaseController):
     def toggle_pg_auto_cleanup(self) -> bool:
         """
         Toggle PostgreSQL auto-cleanup.
-        
+
         v4.0 Sprint 13: Migrated from dockwidget._toggle_pg_auto_cleanup()
-        
+
         Returns:
             bool: New state of pg_auto_cleanup
         """
@@ -893,49 +892,49 @@ class BackendController(BaseController):
     def cleanup_postgresql_session_views(self) -> bool:
         """
         Cleanup PostgreSQL materialized views for current session.
-        
+
         v4.0 Sprint 13: Migrated from dockwidget._cleanup_postgresql_session_views()
-        
+
         Returns:
             bool: True if cleanup successful
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
-        
+
         if not connexion:
             logger.warning("cleanup_postgresql_session_views: No PostgreSQL connection available")
             return False
-        
+
         if not session_id:
             logger.warning("cleanup_postgresql_session_views: Session ID not available")
             return False
-        
+
         try:
             with connexion.cursor() as cursor:
                 # Find views for this session (unified fm_temp_* prefix v4.4.4)
                 # Also check legacy mv_ prefix for backward compatibility
                 cursor.execute(
-                    """SELECT matviewname FROM pg_matviews 
-                       WHERE schemaname = %s 
+                    """SELECT matviewname FROM pg_matviews
+                       WHERE schemaname = %s
                        AND (matviewname LIKE %s OR matviewname LIKE %s)""",
                     (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                 )
                 views = [v[0] for v in cursor.fetchall()]
-                
+
                 if not views:
                     logger.info(f"No views found for session {session_id[:8]}")
                     return True
-                
+
                 # Drop each view
                 for view in views:
                     try:
                         cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
                     except Exception as e:
                         logger.warning(f"Failed to drop view {view}: {e}")
-                
+
                 connexion.commit()
                 logger.info(f"Cleaned up {len(views)} view(s) for session {session_id[:8]}")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Error cleaning PostgreSQL session views: {e}")
             return False
@@ -948,21 +947,21 @@ class BackendController(BaseController):
     def cleanup_postgresql_schema_if_empty(self, force: bool = False) -> bool:
         """
         Drop PostgreSQL schema if no other sessions are using it.
-        
+
         v4.0 Sprint 13: Migrated from dockwidget._cleanup_postgresql_schema_if_empty()
-        
+
         Args:
             force: If True, skip confirmation for views from other sessions
-            
+
         Returns:
             bool: True if cleanup successful or schema doesn't exist
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
-        
+
         if not connexion:
             logger.warning("cleanup_postgresql_schema_if_empty: No PostgreSQL connection available")
             return False
-        
+
         try:
             with connexion.cursor() as cursor:
                 # Check if schema exists
@@ -973,32 +972,32 @@ class BackendController(BaseController):
                 if cursor.fetchone()[0] == 0:
                     logger.info(f"Schema '{schema}' does not exist")
                     return True
-                
+
                 # Get all views in schema
                 cursor.execute(
                     "SELECT matviewname FROM pg_matviews WHERE schemaname = %s",
                     (schema,)
                 )
                 views = [v[0] for v in cursor.fetchall()]
-                
+
                 # Check for views from other sessions (handle both new and legacy prefixes)
                 other_views = [v for v in views if not (
                     session_id and (
-                        v.startswith(f"fm_temp_mv_{session_id}_") or 
+                        v.startswith(f"fm_temp_mv_{session_id}_") or
                         v.startswith(f"mv_{session_id}_")
                     )
                 )]
-                
+
                 if other_views and not force:
                     logger.warning(f"Schema '{schema}' has {len(other_views)} view(s) from other sessions")
                     return False
-                
+
                 # Drop schema
                 cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
                 connexion.commit()
                 logger.info(f"Schema '{schema}' dropped successfully")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Error cleaning PostgreSQL schema: {e}")
             return False
@@ -1011,15 +1010,15 @@ class BackendController(BaseController):
     def get_postgresql_session_info(self) -> dict:
         """
         Get PostgreSQL session information.
-        
+
         v4.0 Sprint 13: Migrated from dockwidget._show_postgresql_session_info()
-        
+
         Returns:
             dict: Session information with keys: session_id, schema, auto_cleanup,
                   schema_exists, our_views_count, total_views_count, connection_available
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
-        
+
         info = {
             'session_id': session_id,
             'schema': schema,
@@ -1029,34 +1028,34 @@ class BackendController(BaseController):
             'our_views_count': 0,
             'total_views_count': 0
         }
-        
+
         if connexion:
             try:
                 with connexion.cursor() as cursor:
                     # Count our views (both new and legacy prefixes)
                     if session_id:
                         cursor.execute(
-                            """SELECT COUNT(*) FROM pg_matviews 
-                               WHERE schemaname = %s 
+                            """SELECT COUNT(*) FROM pg_matviews
+                               WHERE schemaname = %s
                                AND (matviewname LIKE %s OR matviewname LIKE %s)""",
                             (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                         )
                         info['our_views_count'] = cursor.fetchone()[0]
-                    
+
                     # Count total views
                     cursor.execute(
                         "SELECT COUNT(*) FROM pg_matviews WHERE schemaname = %s",
                         (schema,)
                     )
                     info['total_views_count'] = cursor.fetchone()[0]
-                    
+
                     # Check schema exists
                     cursor.execute(
                         "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = %s",
                         (schema,)
                     )
                     info['schema_exists'] = cursor.fetchone()[0] > 0
-                    
+
             except Exception as e:
                 info['error'] = str(e)[:50]
                 logger.warning(f"Error getting PostgreSQL session info: {e}")
@@ -1065,7 +1064,7 @@ class BackendController(BaseController):
                     connexion.close()
                 except Exception:
                     pass
-        
+
         return info
 
     # ========================================
@@ -1075,23 +1074,23 @@ class BackendController(BaseController):
     def cleanup_temp_tables_project(self) -> int:
         """
         Clean up temporary tables for the current project only.
-        
+
         Cleans both PostgreSQL materialized views and Spatialite temp tables
         associated with the current session/project.
-        
+
         Returns:
             int: Total number of tables cleaned up
         """
         total_count = 0
-        
+
         # 1. Clean PostgreSQL views for current session
         pg_count = self._cleanup_postgresql_current_session()
         total_count += pg_count
-        
+
         # 2. Clean Spatialite temp tables for current project databases
         spatialite_count = self._cleanup_spatialite_project_tables()
         total_count += spatialite_count
-        
+
         logger.info(f"Project cleanup complete: {total_count} table(s) removed "
                    f"(PostgreSQL: {pg_count}, Spatialite: {spatialite_count})")
         return total_count
@@ -1099,26 +1098,26 @@ class BackendController(BaseController):
     def cleanup_temp_tables_global(self) -> int:
         """
         Clean up ALL FilterMate temporary tables globally.
-        
+
         Cleans all FilterMate temp tables from:
         - PostgreSQL: All sessions in filter_mate_temp schema
         - Spatialite: All mv_* tables in all known databases
-        
+
         Warning: This affects all projects, not just the current one!
-        
+
         Returns:
             int: Total number of tables cleaned up
         """
         total_count = 0
-        
+
         # 1. Clean ALL PostgreSQL views in schema
         pg_count = self._cleanup_postgresql_all_sessions()
         total_count += pg_count
-        
+
         # 2. Clean ALL Spatialite temp tables
         spatialite_count = self._cleanup_spatialite_all_tables()
         total_count += spatialite_count
-        
+
         logger.info(f"Global cleanup complete: {total_count} table(s) removed "
                    f"(PostgreSQL: {pg_count}, Spatialite: {spatialite_count})")
         return total_count
@@ -1126,32 +1125,32 @@ class BackendController(BaseController):
     def _cleanup_postgresql_current_session(self) -> int:
         """
         Clean PostgreSQL materialized views for current session only.
-        
+
         Returns:
             int: Number of views dropped
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
-        
+
         if not connexion or not session_id:
             logger.debug("No PostgreSQL connection or session_id for current session cleanup")
             return 0
-        
+
         try:
             with connexion.cursor() as cursor:
                 # Find views for this session only (unified fm_temp_* prefix v4.4.4)
                 # Also check legacy mv_ prefix for backward compatibility
                 cursor.execute(
-                    """SELECT matviewname FROM pg_matviews 
-                       WHERE schemaname = %s 
+                    """SELECT matviewname FROM pg_matviews
+                       WHERE schemaname = %s
                        AND (matviewname LIKE %s OR matviewname LIKE %s)""",
                     (schema, f"fm_temp_mv_{session_id}_%", f"mv_{session_id}_%")
                 )
                 views = [v[0] for v in cursor.fetchall()]
-                
+
                 if not views:
                     logger.debug(f"No PostgreSQL views found for session {session_id[:8]}")
                     return 0
-                
+
                 count = 0
                 for view in views:
                     try:
@@ -1159,11 +1158,11 @@ class BackendController(BaseController):
                         count += 1
                     except Exception as e:
                         logger.warning(f"Failed to drop PostgreSQL view {view}: {e}")
-                
+
                 connexion.commit()
                 logger.info(f"PostgreSQL session cleanup: {count} view(s) dropped for session {session_id[:8]}")
                 return count
-                
+
         except Exception as e:
             logger.error(f"Error in PostgreSQL session cleanup: {e}")
             return 0
@@ -1176,47 +1175,47 @@ class BackendController(BaseController):
     def _cleanup_postgresql_all_sessions(self) -> int:
         """
         Clean ALL PostgreSQL materialized views AND tables created by FilterMate.
-        
+
         Uses unified naming convention (v4.4.3+) - all FilterMate objects start with 'fm_temp_':
         - fm_temp_mv_* (materialized views)
-        - fm_temp_buf_* (buffer geometry tables) 
+        - fm_temp_buf_* (buffer geometry tables)
         - fm_temp_tbl_* (temporary tables)
         - fm_temp_src_* (source selection tables/MVs)
         - fm_temp_chain_* (filter chain MVs)
-        
+
         Also cleans legacy prefixes for backward compatibility:
         - fm_mv_*, fm_buf_*, filtermate_mv_*, filtermate_src_*
-        
+
         Returns:
             int: Total number of objects dropped
         """
         app, session_id, schema, connexion = self.get_pg_session_context()
-        
+
         if not connexion:
             logger.warning("No PostgreSQL connection available for global cleanup")
             return 0
-        
+
         total_count = 0
-        
+
         try:
             with connexion.cursor() as cursor:
                 # 1. Find ALL FilterMate materialized views in ANY schema
                 # Includes both new (fm_temp_*) and legacy (fm_mv_*, filtermate_*) prefixes
                 cursor.execute("""
-                    SELECT schemaname, matviewname 
-                    FROM pg_matviews 
+                    SELECT schemaname, matviewname
+                    FROM pg_matviews
                     WHERE matviewname LIKE 'fm\\_temp\\_%'
                        OR matviewname LIKE 'fm\\_mv\\_%'
                        OR matviewname LIKE 'filtermate\\_%'
                     ORDER BY schemaname, matviewname
                 """)
                 all_views = cursor.fetchall()
-                
+
                 if all_views:
                     logger.info(f"Found {len(all_views)} FilterMate materialized view(s) to clean:")
                     for view_schema, view_name in all_views:
                         logger.debug(f"  - MV: {view_schema}.{view_name}")
-                    
+
                     # Drop each materialized view
                     for view_schema, view_name in all_views:
                         try:
@@ -1225,38 +1224,38 @@ class BackendController(BaseController):
                             logger.debug(f"Dropped MV: {view_schema}.{view_name}")
                         except Exception as e:
                             logger.warning(f"Failed to drop MV {view_schema}.{view_name}: {e}")
-                
+
                 connexion.commit()
-                
+
                 # 2. Clean ALL fm_temp_* TABLES (new unified prefix)
                 # Also cleans legacy fm_buf_* tables
                 cursor.execute("""
-                    SELECT table_schema, table_name 
-                    FROM information_schema.tables 
+                    SELECT table_schema, table_name
+                    FROM information_schema.tables
                     WHERE table_type = 'BASE TABLE'
-                    AND (table_name LIKE 'fm\\_temp\\_%' 
+                    AND (table_name LIKE 'fm\\_temp\\_%'
                          OR table_name LIKE 'fm\\_buf\\_%'
                          OR table_name LIKE 'filtermate\\_%')
                     ORDER BY table_schema, table_name
                 """)
                 all_tables = cursor.fetchall()
-                
+
                 if all_tables:
                     logger.info(f"Found {len(all_tables)} FilterMate table(s) to clean:")
                     for table_schema, table_name in all_tables:
                         logger.debug(f"  - TABLE: {table_schema}.{table_name}")
-                    
+
                     # Drop each table
                     for table_schema, table_name in all_tables:
                         try:
-                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')
+                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')  # nosec B608
                             total_count += 1
                             logger.debug(f"Dropped TABLE: {table_schema}.{table_name}")
                         except Exception as e:
                             logger.warning(f"Failed to drop TABLE {table_schema}.{table_name}: {e}")
-                
+
                 connexion.commit()
-                
+
                 # 3. Also try to drop the temp schemas if empty
                 for temp_schema in ['filter_mate_temp', 'filtermate_temp']:
                     try:
@@ -1265,10 +1264,10 @@ class BackendController(BaseController):
                         logger.debug(f"Dropped empty schema: {temp_schema}")
                     except Exception as e:
                         logger.debug(f"Could not drop schema {temp_schema}: {e}")
-                
+
                 logger.info(f"PostgreSQL global cleanup: {total_count} object(s) dropped")
                 return total_count
-                
+
         except Exception as e:
             logger.error(f"Error in PostgreSQL global cleanup: {e}")
             return 0
@@ -1281,15 +1280,15 @@ class BackendController(BaseController):
     def _cleanup_spatialite_project_tables(self) -> int:
         """Clean Spatialite temp tables for current project databases."""
         from qgis.core import QgsProject
-        
+
         # Get session_id from app
         app = getattr(self.dockwidget, '_app_ref', None)
         session_id = getattr(app, 'session_id', None) if app else None
-        
+
         if not session_id:
             logger.debug("No session_id available for Spatialite project cleanup")
             return 0
-        
+
         # Collect unique database paths from project layers
         db_paths = set()
         project = QgsProject.instance()
@@ -1298,18 +1297,18 @@ class BackendController(BaseController):
                 source = layer.source().split('|')[0]
                 if source.lower().endswith(('.gpkg', '.sqlite', '.db')):
                     db_paths.add(source)
-        
+
         total_count = 0
         for db_path in db_paths:
             count = self._cleanup_spatialite_db(db_path, session_id)
             total_count += count
-        
+
         return total_count
 
     def _cleanup_spatialite_all_tables(self) -> int:
         """Clean ALL FilterMate temp tables from all known Spatialite databases."""
         from qgis.core import QgsProject
-        
+
         # Collect unique database paths from project layers
         db_paths = set()
         project = QgsProject.instance()
@@ -1318,37 +1317,37 @@ class BackendController(BaseController):
                 source = layer.source().split('|')[0]
                 if source.lower().endswith(('.gpkg', '.sqlite', '.db')):
                     db_paths.add(source)
-        
+
         total_count = 0
         for db_path in db_paths:
             # Pass None for session_id to clean ALL mv_* tables
             count = self._cleanup_spatialite_db(db_path, session_id=None)
             total_count += count
-        
+
         return total_count
 
     def _cleanup_spatialite_db(self, db_path: str, session_id: str = None) -> int:
         """
         Clean FilterMate temp tables from a specific Spatialite database.
-        
+
         Args:
             db_path: Path to the SQLite/GeoPackage database
             session_id: If provided, only clean tables for this session.
                        If None, clean ALL mv_* tables.
-        
+
         Returns:
             int: Number of tables cleaned up
         """
         import sqlite3
         import os
-        
+
         if not db_path or not os.path.exists(db_path):
             return 0
-        
+
         try:
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
-            
+
             # Build pattern based on session_id (unified fm_temp_* prefix v4.4.4)
             if session_id:
                 pattern_new = f"fm_temp_mv_{session_id}_%"
@@ -1356,35 +1355,35 @@ class BackendController(BaseController):
             else:
                 pattern_new = "fm_temp_%"  # All FilterMate temp tables (new prefix)
                 pattern_legacy = "mv_%"  # All FilterMate temp tables (legacy prefix)
-            
+
             # Find matching tables (both new and legacy prefixes)
             cur.execute(
-                """SELECT name FROM sqlite_master 
+                """SELECT name FROM sqlite_master
                    WHERE type='table' AND (name LIKE ? OR name LIKE ?)""",
                 (pattern_new, pattern_legacy)
             )
             tables = cur.fetchall()
-            
+
             count = 0
             for (table_name,) in tables:
                 try:
-                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
+                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')  # nosec B608
                     # Also drop R-tree index if exists
-                    cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')
+                    cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')  # nosec B608
                     count += 1
                 except Exception as e:
                     logger.warning(f"Error dropping table {table_name}: {e}")
-            
+
             conn.commit()
             conn.close()
-            
+
             if count > 0:
                 db_name = os.path.basename(db_path)
                 scope = f"session {session_id[:8]}" if session_id else "all sessions"
                 logger.info(f"Spatialite cleanup ({db_name}): {count} table(s) for {scope}")
-            
+
             return count
-            
+
         except Exception as e:
             logger.error(f"Error cleaning Spatialite database {db_path}: {e}")
             return 0

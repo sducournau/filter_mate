@@ -9,13 +9,13 @@ This layer follows the Hexagonal Architecture pattern:
 - services/: Business logic orchestration
 
 Usage:
-    from ..core.domain import FilterExpression, FilterResult, LayerInfo
-    from ..core.ports import BackendPort, CachePort
-    from ..core.services import FilterService, ExpressionService
+    from ..core.domain import FilterExpression, FilterResult, LayerInfo  # noqa: F401
+    from ..core.ports import BackendPort, CachePort  # noqa: F401
+    from ..core.services import FilterService, ExpressionService  # noqa: F401
 """
 
 # Re-export commonly used types for convenience
-from .domain import (
+from .domain import (  # noqa: F401
     FilterExpression,
     FilterResult,
     FilterStatus,
@@ -26,7 +26,7 @@ from .domain import (
     OptimizationConfig,
 )
 
-from .ports import (
+from .ports import (  # noqa: F401
     BackendPort,
     BackendInfo,
     BackendCapability,
@@ -35,7 +35,7 @@ from .ports import (
     LayerRepositoryPort,
 )
 
-from .services import (
+from .services import (  # noqa: F401
     FilterService,
     FilterRequest,
     FilterResponse,
@@ -46,7 +46,7 @@ from .services import (
 )
 
 # v4.0 EPIC-1 Phase E1: Export module
-from .export import (
+from .export import (  # noqa: F401
     LayerExporter,
     ExportConfig,
     ExportResult,
@@ -59,7 +59,7 @@ from .export import (
 )
 
 # v4.0 EPIC-1 Phase E2: Geometry module
-from .geometry import (
+from .geometry import (  # noqa: F401
     apply_qgis_buffer,
     create_buffered_memory_layer,
     BufferConfig,
@@ -69,7 +69,7 @@ from .geometry import (
 )
 
 # v4.0 EPIC-1 Phase E3: Filter/Expression module
-from .filter import (
+from .filter import (  # noqa: F401
     build_feature_id_expression,
     build_combined_filter_expression,
     sanitize_subset_string,

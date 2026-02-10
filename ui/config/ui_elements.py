@@ -2,7 +2,7 @@
 """
 UI Elements Reference for FilterMate
 
-Centralized reference for all named UI elements (spacers and layouts) 
+Centralized reference for all named UI elements (spacers and layouts)
 after harmonization. Useful for programmatic access and dynamic configuration.
 
 Migrated from before_migration/modules/ui_elements.py for v4.0 hexagonal architecture.
@@ -20,7 +20,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_main_top",
         "horizontalSpacer_main_right",
     ],
-    
+
     "exploring": [
         "verticalSpacer_exploring_tab_top",
         "verticalSpacer_exploring_tab_bottom",
@@ -31,7 +31,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_exploring_multiple_bottom",
         "verticalSpacer_exploring_custom_bottom",
     ],
-    
+
     "filtering_keys": [
         "verticalSpacer_filtering_keys_field_top",
         "verticalSpacer_filtering_keys_field_middle1",
@@ -39,7 +39,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_filtering_keys_field_middle3",
         "verticalSpacer_filtering_keys_field_bottom",
     ],
-    
+
     "filtering_values": [
         "verticalSpacer_filtering_values_top",
         "verticalSpacer_filtering_values_search_top",
@@ -50,7 +50,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_filtering_values_buttons_bottom2",
         "horizontalSpacer_filtering_values_right",
     ],
-    
+
     "exporting_keys": [
         "verticalSpacer_exporting_keys_field_top",
         "verticalSpacer_exporting_keys_field_middle1",
@@ -58,7 +58,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_exporting_keys_field_middle3",
         "verticalSpacer_exporting_keys_field_bottom",
     ],
-    
+
     "exporting_values": [
         "verticalSpacer_exporting_values_top",
         "verticalSpacer_exporting_values_crs_top",
@@ -69,7 +69,7 @@ SPACERS: Dict[str, List[str]] = {
         "verticalSpacer_exporting_values_destination_bottom",
         "horizontalSpacer_exporting_values_right",
     ],
-    
+
     "config": [
         "verticalSpacer_config_bottom",
     ],
@@ -91,7 +91,7 @@ LAYOUTS: Dict[str, List[str]] = {
         "gridLayout_main_header",
         "gridLayout_main_actions",
     ],
-    
+
     "exploring": [
         "verticalLayout_exploring_container",
         "verticalLayout_exploring_content",
@@ -103,7 +103,7 @@ LAYOUTS: Dict[str, List[str]] = {
         "verticalLayout_exploring_custom_container",
         "verticalLayout_exploring_custom_selection",
     ],
-    
+
     "filtering": [
         "verticalLayout_filtering_section",
         "verticalLayout_filtering_container",
@@ -115,7 +115,7 @@ LAYOUTS: Dict[str, List[str]] = {
         "horizontalLayout_filtering_values_search",
         "horizontalLayout_filtering_values_buttons",
     ],
-    
+
     "exporting": [
         "verticalLayout_exporting_section",
         "horizontalLayout_exporting_main",
@@ -123,12 +123,12 @@ LAYOUTS: Dict[str, List[str]] = {
         "verticalLayout_exporting_keys",
         "verticalLayout_exporting_values",
     ],
-    
+
     "config": [
         "verticalLayout_config_section",
         "verticalLayout_configurationPanel",
     ],
-    
+
     "actions": [
         "horizontalLayout_actions_container",
         "horizontalLayout_actions_bottom",
@@ -146,10 +146,10 @@ ALL_LAYOUTS: List[str] = [layout for section in LAYOUTS.values() for layout in s
 def get_spacers_by_section(section: str) -> List[str]:
     """
     Get all spacers for a specific section.
-    
+
     Args:
         section: Section name (e.g., 'exploring', 'filtering_keys')
-    
+
     Returns:
         List of spacer names
     """
@@ -159,10 +159,10 @@ def get_spacers_by_section(section: str) -> List[str]:
 def get_layouts_by_section(section: str) -> List[str]:
     """
     Get all layouts for a specific section.
-    
+
     Args:
         section: Section name (e.g., 'exploring', 'filtering')
-    
+
     Returns:
         List of layout names
     """
@@ -172,18 +172,18 @@ def get_layouts_by_section(section: str) -> List[str]:
 def get_spacer_size(spacer_name: str, compact_mode: bool = True) -> int:
     """
     Get recommended size for a spacer based on mode and name.
-    
+
     Args:
         spacer_name: Name of the spacer
         compact_mode: True for compact mode, False for normal mode
-    
+
     Returns:
         Recommended size in pixels
     """
     # Default sizes based on mode - REDUCED for better alignment
     # Keys and values columns need matching spacer sizes
     base_size = 4 if compact_mode else 6
-    
+
     # Section-specific adjustments - minimal to maintain alignment
     if "main" in spacer_name:
         return base_size + 2
@@ -195,24 +195,24 @@ def get_spacer_size(spacer_name: str, compact_mode: bool = True) -> int:
         return base_size  # Must match between keys and values
     elif "exporting" in spacer_name:
         return base_size  # Must match between keys and values
-    
+
     return base_size
 
 
 def get_layout_spacing(layout_name: str, compact_mode: bool = True) -> int:
     """
     Get recommended spacing for a layout based on mode and name.
-    
+
     Args:
         layout_name: Name of the layout
         compact_mode: True for compact mode, False for normal mode
-    
+
     Returns:
         Recommended spacing in pixels
     """
     # Default spacing based on mode
     base_spacing = 6 if compact_mode else 12
-    
+
     # Layout-specific adjustments
     if "main" in layout_name:
         return base_spacing + 2
@@ -222,14 +222,14 @@ def get_layout_spacing(layout_name: str, compact_mode: bool = True) -> int:
         return base_spacing + 2
     elif "content" in layout_name:
         return base_spacing
-    
+
     return base_spacing
 
 
 def get_section_names() -> List[str]:
     """
     Get list of all section names.
-    
+
     Returns:
         List of section name strings
     """
@@ -241,21 +241,21 @@ def get_section_names() -> List[str]:
 def find_element_section(element_name: str) -> Optional[str]:
     """
     Find which section an element belongs to.
-    
+
     Args:
         element_name: Name of spacer or layout
-        
+
     Returns:
         Section name or None if not found
     """
     for section, spacers in SPACERS.items():
         if element_name in spacers:
             return section
-    
+
     for section, layouts in LAYOUTS.items():
         if element_name in layouts:
             return section
-    
+
     return None
 
 

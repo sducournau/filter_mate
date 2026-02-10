@@ -54,18 +54,18 @@ class FilterParameters:
     schema: str
     geometry_field: str
     primary_key_name: str
-    
+
     # Provider detection flags
     forced_backend: bool = False
     postgresql_fallback: bool = False
-    
+
     # Filtering configuration
     has_combine_operator: bool = False
     source_layer_combine_operator: str = "AND"
     other_layers_combine_operator: str = "AND"
     old_subset: str = ""
     field_names: List[str] = field(default_factory=list)
-    
+
     # Auto-filled info dict (for reference)
     infos: Dict[str, Any] = field(default_factory=dict)
 
@@ -87,47 +87,47 @@ class ParameterBuilderContext:
 class FilterParameterBuilder:
     """
     Service for building filter parameters from task parameters and source layer.
-    
+
     This service extracts the initialization logic from FilterTask,
     making it testable and reusable.
-    
+
     Example:
         builder = FilterParameterBuilder()
         params = builder.build(context)
-      
-      
+
+
     """
-    
+
     def build(self, context: ParameterBuilderContext) -> FilterParameters:
         """
         Build filter parameters from context.
-        
+
         Args:
             context: Builder context with task parameters and source layer
-            
+
         Returns:
             FilterParameters with all initialized values
         """
         infos = context.task_parameters.get("infos", {}).copy()
-        
+
         # Step 1: Auto-fill missing metadata
         self._auto_fill_metadata(infos, context)
-        
+
         # Step 2: Validate required keys
         self._validate_required_keys(infos)
-        
+
         # Step 3: Determine effective provider type
         provider_info = self._determine_provider_type(infos, context)
-        
+
         # Step 4: Validate schema for PostgreSQL
         schema = self._validate_schema(infos, context, provider_info['provider_type'])
-        
+
         # Step 5: Extract basic parameters
         table_name = infos.get("layer_table_name") or infos["layer_name"]
-        
+
         # Step 6: Extract filtering configuration
         filtering_config = self._extract_filtering_config(context, infos)
-        
+
         # Build result
         return FilterParameters(
             provider_type=provider_info['provider_type'],
@@ -146,7 +146,7 @@ class FilterParameterBuilder:
             field_names=filtering_config['field_names'],
             infos=infos
         )
-    
+
     def _auto_fill_metadata(
         self,
         infos: Dict[str, Any],
@@ -155,17 +155,17 @@ class FilterParameterBuilder:
         """Auto-fill missing metadata from source layer."""
         if not context.source_layer:
             return
-        
+
         # Auto-fill layer_name
         if "layer_name" not in infos or infos["layer_name"] is None:
             infos["layer_name"] = context.source_layer.name()
             logger.info(f"Auto-filled layer_name='{infos['layer_name']}'")
-        
+
         # Auto-fill layer_id
         if "layer_id" not in infos or infos["layer_id"] is None:
             infos["layer_id"] = context.source_layer.id()
             logger.info(f"Auto-filled layer_id='{infos['layer_id']}'")
-        
+
         # Auto-fill layer_provider_type
         if "layer_provider_type" not in infos or infos["layer_provider_type"] is None:
             if context.detect_provider_fn:
@@ -174,7 +174,7 @@ class FilterParameterBuilder:
                 logger.debug(f"Auto-filled layer_provider_type='{detected_type}'")
             else:
                 infos["layer_provider_type"] = 'unknown'
-        
+
         # Auto-fill layer_geometry_field
         # FIX v4.0.7 (2026-01-16): Use QgsDataSourceUri directly (more reliable)
         # Also check for string "NULL" which may be stored from stale config
@@ -183,7 +183,7 @@ class FilterParameterBuilder:
         # Don't trust stored values like 'geom' - they may be incorrect defaults
         stored_geom_field = infos.get("layer_geometry_field")
         needs_detection = (
-            not stored_geom_field or 
+            not stored_geom_field or
             stored_geom_field in ('NULL', 'None', '', 'geom', 'geometry')
         )
         if needs_detection:
@@ -205,7 +205,7 @@ class FilterParameterBuilder:
                         if pg_geom_col:
                             infos["layer_geometry_field"] = pg_geom_col
                             logger.info(
-                                f"Detected geometry column from PostgreSQL catalog: "
+                                "Detected geometry column from PostgreSQL catalog: "
                                 f"'{pg_geom_col}'"
                             )
                         else:
@@ -223,7 +223,7 @@ class FilterParameterBuilder:
             except Exception as e:
                 infos["layer_geometry_field"] = stored_geom_field or 'geom'
                 logger.warning(f"Could not detect geometry column: {e}")
-        
+
         # Auto-fill primary_key_name
         if "primary_key_name" not in infos or infos["primary_key_name"] is None:
             pk_indices = context.source_layer.primaryKeyAttributes()
@@ -236,7 +236,7 @@ class FilterParameterBuilder:
                 else:
                     infos["primary_key_name"] = 'id'
             logger.info(f"Auto-filled primary_key_name='{infos['primary_key_name']}'")
-        
+
         # Auto-fill layer_schema (empty for non-PostgreSQL)
         if "layer_schema" not in infos or infos["layer_schema"] is None:
             if infos.get("layer_provider_type") == PROVIDER_POSTGRES:
@@ -249,7 +249,7 @@ class FilterParameterBuilder:
             else:
                 infos["layer_schema"] = ''
             logger.info(f"Auto-filled layer_schema='{infos['layer_schema']}'")
-    
+
     def _query_postgresql_geometry_column(
         self,
         layer,
@@ -258,89 +258,89 @@ class FilterParameterBuilder:
     ) -> Optional[str]:
         """
         Query PostgreSQL geometry_columns catalog to find the geometry column name.
-        
+
         FIX v4.2.15 (2026-01-22): Added to handle cases where
-        QgsDataSourceUri.geometryColumn() returns empty (e.g., for some 
+        QgsDataSourceUri.geometryColumn() returns empty (e.g., for some
         PostgreSQL views or layers with non-standard URIs).
-        
+
         Args:
             layer: QGIS vector layer (PostgreSQL)
             schema: Schema name (e.g., 'public')
             table: Table name (e.g., 'commune')
-            
+
         Returns:
             str: Geometry column name, or None if not found
         """
         try:
             # Import here to avoid circular imports and optional dependency
             from ...infrastructure.utils import get_datasource_connexion_from_layer
-            
+
             conn, source_uri = get_datasource_connexion_from_layer(layer)
             if conn is None:
                 logger.debug(
                     "No PostgreSQL connection for geometry column detection"
                 )
                 return None
-            
+
             cursor = None
             try:
                 cursor = conn.cursor()
                 # Query geometry_columns view (works for tables and views)
                 cursor.execute("""
-                    SELECT f_geometry_column 
-                    FROM geometry_columns 
+                    SELECT f_geometry_column
+                    FROM geometry_columns
                     WHERE f_table_schema = %s AND f_table_name = %s
                     LIMIT 1
                 """, (schema, table))
-                
+
                 result = cursor.fetchone()
                 if result and result[0]:
                     logger.debug(
                         f"Found geometry column '{result[0]}' from catalog"
                     )
                     return result[0]
-                
+
                 # Fallback: Query geography_columns for geography types
                 cursor.execute("""
-                    SELECT f_geography_column 
-                    FROM geography_columns 
+                    SELECT f_geography_column
+                    FROM geography_columns
                     WHERE f_table_schema = %s AND f_table_name = %s
                     LIMIT 1
                 """, (schema, table))
-                
+
                 result = cursor.fetchone()
                 if result and result[0]:
                     logger.debug(
                         f"Found geography column '{result[0]}' from catalog"
                     )
                     return result[0]
-                    
+
                 logger.debug(
                     f"No geometry column found in catalog for {schema}.{table}"
                 )
                 return None
-                
+
             finally:
                 if cursor:
                     cursor.close()
                 # Note: Don't close connection - managed by connection pool
-                
+
         except Exception as e:
             logger.debug(f"Error querying PostgreSQL geometry column: {e}")
             return None
-    
+
     def _validate_required_keys(self, infos: Dict[str, Any]) -> None:
         """Validate that all required keys exist."""
         missing_keys = [
-            k for k in REQUIRED_INFO_KEYS 
+            k for k in REQUIRED_INFO_KEYS
             if k not in infos or infos[k] is None
         ]
-        
+
         if missing_keys:
             error_msg = f"task_parameters['infos'] missing required keys: {missing_keys}"
             logger.error(error_msg)
             raise KeyError(error_msg)
-    
+
     def _determine_provider_type(
         self,
         infos: Dict[str, Any],
@@ -348,19 +348,17 @@ class FilterParameterBuilder:
     ) -> Dict[str, Any]:
         """
         Determine effective provider type.
-        
+
         Returns:
             Dict with 'provider_type', 'forced_backend', 'postgresql_fallback'
         """
         provider_type = infos["layer_provider_type"]
-        forced_backend = False
-        postgresql_fallback = False
-        
+
         # PRIORITY 1: Check if backend is forced
         forced_backends = context.task_parameters.get('forced_backends', {})
         source_layer_id = infos.get("layer_id")
         forced = forced_backends.get(source_layer_id) if source_layer_id else None
-        
+
         if forced:
             logger.debug(f"🔒 Source layer: Using FORCED backend '{forced}'")
             return {
@@ -368,7 +366,7 @@ class FilterParameterBuilder:
                 'forced_backend': True,
                 'postgresql_fallback': False
             }
-        
+
         # PRIORITY 2: PostgreSQL layers ALWAYS use PostgreSQL backend
         # FIX v4.1.4 (2026-01-21): PostgreSQL layers are ALWAYS filterable via QGIS native API
         # (setSubsetString works without psycopg2). NEVER fall back to OGR.
@@ -379,13 +377,13 @@ class FilterParameterBuilder:
             else:
                 logger.debug("PostgreSQL backend: full functionality with psycopg2")
             # ALWAYS return PostgreSQL - never fallback to OGR
-        
+
         return {
             'provider_type': provider_type,
             'forced_backend': False,
             'postgresql_fallback': False
         }
-    
+
     def _validate_schema(
         self,
         infos: Dict[str, Any],
@@ -394,15 +392,15 @@ class FilterParameterBuilder:
     ) -> str:
         """Validate and return schema for PostgreSQL layers."""
         stored_schema = infos.get("layer_schema", "")
-        
+
         if provider_type != PROVIDER_POSTGRES or not context.source_layer:
             return stored_schema
-        
+
         try:
             from qgis.core import QgsDataSourceUri
             source_uri = QgsDataSourceUri(context.source_layer.source())
             detected_schema = source_uri.schema()
-            
+
             if detected_schema:
                 if stored_schema != detected_schema:
                     logger.info(f"Schema mismatch: stored='{stored_schema}', actual='{detected_schema}'")
@@ -416,7 +414,7 @@ class FilterParameterBuilder:
         except Exception as e:
             logger.warning(f"Could not detect schema from layer source: {e}")
             return stored_schema if stored_schema and stored_schema != 'NULL' else 'public'
-    
+
     def _extract_filtering_config(
         self,
         context: ParameterBuilderContext,
@@ -424,41 +422,41 @@ class FilterParameterBuilder:
     ) -> Dict[str, Any]:
         """Extract filtering configuration."""
         filtering_params = context.task_parameters.get("filtering", {})
-        
+
         # Extract combine operators
         has_combine_operator = filtering_params.get("has_combine_operator", False)
-        
+
         source_combine_op = "AND"
         other_combine_op = "AND"
-        
+
         if has_combine_operator:
             source_combine_op = filtering_params.get("source_layer_combine_operator", "AND") or "AND"
             other_combine_op = filtering_params.get("other_layers_combine_operator", "AND") or "AND"
-        
+
         # Extract field names
         primary_key_name = infos["primary_key_name"]
         field_names = []
-        
+
         if context.source_layer:
             field_names = [
-                field.name() 
+                field.name()
                 for field in context.source_layer.fields()
                 if field.name() != primary_key_name
             ]
-        
+
         # Extract old subset
         old_subset = ""
         if context.source_layer and context.source_layer.subsetString():
             old_subset_raw = context.source_layer.subsetString()
-            
+
             if context.sanitize_subset_fn:
                 old_subset = context.sanitize_subset_fn(old_subset_raw)
             else:
                 old_subset = old_subset_raw
-            
+
             table_name = infos.get("layer_table_name") or infos["layer_name"]
             logger.info(f"FilterMate: Existing filter detected on {table_name}: {old_subset[:100]}...")
-        
+
         return {
             'has_combine_operator': has_combine_operator,
             'source_layer_combine_operator': source_combine_op,
@@ -475,7 +473,7 @@ class FilterParameterBuilder:
 def create_filter_parameter_builder() -> FilterParameterBuilder:
     """
     Factory function to create a FilterParameterBuilder.
-    
+
     Returns:
         FilterParameterBuilder instance
     """
@@ -495,16 +493,16 @@ def build_filter_parameters(
 ) -> FilterParameters:
     """
     Build filter parameters.
-    
+
     Convenience function that creates a FilterParameterBuilder and builds parameters.
-    
+
     Args:
         task_parameters: Task parameters dict
         source_layer: QgsVectorLayer instance
         postgresql_available: Whether PostgreSQL/psycopg2 is available
         detect_provider_fn: Function to detect provider type from layer
         sanitize_subset_fn: Function to sanitize subset strings
-        
+
     Returns:
         FilterParameters result
     """
@@ -515,6 +513,6 @@ def build_filter_parameters(
         detect_provider_fn=detect_provider_fn,
         sanitize_subset_fn=sanitize_subset_fn
     )
-    
+
     builder = create_filter_parameter_builder()
     return builder.build(context)

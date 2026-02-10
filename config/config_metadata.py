@@ -16,7 +16,7 @@ Migrated from: before_migration/modules/config_metadata.py (375 lines)
 Location: config/config_metadata.py
 
 Usage:
-    from ..config.config_metadata import get_config_metadata, ConfigMetadata    
+    from ..config.config_metadata import get_config_metadata, ConfigMetadata
     metadata = get_config_metadata()
     widget_type = metadata.get_widget_type('app.ui.profile')
     description = metadata.get_description('app.ui.profile')
@@ -387,11 +387,11 @@ def get_config_metadata() -> ConfigMetadata:
 def validate_config_value_with_metadata(config_path: str, value: Any) -> Tuple[bool, str]:
     """
     Validate a configuration value using global metadata instance.
-    
+
     Args:
         config_path: Dot-separated path to config parameter
         value: Value to validate
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """

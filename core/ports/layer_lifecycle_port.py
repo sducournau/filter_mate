@@ -9,13 +9,13 @@ Author: FilterMate Team
 Date: January 2026
 """
 from typing import List, Dict, Any, Callable, Protocol
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 
 class LayerLifecyclePort(Protocol):
     """
     Port (interface) for layer lifecycle operations.
-    
+
     This port defines the contract for managing layer lifecycle within FilterMate.
     Implementations must handle:
     - Layer validation and filtering
@@ -23,7 +23,7 @@ class LayerLifecyclePort(Protocol):
     - PostgreSQL session cleanup
     - Project initialization support
     """
-    
+
     @abstractmethod
     def filter_usable_layers(
         self,
@@ -32,16 +32,16 @@ class LayerLifecyclePort(Protocol):
     ) -> List[Any]:
         """
         Filter and return only usable vector layers.
-        
+
         Args:
             layers: List of layers to filter
             postgresql_available: Whether PostgreSQL backend is available
-            
+
         Returns:
             List of usable layers
         """
         ...
-    
+
     @abstractmethod
     def handle_layers_added(
         self,
@@ -52,7 +52,7 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Handle layer addition with validation and retry logic.
-        
+
         Args:
             layers: Layers that were added
             postgresql_available: Whether PostgreSQL is available
@@ -60,7 +60,7 @@ class LayerLifecyclePort(Protocol):
             stability_constants: Timing constants for debouncing
         """
         ...
-    
+
     @abstractmethod
     def cleanup_postgresql_session_views(
         self,
@@ -71,14 +71,15 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Clean up PostgreSQL materialized views for a session.
-        
+
         Args:
             session_id: Session ID for materialized view isolation
             temp_schema: PostgreSQL schema for temporary objects
             project_layers: Dictionary of project layers
             postgresql_available: Whether PostgreSQL backend is available
         """
-        ...    
+        ...
+
     @abstractmethod
     def cleanup(
         self,
@@ -91,7 +92,7 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Clean up all plugin resources on unload or reload.
-        
+
         Args:
             session_id: Session ID for cleanup
             temp_schema: PostgreSQL temp schema
@@ -101,7 +102,7 @@ class LayerLifecyclePort(Protocol):
             postgresql_available: Whether PostgreSQL is available
         """
         ...
-    
+
     @abstractmethod
     def force_reload_layers(
         self,
@@ -115,7 +116,7 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Force a complete reload of all layers in the current project.
-        
+
         Args:
             cancel_tasks_callback: Callback to cancel all tasks
             reset_flags_callback: Callback to reset state flags
@@ -126,7 +127,7 @@ class LayerLifecyclePort(Protocol):
             stability_constants: Timing constants dictionary
         """
         ...
-    
+
     @abstractmethod
     def handle_remove_all_layers(
         self,
@@ -135,13 +136,13 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Handle remove all layers event.
-        
+
         Args:
             cancel_tasks_callback: Callback to cancel tasks
             dockwidget: Reference to dockwidget for UI cleanup
         """
         ...
-    
+
     @abstractmethod
     def handle_project_initialization(
         self,
@@ -162,7 +163,7 @@ class LayerLifecyclePort(Protocol):
     ) -> None:
         """
         Handle project read/new project initialization.
-        
+
         Args:
             task_name: 'project_read' or 'new_project'
             is_initializing: Current initializing flag state

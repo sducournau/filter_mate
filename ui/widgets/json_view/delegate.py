@@ -46,7 +46,7 @@ class JsonDelegate(QtWidgets.QStyledItemDelegate):
         except (NotImplementedError, AttributeError):
             pass
         return super(JsonDelegate, self).setEditorData(editor, index)
-    
+
     def setModelData(self, editor, model, index):
         """Use method from the data type or fall back to the default."""
         if index.column() == 0:

@@ -13,11 +13,11 @@ Submodules:
 """
 
 # Layout managers (Phase 6 - MIG-060+)
-from . import layout
-from . import config
+from . import layout  # noqa: F401
+from . import config  # noqa: F401
 
 # Orchestrator (Phase 6 - MIG-087)
-from .orchestrator import DockWidgetOrchestrator, create_orchestrator
+from .orchestrator import DockWidgetOrchestrator, create_orchestrator  # noqa: F401
 
 __all__ = [
     'layout',

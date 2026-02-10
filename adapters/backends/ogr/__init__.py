@@ -6,9 +6,9 @@ Universal fallback for unsupported providers.
 
 Part of Phase 4 Backend Refactoring (ARCH-044).
 """
-from .backend import OGRBackend, create_ogr_backend
-from .executor_wrapper import OGRFilterExecutor
-from .filter_executor import (
+from .backend import OGRBackend, create_ogr_backend  # noqa: F401
+from .executor_wrapper import OGRFilterExecutor  # noqa: F401
+from .filter_executor import (  # noqa: F401
     build_ogr_filter_from_selection,
     format_ogr_pk_values,
     normalize_column_names_for_ogr,
@@ -32,7 +32,7 @@ from .filter_executor import (
 )
 
 # v4.1.0: Expression Builder (migrated from before_migration)
-from .expression_builder import OGRExpressionBuilder, CancellableFeedback
+from .expression_builder import OGRExpressionBuilder, CancellableFeedback  # noqa: F401
 
 __all__ = [
     'OGRBackend',

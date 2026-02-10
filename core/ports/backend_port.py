@@ -16,7 +16,7 @@ from enum import Flag, auto
 class BackendCapability(Flag):
     """
     Capabilities that a backend may support.
-    
+
     Used to query backend features at runtime and make
     intelligent decisions about optimization strategies.
     """
@@ -36,7 +36,7 @@ class BackendCapability(Flag):
 class BackendInfo:
     """
     Information about a backend implementation.
-    
+
     Attributes:
         name: Human-readable backend name
         version: Backend version string
@@ -124,7 +124,7 @@ class BackendPort(ABC):
 
         Returns:
             True if backend can process this layer type
-            
+
         Example:
             >>> backend.supports_layer(postgresql_layer)
             True
@@ -152,7 +152,7 @@ class BackendPort(ABC):
         - Temporary tables
         - Connection pools
         - Cached data
-        
+
         Should be idempotent and safe to call multiple times.
         """
 
@@ -179,10 +179,10 @@ class BackendPort(ABC):
     def has_capability(self, capability: BackendCapability) -> bool:
         """
         Check if backend has a specific capability.
-        
+
         Args:
             capability: Capability to check
-            
+
         Returns:
             True if backend has the capability
         """
@@ -222,13 +222,13 @@ class BackendPort(ABC):
     def prepare(self, layer_info: 'LayerInfo') -> bool:
         """
         Prepare backend for operations on a layer.
-        
+
         Called before execute() to allow backends to set up
         connections, caches, or other resources.
-        
+
         Args:
             layer_info: Layer that will be processed
-            
+
         Returns:
             True if preparation successful
         """
@@ -238,7 +238,7 @@ class BackendPort(ABC):
     def get_statistics(self) -> dict:
         """
         Get backend execution statistics.
-        
+
         Returns:
             Dictionary with statistics like:
             - total_executions

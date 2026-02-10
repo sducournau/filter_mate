@@ -15,7 +15,6 @@ import os
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QObject, QEvent, Qt
 from qgis.PyQt.QtWidgets import QDialog, QWidget
-from qgis.PyQt.QtGui import QFont
 
 from .base_styler import StylerBase
 
@@ -28,18 +27,18 @@ logger = logging.getLogger(__name__)
 class GlobalDialogStyleFilter(QObject):
     """
     Global application-level event filter to reset styles on QGIS dialogs.
-    
+
     This filter is installed on QApplication to intercept ALL dialog show events,
     regardless of their parent. It ensures dialogs like QgsExpressionBuilderDialog
     inherit QGIS default styles instead of FilterMate's custom styles.
-    
+
     FIX 2026-01-21: Expression Builder dialogs displayed with gray/empty areas
     due to style inheritance from FilterMate dockwidget.
     """
-    
+
     _instance = None
     _installed = False
-    
+
     # Dialog class names that need style reset
     QGIS_DIALOGS = {
         'QgsExpressionBuilderDialog',
@@ -48,70 +47,69 @@ class GlobalDialogStyleFilter(QObject):
         'QgsFieldCalculator',
         'QgsQueryBuilder',
     }
-    
+
     def __init__(self):
         super().__init__()
         self._processed_dialogs = set()
-    
+
     @classmethod
     def get_instance(cls) -> 'GlobalDialogStyleFilter':
         """Get singleton instance."""
         if cls._instance is None:
             cls._instance = GlobalDialogStyleFilter()
         return cls._instance
-    
+
     @classmethod
     def install(cls) -> bool:
         """
         DISABLED 2026-01-21: Dialog style filter disabled.
-        
+
         The scanner and event filter were causing UI freezes.
         Root cause investigation needed - may be QGIS/system theme issue.
         """
         logger.info("GlobalDialogStyleFilter is DISABLED (prevents UI freeze)")
         return True  # Return True to avoid breaking callers
-    
+
     def _start_dialog_scanner(self):
         """
         DISABLED 2026-01-21: Scanner disabled to prevent UI freeze.
         The QTimer polling was causing performance issues.
         """
-        pass
-    
+
     def _scan_for_expression_dialogs(self):
         """Scan all top-level widgets for expression dialogs."""
         try:
             app = QgsApplication.instance()
             if not app:
                 return
-            
+
             for widget in app.topLevelWidgets():
                 if widget is None:
                     continue
-                    
+
                 class_name = widget.__class__.__name__
                 widget_id = id(widget)
-                
+
                 # Log ALL visible dialogs for debugging
                 if widget.isVisible() and widget_id not in self._processed_dialogs:
                     # Check window title for "expression" keyword (case insensitive)
                     title = widget.windowTitle().lower() if hasattr(widget, 'windowTitle') else ""
-                    
+
                     is_expression_dialog = (
-                        'Expression' in class_name or 
-                        'Builder' in class_name or 
+                        'Expression' in class_name or
+                        'Builder' in class_name or
                         'expression' in title or
                         'constructeur' in title or  # French
                         class_name in self.QGIS_DIALOGS
                     )
-                    
+
                     if is_expression_dialog:
                         self._processed_dialogs.add(widget_id)
                         self._fix_expression_dialog(widget, class_name)
-                        
+
         except Exception as e:
             logger.debug(f"Dialog scanner error: {e}")
-    
+
     def _fix_expression_dialog(self, widget, class_name: str):
         """Fix expression dialog style using QGIS defaults."""
         try:
@@ -171,16 +169,16 @@ class GlobalDialogStyleFilter(QObject):
                     background-color: white;
                 }
             """
-            
+
             widget.setStyleSheet(comprehensive_stylesheet)
-            
+
             # Force repaint
             widget.update()
             widget.repaint()
-            
+
         except Exception as e:
             logger.debug(f"Error fixing expression dialog {class_name}: {e}")
-    
+
     @classmethod
     def uninstall(cls) -> None:
         """Remove global filter from QApplication."""
@@ -191,7 +189,7 @@ class GlobalDialogStyleFilter(QObject):
             if hasattr(cls._instance, '_scanner_timer') and cls._instance._scanner_timer:
                 cls._instance._scanner_timer.stop()
                 cls._instance._scanner_timer = None
-            
+
             app = QgsApplication.instance()
             if app:
                 app.removeEventFilter(cls._instance)
@@ -199,14 +197,14 @@ class GlobalDialogStyleFilter(QObject):
                 logger.info("GlobalDialogStyleFilter removed from QApplication")
         except Exception as e:
             logger.warning(f"Could not uninstall GlobalDialogStyleFilter: {e}")
-    
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """
         DISABLED 2026-01-21: Event filter disabled to prevent UI freeze.
         Always returns False to allow normal event processing.
         """
         return False
-    
+
     def _fix_widget_style(self, widget: QWidget, class_name: str) -> None:
         """Fix style for any widget (dialog or not)."""
         try:
@@ -229,7 +227,7 @@ class GlobalDialogStyleFilter(QObject):
                 widget.update()
         except Exception as e:
             logger.debug(f"Error fixing widget {class_name}: {e}")
-    
+
     def _fix_dialog_style(self, dialog: QDialog, class_name: str) -> None:
         """
         Reset dialog and all its children to QGIS default appearance.
@@ -239,45 +237,45 @@ class GlobalDialogStyleFilter(QObject):
             app = QgsApplication.instance()
             app_palette = app.palette()
             app_font = app.font()
-            
+
             # Get main window for reparenting reference
             from qgis.utils import iface
-            main_window = iface.mainWindow() if iface else None
-            
+            iface.mainWindow() if iface else None
+
             # Reset the dialog itself
             dialog.setStyleSheet("")
             dialog.setPalette(app_palette)
             dialog.setFont(app_font)
             dialog.setAutoFillBackground(True)
-            
+
             # Force the dialog to NOT inherit from parent
             dialog.setAttribute(Qt.WA_StyledBackground, False)
             dialog.setAttribute(Qt.WA_NoSystemBackground, False)
-            
+
             # Import view classes for special handling
             from qgis.PyQt.QtWidgets import QTreeView, QListView, QAbstractItemView, QTreeWidget, QListWidget
-            
+
             # Reset all child widgets recursively with special handling for views
             for child in dialog.findChildren(QWidget):
                 try:
-                    child_class = child.__class__.__name__
-                    
+                    child.__class__.__name__
+
                     # Clear stylesheet
                     if child.styleSheet():
                         child.setStyleSheet("")
-                    
-                    # Reset palette  
+
+                    # Reset palette
                     child.setPalette(app_palette)
-                    
+
                     # Reset font to application default
                     child.setFont(app_font)
-                    
+
                     # Enable auto-fill background for proper rendering
                     child.setAutoFillBackground(True)
-                    
+
                     # Reset style attributes
                     child.setAttribute(Qt.WA_StyledBackground, False)
-                    
+
                     # Special handling for tree/list views - they need explicit background
                     if isinstance(child, (QTreeView, QListView, QTreeWidget, QListWidget, QAbstractItemView)):
                         # Force white background for views
@@ -289,42 +287,41 @@ class GlobalDialogStyleFilter(QObject):
                             child.viewport().setPalette(view_palette)
                             child.viewport().setAutoFillBackground(True)
                             child.viewport().setStyleSheet("")
-                        
+
                 except RuntimeError:
                     pass  # Widget was deleted
                 except Exception as e:
                     logger.debug(f"Error fixing child {child.__class__.__name__}: {e}")
-            
+
             # Force immediate repaint
             dialog.style().unpolish(dialog)
             dialog.style().polish(dialog)
             dialog.update()
             dialog.repaint()
-            
+
         except RuntimeError:
             pass  # Dialog was deleted
         except Exception as e:
             logger.debug(f"Error in _fix_dialog_style for {class_name}: {e}")
 
 
-
 class ChildDialogStyleFilter(QObject):
     """
     Event filter to prevent FilterMate styles from affecting child dialogs.
-    
+
     When QGIS widgets like QgsFieldExpressionWidget open dialogs
     (e.g., QgsExpressionBuilderDialog), those dialogs inherit the parent's
     palette/styles. This filter intercepts child additions and resets
     the stylesheet on QDialog instances to restore default QGIS appearance.
-    
+
     FIX 2026-01-21: Expression Builder and other QGIS dialogs displayed
     incorrectly due to style inheritance from FilterMate's themed dockwidget.
     """
-    
+
     # Dialog class names that should be protected from style inheritance
     PROTECTED_DIALOGS = {
         'QgsExpressionBuilderDialog',
-        'QgsProcessingAlgorithmDialogBase', 
+        'QgsProcessingAlgorithmDialogBase',
         'QDialog',
         'QMessageBox',
         'QFileDialog',
@@ -332,19 +329,19 @@ class ChildDialogStyleFilter(QObject):
         'QFontDialog',
         'QInputDialog',
     }
-    
+
     def __init__(self, parent: QObject = None):
         super().__init__(parent)
         self._processed_widgets = set()  # Track processed widgets by id
-    
+
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """
         Filter events to detect child dialog creation and show events.
-        
+
         Args:
             watched: The object being watched
             event: The event being processed
-            
+
         Returns:
             False to allow event to continue propagation
         """
@@ -357,7 +354,7 @@ class ChildDialogStyleFilter(QObject):
                     self._processed_widgets.add(widget_id)
                     from qgis.PyQt.QtCore import QTimer
                     QTimer.singleShot(0, lambda w=child: self._reset_dialog_style(w))
-        
+
         # Handle Show events - dialogs might be created later
         elif event.type() == QEvent.Show:
             if isinstance(watched, QDialog):
@@ -365,14 +362,14 @@ class ChildDialogStyleFilter(QObject):
                 if widget_id not in self._processed_widgets:
                     self._processed_widgets.add(widget_id)
                     self._reset_dialog_style(watched)
-        
+
         # Always return False to allow normal event processing
         return False
-    
+
     def _reset_dialog_style(self, dialog: QDialog) -> None:
         """
         Reset dialog stylesheet and palette to default.
-        
+
         Args:
             dialog: The dialog to reset
         """
@@ -380,9 +377,9 @@ class ChildDialogStyleFilter(QObject):
             # Check if dialog still exists and is valid
             if dialog is None:
                 return
-                
+
             class_name = dialog.__class__.__name__
-            
+
             # Only reset protected dialog types
             if class_name in self.PROTECTED_DIALOGS or isinstance(dialog, QDialog):
                 # Clear any inherited stylesheet
@@ -390,12 +387,12 @@ class ChildDialogStyleFilter(QObject):
                 if current_style:
                     dialog.setStyleSheet("")
                     logger.debug(f"Reset stylesheet for child dialog: {class_name}")
-                
+
                 # Reset palette to application default
                 from qgis.core import QgsApplication
                 app_palette = QgsApplication.instance().palette()
                 dialog.setPalette(app_palette)
-                
+
                 # Ensure all children also use default palette
                 for child in dialog.findChildren(QObject):
                     if hasattr(child, 'setPalette'):
@@ -403,9 +400,9 @@ class ChildDialogStyleFilter(QObject):
                             child.setPalette(app_palette)
                         except (RuntimeError, AttributeError):
                             pass  # Child widget may have been deleted
-                            
+
                 logger.debug(f"Reset palette for child dialog: {class_name}")
-                    
+
         except RuntimeError:
             # Widget was deleted
             pass
@@ -416,33 +413,33 @@ class ChildDialogStyleFilter(QObject):
 class ThemeManager(StylerBase):
     """
     Centralized theme management for FilterMate.
-    
+
     Provides:
     - Theme detection from QGIS palette
     - Theme application to widgets
     - Theme change events via callbacks
     - Color scheme management
-    
+
     Migrated methods from modules/ui_styles.py:
     - detect_qgis_theme() -> detect_system_theme()
     - set_theme() -> set_theme()
     - get_current_theme() -> current_theme property
     - load_stylesheet() -> _load_stylesheet()
-    
+
     Theme Change Callbacks:
         Use add_theme_changed_callback() to register handlers
-    
+
     Example:
         manager = ThemeManager(dockwidget)
         manager.setup()
-        
+
         # React to theme changes via callback
         manager.add_theme_changed_callback(on_theme_changed)
-        
+
         # Change theme
         manager.set_theme('dark')
     """
-    
+
     # Default color schemes
     COLOR_SCHEMES = {
         'default': {
@@ -494,43 +491,43 @@ class ThemeManager(StylerBase):
             'icon_filter': 'none'
         }
     }
-    
+
     def __init__(self, dockwidget: 'FilterMateDockWidget') -> None:
         """
         Initialize the ThemeManager.
-        
+
         Args:
             dockwidget: The main FilterMate dockwidget instance
         """
         super().__init__(dockwidget)
-        
+
         self._current_theme: str = 'default'
         self._auto_detect: bool = True
         self._styles_cache: Dict[str, str] = {}
         self._config_data: Optional[Dict] = None
         self._theme_changed_callbacks: List[Callable[[str], None]] = []
         self._child_dialog_filter: Optional['ChildDialogStyleFilter'] = None
-    
+
     def add_theme_changed_callback(self, callback: Callable[[str], None]) -> None:
         """
         Register a callback to be called when theme changes.
-        
+
         Args:
             callback: Function that accepts theme name as parameter
         """
         if callback not in self._theme_changed_callbacks:
             self._theme_changed_callbacks.append(callback)
-    
+
     def remove_theme_changed_callback(self, callback: Callable[[str], None]) -> None:
         """
         Remove a previously registered theme change callback.
-        
+
         Args:
             callback: The callback to remove
         """
         if callback in self._theme_changed_callbacks:
             self._theme_changed_callbacks.remove(callback)
-    
+
     def _emit_theme_changed(self, theme: str) -> None:
         """Notify all registered callbacks of theme change."""
         for callback in self._theme_changed_callbacks:
@@ -538,48 +535,48 @@ class ThemeManager(StylerBase):
                 callback(theme)
             except Exception as e:
                 logger.error(f"Error in theme change callback: {e}")
-    
+
     @property
     def current_theme(self) -> str:
         """Get current active theme name."""
         return self._current_theme
-    
+
     @property
     def is_dark_mode(self) -> bool:
         """Check if current theme is dark mode."""
         return self._current_theme == 'dark'
-    
+
     def setup(self) -> None:
         """
         Initialize theme from QGIS settings or config.
-        
+
         Auto-detects theme from QGIS if auto-detect is enabled.
         Installs event filter to protect child dialogs from style inheritance.
         """
         # Try to load config
         self._load_config()
-        
+
         # Install event filter to protect child dialogs (Expression Builder, etc.)
         self._install_child_dialog_filter()
-        
+
         # Detect and apply theme
         if self._auto_detect:
             detected = self.detect_system_theme()
             self._current_theme = detected
-        
+
         success = self.apply()
         if not success:
             logger.warning("ThemeManager: Initial theme application failed")
         self._initialized = True
         logger.info(f"ThemeManager initialized with theme: {self._current_theme} (success={success})")
-    
+
     def _install_child_dialog_filter(self) -> None:
         """
         Install event filter to reset stylesheet on child dialogs.
-        
+
         This prevents FilterMate's styles from affecting QGIS dialogs like
         QgsExpressionBuilderDialog that are created with dockwidget as parent.
-        
+
         FIX 2026-01-21: Now uses GlobalDialogStyleFilter on QApplication
         to catch ALL dialogs, not just direct children of dockwidget.
         """
@@ -591,15 +588,15 @@ class ThemeManager(StylerBase):
             logger.warning(f"Could not install global dialog filter: {e}")
         except Exception as e:
             logger.warning(f"Could not install child dialog filter: {e}")
-    
+
     def apply(self) -> bool:
         """
         Apply current theme to dockwidget contents only.
-        
+
         CRITICAL: Apply to dockWidgetContents, NOT the QDockWidget itself.
         This prevents styles from propagating to child dialogs like
         QgsExpressionBuilderDialog which are created with dockwidget as parent.
-        
+
         Returns:
             bool: True if theme applied successfully, False otherwise
         """
@@ -617,7 +614,7 @@ class ThemeManager(StylerBase):
                     contents = self.dockwidget.findChild(QWidget, 'dockWidgetContents')
                     if contents:
                         target_widget = contents
-                
+
                 target_widget.setStyleSheet(stylesheet)
                 logger.debug(f"Applied theme '{self._current_theme}' to {target_widget.objectName() or 'dockwidget'}")
                 return True
@@ -627,21 +624,21 @@ class ThemeManager(StylerBase):
         except Exception as e:
             logger.error(f"ThemeManager: Error applying theme '{self._current_theme}': {e}", exc_info=True)
             return False
-    
+
     def set_theme(self, theme: str) -> None:
         """
         Set and apply a new theme.
-        
+
         Args:
             theme: Theme name ('light', 'dark', 'default', 'auto')
         """
         if theme == 'auto':
             theme = self.detect_system_theme()
-        
+
         if theme not in self.COLOR_SCHEMES:
             logger.warning(f"Unknown theme '{theme}', falling back to 'default'")
             theme = 'default'
-        
+
         if theme != self._current_theme:
             old_theme = self._current_theme
             self._current_theme = theme
@@ -652,13 +649,13 @@ class ThemeManager(StylerBase):
             else:
                 logger.error(f"Theme change from '{old_theme}' to '{theme}' FAILED - reverting")
                 self._current_theme = old_theme  # Revert on failure
-    
+
     def detect_system_theme(self) -> str:
         """
         Detect current QGIS theme.
-        
+
         Analyzes QGIS palette luminance to determine dark/light mode.
-        
+
         Returns:
             str: 'dark' if QGIS uses dark theme, 'default' for light theme
         """
@@ -666,77 +663,77 @@ class ThemeManager(StylerBase):
             app = QgsApplication.instance()
             if app is None:
                 return 'default'
-            
+
             palette = app.palette()
             bg_color = palette.color(palette.Window)
-            
+
             # Calculate luminance (perceived brightness)
-            luminance = (0.299 * bg_color.red() + 
-                        0.587 * bg_color.green() + 
+            luminance = (0.299 * bg_color.red() +
+                        0.587 * bg_color.green() +
                         0.114 * bg_color.blue())
-            
+
             if luminance < 128:
                 logger.debug(f"Detected QGIS dark theme (luminance: {luminance:.0f})")
                 return 'dark'
             else:
                 logger.debug(f"Detected QGIS light theme (luminance: {luminance:.0f})")
                 return 'default'
-                
+
         except Exception as e:
             logger.warning(f"Could not detect QGIS theme: {e}")
             return 'default'
-    
+
     def on_theme_changed(self, theme: str) -> None:
         """
         Handle external theme change event.
-        
+
         Args:
             theme: New theme name
         """
         self.set_theme(theme)
-    
+
     def get_color(self, color_key: str) -> str:
         """
         Get a color value from current theme.
-        
+
         Args:
             color_key: Color key name (e.g., 'color_accent')
-        
+
         Returns:
             str: Color value (hex) or empty string if not found
         """
         colors = self.COLOR_SCHEMES.get(self._current_theme, {})
         return colors.get(color_key, '')
-    
+
     def get_colors(self) -> Dict[str, str]:
         """
         Get all colors for current theme.
-        
+
         Returns:
             Dict of color key -> color value
         """
         return self.COLOR_SCHEMES.get(self._current_theme, {}).copy()
-    
+
     def get_available_themes(self) -> list:
         """
         Get list of available theme names.
-        
+
         Returns:
             List of theme names
         """
         return list(self.COLOR_SCHEMES.keys())
-    
+
     def clear_cache(self) -> None:
         """Clear stylesheet cache."""
         self._styles_cache.clear()
         logger.debug("Theme cache cleared")
-    
+
     def _load_config(self) -> None:
         """Load configuration from dockwidget or config file."""
         try:
             if hasattr(self.dockwidget, 'config_data'):
                 self._config_data = self.dockwidget.config_data
-                
+
                 # Check for auto-detect setting
                 if self._config_data:
                     active_theme = self._config_data.get('app', {}).get('active_theme', 'auto')
@@ -745,43 +742,43 @@ class ThemeManager(StylerBase):
                         self._current_theme = active_theme
         except Exception as e:
             logger.debug(f"Could not load theme config: {e}")
-    
+
     def _load_stylesheet(self, theme: str) -> str:
         """
         Load QSS stylesheet for theme.
-        
+
         Args:
             theme: Theme name
-        
+
         Returns:
             Stylesheet content with colors applied
         """
         # Check cache
         if theme in self._styles_cache:
             return self._styles_cache[theme]
-        
+
         # Get raw stylesheet
         stylesheet = self._load_raw_stylesheet(theme)
         if not stylesheet:
             return ""
-        
+
         # Apply colors
         colors = self.COLOR_SCHEMES.get(theme, self.COLOR_SCHEMES['default'])
         for key, value in colors.items():
             stylesheet = stylesheet.replace(f'{{{key}}}', value)
-        
+
         # Cache result
         self._styles_cache[theme] = stylesheet
-        
+
         return stylesheet
-    
+
     def _load_raw_stylesheet(self, theme: str) -> str:
         """
         Load raw QSS file without color replacement.
-        
+
         Args:
             theme: Theme name
-        
+
         Returns:
             Raw stylesheet content
         """
@@ -793,24 +790,24 @@ class ThemeManager(StylerBase):
                 plugin_dir = os.path.dirname(filter_mate_dockwidget.__file__)
             except (ImportError, AttributeError):
                 return ""  # Cannot determine plugin directory
-        
+
         style_file = os.path.join(plugin_dir, 'resources', 'styles', f'{theme}.qss')
-        
+
         # Fallback to default
         if not os.path.exists(style_file):
             style_file = os.path.join(plugin_dir, 'resources', 'styles', 'default.qss')
-        
+
         if not os.path.exists(style_file):
             logger.warning(f"Stylesheet not found: {style_file}")
             return ""
-        
+
         try:
             with open(style_file, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
             logger.error(f"Error loading stylesheet: {e}")
             return ""
-    
+
     def teardown(self) -> None:
         """Clean up resources."""
         # Remove event filter
@@ -821,7 +818,7 @@ class ThemeManager(StylerBase):
                 logger.debug("Child dialog style filter removed")
             except Exception as e:
                 logger.debug(f"Could not remove event filter: {e}")
-        
+
         self.clear_cache()
         self._theme_changed_callbacks.clear()
         super().teardown()

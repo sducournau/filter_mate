@@ -46,7 +46,7 @@ class ProgressEvent:
     percent: int  # 0-100
     message: str
     timestamp: float = field(default_factory=time.time)
-    
+
     # Optional detailed info
     current_step: int = 0
     total_steps: int = 0
@@ -54,7 +54,7 @@ class ProgressEvent:
     items_total: int = 0
     elapsed_ms: float = 0.0
     estimated_remaining_ms: float = 0.0
-    
+
     # Metadata
     layer_name: Optional[str] = None
     task_id: Optional[str] = None
@@ -92,7 +92,7 @@ class ProgressHandler:
             task_id="filter_123",
             on_progress=update_ui_progress
         )
-        
+
         handler.start_phase(ProgressPhase.LOADING_DATA)
         for i, item in enumerate(items):
             handler.update(i, len(items), f"Processing {item}")
@@ -162,7 +162,7 @@ class ProgressHandler:
         if self._current_phase != phase:
             if self._current_phase not in self._completed_phases:
                 self._completed_phases.append(self._current_phase)
-            
+
             self._current_phase = phase
             self._phase_start_time = time.time()
 
@@ -198,7 +198,7 @@ class ProgressHandler:
         phase_progress = (current / total) * 100
         phase_weight = self._phase_weights.get(self._current_phase, 10)
         base_percent = self._get_phase_start_percent(self._current_phase)
-        
+
         percent = int(base_percent + (phase_progress * phase_weight / 100))
         percent = min(percent, 100)
 
@@ -206,7 +206,7 @@ class ProgressHandler:
         if abs(percent - self._last_percent) >= 1 or message:
             elapsed = (time.time() - self._start_time) * 1000
             estimated_remaining = 0.0
-            
+
             if current > 0 and total > 0:
                 rate = elapsed / current
                 estimated_remaining = rate * (total - current)
@@ -269,12 +269,12 @@ class ProgressHandler:
         """Get starting percent for a phase."""
         percent = 0
         phases_order = list(self.DEFAULT_PHASE_WEIGHTS.keys())
-        
+
         for p in phases_order:
             if p == phase:
                 break
             percent += self._phase_weights.get(p, 0)
-        
+
         return percent
 
     def _get_phase_end_percent(self, phase: ProgressPhase) -> int:
@@ -354,7 +354,7 @@ class ProgressAggregator:
             total_tasks=5,
             on_progress=update_batch_progress
         )
-        
+
         for i, task in enumerate(tasks):
             task.run()
             aggregator.task_complete(i)

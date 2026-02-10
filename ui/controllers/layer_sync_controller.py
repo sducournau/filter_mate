@@ -162,11 +162,11 @@ class LayerSyncController(BaseController):
         # CRITICAL: Check post-filter protection window - SKIP for manual changes
         if self._is_within_post_filter_protection() and not manual_change:
             elapsed = time.time() - self._filter_completed_time
-            
+
             # Case 1: layer=None - BLOCK to prevent auto-selection of wrong layer
             if layer is None:
                 logger.info(
-                    f"🛡️ on_current_layer_changed BLOCKED - layer=None during "
+                    "🛡️ on_current_layer_changed BLOCKED - layer=None during "
                     f"protection window (elapsed={elapsed:.3f}s)"
                 )
                 self._restore_protected_layer()
@@ -174,8 +174,8 @@ class LayerSyncController(BaseController):
                 return False
 
             # Case 2: Different layer than saved - BLOCK
-            if (self._saved_layer_id_before_filter and 
-                layer.id() != self._saved_layer_id_before_filter):
+            if (self._saved_layer_id_before_filter and
+                    layer.id() != self._saved_layer_id_before_filter):
                 logger.info(
                     f"🛡️ on_current_layer_changed BLOCKED - layer '{layer_name}' "
                     f"!= saved during protection (elapsed={elapsed:.3f}s)"
@@ -186,7 +186,7 @@ class LayerSyncController(BaseController):
 
             # Case 3: Same layer as saved - ALLOW
             logger.debug(
-                f"✓ on_current_layer_changed ALLOWED - same layer during "
+                "✓ on_current_layer_changed ALLOWED - same layer during "
                 f"protection (elapsed={elapsed:.3f}s)"
             )
         elif self._is_within_post_filter_protection() and manual_change:
@@ -222,7 +222,7 @@ class LayerSyncController(BaseController):
             in_progress: True when filtering starts, False when complete
         """
         self._filtering_in_progress = in_progress
-        
+
         # Sync with dockwidget if exists
         if hasattr(self.dockwidget, '_filtering_in_progress'):
             self.dockwidget._filtering_in_progress = in_progress
@@ -258,7 +258,7 @@ class LayerSyncController(BaseController):
         """
         self._filter_completed_time = time.time()
         self._filtering_in_progress = False
-        
+
         # Sync with dockwidget
         if hasattr(self.dockwidget, '_filter_completed_time'):
             self.dockwidget._filter_completed_time = self._filter_completed_time
@@ -266,7 +266,7 @@ class LayerSyncController(BaseController):
             self.dockwidget._filtering_in_progress = False
 
         logger.info(
-            f"Filter completed - protection window started "
+            "Filter completed - protection window started "
             f"({POST_FILTER_PROTECTION_WINDOW}s)"
         )
 
@@ -279,7 +279,7 @@ class LayerSyncController(BaseController):
         self._filter_completed_time = 0
         self._saved_layer_id_before_filter = None
         self._filtering_in_progress = False
-        
+
         # Sync with dockwidget
         if hasattr(self.dockwidget, '_filter_completed_time'):
             self.dockwidget._filter_completed_time = 0
@@ -337,45 +337,45 @@ class LayerSyncController(BaseController):
     def is_layer_truly_deleted(self, layer: Optional[QgsVectorLayer]) -> bool:
         """
         Check if a layer is truly deleted, accounting for filtering operations.
-        
+
         v4.0 Sprint 2: Centralized layer deletion check with filtering protection.
-        
+
         During and immediately after filtering, layers can temporarily appear as
         "deleted" to sip.isdeleted() even though they're still valid. This method
         provides a centralized check that respects:
         1. Active filtering operations (_filtering_in_progress flag)
         2. Post-filtering protection window (configured in POST_FILTER_PROTECTION_WINDOW)
         3. Actual C++ object deletion status via sip
-        
+
         Args:
             layer: The layer to check (can be None)
-            
+
         Returns:
             True if layer is truly deleted and should be cleared, False otherwise
         """
         # If layer is None, it's already "deleted" in a sense
         if layer is None:
             return True
-        
+
         # During filtering, NEVER consider layer as deleted
         if self._filtering_in_progress:
             layer_name = layer.name() if hasattr(layer, 'name') else 'unknown'
             logger.debug(
-                f"🛡️ is_layer_truly_deleted BLOCKED - filtering in progress "
+                "🛡️ is_layer_truly_deleted BLOCKED - filtering in progress "
                 f"(layer={layer_name})"
             )
             return False
-        
+
         # Within protection window after filtering, NEVER consider layer as deleted
         if self._is_within_post_filter_protection():
             elapsed = time.time() - self._filter_completed_time
             layer_name = layer.name() if hasattr(layer, 'name') else 'unknown'
             logger.debug(
-                f"🛡️ is_layer_truly_deleted BLOCKED - within protection window "
+                "🛡️ is_layer_truly_deleted BLOCKED - within protection window "
                 f"(elapsed={elapsed:.3f}s, layer={layer_name})"
             )
             return False
-        
+
         # Perform the actual deletion check via sip
         try:
             import sip
@@ -490,7 +490,7 @@ class LayerSyncController(BaseController):
         """Set current layer on dockwidget."""
         if hasattr(self.dockwidget, 'current_layer'):
             self.dockwidget.current_layer = layer
-        
+
         # Update combobox
         if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
             combo = self.dockwidget.comboBox_filtering_current_layer
@@ -541,7 +541,7 @@ class LayerSyncController(BaseController):
         # If current layer is being removed, find a replacement
         if current_layer.id() in layer_ids:
             logger.debug(f"Current layer {current_layer.name()} being removed")
-            
+
             # Clear saved layer if it's being removed
             if self._saved_layer_id_before_filter in layer_ids:
                 self._saved_layer_id_before_filter = None
@@ -550,9 +550,9 @@ class LayerSyncController(BaseController):
             replacement = None
             project = QgsProject.instance()
             for layer in project.mapLayers().values():
-                if (isinstance(layer, QgsVectorLayer) and 
+                if (isinstance(layer, QgsVectorLayer) and
                     layer.id() not in layer_ids and
-                    self.validate_layer(layer)):
+                        self.validate_layer(layer)):
                     replacement = layer
                     break
 
@@ -590,55 +590,55 @@ class LayerSyncController(BaseController):
     ) -> bool:
         """
         Synchronize all widgets with the new current layer.
-        
+
         Updates comboboxes, field expression widgets, and backend indicator.
         Migrated from filter_mate_dockwidget._synchronize_layer_widgets.
-        
+
         v4.0 Sprint 3: Full migration from dockwidget.
-        
+
         CRITICAL: Respects post-filter protection window to prevent CRIT-005.
         FIX 2026-01-14: Manual changes bypass protection window.
-        
+
         Args:
             layer: The current layer to sync widgets to
             layer_props: Layer properties from PROJECT_LAYERS
             manual_change: True if user manually selected layer (bypasses protection)
-            
+
         Returns:
             True if synchronization completed, False if blocked
         """
         dw = self.dockwidget
-        
+
         # Check if widgets are initialized
         if not getattr(dw, 'widgets_initialized', False):
             logger.debug("synchronize_layer_widgets: widgets not initialized")
             return False
-        
+
         # Check protection window for combobox sync (manual changes bypass)
         skip_combobox_sync = self._should_skip_combobox_sync(layer, manual_change=manual_change)
-        
+
         # Detect multi-step filter
         if hasattr(dw, '_detect_multi_step_filter'):
             dw._detect_multi_step_filter(layer, layer_props)
-        
+
         # Sync current layer combobox (unless protected)
         if not skip_combobox_sync:
             self._sync_current_layer_combobox(layer)
-        
+
         # Update backend indicator
         self._update_backend_indicator(layer, layer_props)
-        
+
         # Initialize buffer property
         if hasattr(dw, 'filtering_init_buffer_property'):
             dw.filtering_init_buffer_property()
-        
+
         # Synchronize all layer property widgets
         self._sync_layer_property_widgets(layer, layer_props)
-        
+
         # CRITICAL: Populate layers_to_filter combobox (excluding current layer)
         # This ensures the current layer never appears in the remote layers list
         self._sync_layers_to_filter_combobox(layer)
-        
+
         # FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): Safety reconnection of CURRENT_LAYER signal
         # Ensures signal is active even if _sync_current_layer_combobox() exited early
         if not skip_combobox_sync and hasattr(dw, 'manageSignal'):
@@ -650,14 +650,14 @@ class LayerSyncController(BaseController):
                     logger.debug("✓ CURRENT_LAYER.layerChanged signal reconnected (safety check)")
             except Exception as e:
                 logger.warning(f"Could not reconnect CURRENT_LAYER signal: {e}")
-        
+
         # Synchronize state-dependent widgets
         self._sync_state_dependent_widgets()
-        
+
         # Update centroids source checkbox
         if hasattr(dw, '_update_centroids_source_checkbox_state'):
             dw._update_centroids_source_checkbox_state()
-        
+
         logger.debug(f"synchronize_layer_widgets completed for {layer.name()}")
         self.layer_synchronized.emit(layer)
         return True
@@ -669,18 +669,18 @@ class LayerSyncController(BaseController):
     ) -> None:
         """
         Reconnect all layer-related widget signals after updates.
-        
+
         Also restores exploring groupbox UI state and connects layer selection signal.
         Migrated from filter_mate_dockwidget._reconnect_layer_signals.
-        
+
         v4.0 Sprint 3: Full migration from dockwidget.
-        
+
         Args:
             widgets_to_reconnect: List of widget paths to reconnect
             layer_props: Layer properties from PROJECT_LAYERS
         """
         dw = self.dockwidget
-        
+
         # Exploring widget signals - already reconnected in _reload_exploration_widgets
         exploring_signal_prefixes = [
             ["EXPLORING", "SINGLE_SELECTION_FEATURES"],
@@ -691,72 +691,72 @@ class LayerSyncController(BaseController):
             ["EXPLORING", "IDENTIFY"],
             ["EXPLORING", "ZOOM"]
         ]
-        
+
         # Reconnect only non-exploring signals
         for widget_path in widgets_to_reconnect:
             if widget_path not in exploring_signal_prefixes:
                 if hasattr(dw, 'manageSignal'):
                     dw.manageSignal(widget_path, 'connect')
-        
+
         # Reconnect legend link if enabled
         self._reconnect_legend_link()
-        
+
         # Connect selectionChanged signal
         self._connect_layer_selection_signal()
-        
+
         # Restore exploring groupbox UI state
         self._restore_exploring_groupbox_state(layer_props)
-        
+
         # Link widgets and restore feature selection
         self._restore_feature_selection_state(layer_props)
-        
+
         logger.debug("reconnect_layer_signals completed")
 
     def get_project_layers_data(
         self,
         project_layers: dict,
-        project = None
+        project=None
     ) -> dict:
         """
         Update dockwidget with latest layer information from FilterMateApp.
-        
+
         Called when layer management tasks complete. Orchestrates UI refresh.
         Migrated from filter_mate_dockwidget.get_project_layers_from_app.
-        
+
         v4.0 Sprint 3: Partial migration - data handling only.
         UI updates still handled by dockwidget.
-        
+
         Args:
             project_layers: Updated PROJECT_LAYERS dictionary from app
             project: QGIS project instance
-            
+
         Returns:
             dict with status: {'updated': bool, 'layer_count': int, 'reason': str}
         """
         dw = self.dockwidget
-        
+
         # Check if filtering is in progress
         if getattr(dw, '_filtering_in_progress', False) or self._filtering_in_progress:
             logger.info("get_project_layers_data: skipped - filtering in progress")
-            
+
             # Only update data, don't touch UI
             if project_layers is not None:
                 dw.PROJECT_LAYERS = project_layers
             if project is not None:
                 dw.PROJECT = project
-            
+
             return {
                 'updated': False,
                 'layer_count': len(project_layers) if project_layers else 0,
                 'reason': 'filtering_in_progress'
             }
-        
+
         # Update data
         if project_layers is not None:
             dw.PROJECT_LAYERS = project_layers
         if project is not None:
             dw.PROJECT = project
-        
+
         return {
             'updated': True,
             'layer_count': len(project_layers) if project_layers else 0,
@@ -770,14 +770,14 @@ class LayerSyncController(BaseController):
     def _should_skip_combobox_sync(self, layer: Optional[QgsVectorLayer], manual_change: bool = False) -> bool:
         """
         Check if combobox synchronization should be skipped.
-        
+
         Skips during post-filter protection window to prevent CRIT-005.
         FIX 2026-01-14: Manual changes bypass protection window.
-        
+
         Args:
             layer: Layer being synced
             manual_change: True if user manually selected layer (bypasses protection)
-            
+
         Returns:
             True if combobox sync should be skipped
         """
@@ -785,58 +785,58 @@ class LayerSyncController(BaseController):
         if manual_change:
             logger.debug("Manual change - bypassing protection window check")
             return False
-        
+
         if not self._is_within_post_filter_protection():
             return False
-        
+
         elapsed = time.time() - self._filter_completed_time
         saved_layer_id = self._saved_layer_id_before_filter
-        
+
         if saved_layer_id:
             if layer is None or layer.id() != saved_layer_id:
                 layer_name = layer.name() if layer else "(None)"
                 logger.info(
-                    f"🛡️ synchronize_layer_widgets BLOCKED combobox sync - "
+                    "🛡️ synchronize_layer_widgets BLOCKED combobox sync - "
                     f"layer={layer_name} during protection (elapsed={elapsed:.3f}s) - automatic change"
                 )
                 return True
-        
+
         return False
 
     def _sync_current_layer_combobox(self, layer: QgsVectorLayer) -> None:
         """Update current layer combobox widget without triggering signals.
-        
+
         FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): Always reconnect signal, even if layer unchanged.
         Reason: Signal may have been disconnected elsewhere, must ensure it's always active.
-        
+
         Args:
             layer: Layer to set as current
         """
         dw = self.dockwidget
-        
+
         # Get current layer widget
         current_layer_widget = dw.widgets.get("FILTERING", {}).get("CURRENT_LAYER", {}).get("WIDGET")
         if not current_layer_widget:
             return
-        
+
         # Get currently displayed layer
         displayed_layer = current_layer_widget.currentLayer()
-        
+
         # FIX 2026-01-15: Removed early return - always reconnect signal for reliability
         logger.debug(
-            f"_sync_current_layer_combobox: Updating combo | "
+            "_sync_current_layer_combobox: Updating combo | "
             f"{displayed_layer.name() if displayed_layer else 'None'} → {layer.name()}"
         )
-        
+
         # Disconnect, update, reconnect (ALWAYS)
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
-        
+
         # Force update even if same layer (ensures refresh)
         current_layer_widget.blockSignals(True)
         current_layer_widget.setLayer(layer)
         current_layer_widget.blockSignals(False)
-        
+
         # ALWAYS reconnect signal
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'connect', 'layerChanged')
@@ -849,21 +849,21 @@ class LayerSyncController(BaseController):
     ) -> None:
         """
         Update the backend indicator for the layer.
-        
+
         Args:
             layer: Current layer
             layer_props: Layer properties
         """
         dw = self.dockwidget
-        
+
         # Get forced backend if set
         forced_backend = None
         forced_backends = getattr(dw, 'forced_backends', {})
         if layer.id() in forced_backends:
             forced_backend = forced_backends[layer.id()]
-        
+
         project_layers = getattr(dw, 'PROJECT_LAYERS', {})
-        
+
         if layer.id() in project_layers:
             infos = layer_props.get('infos', {})
             if 'layer_provider_type' in infos:
@@ -885,18 +885,18 @@ class LayerSyncController(BaseController):
     ) -> None:
         """
         Synchronize all layer property widgets with stored values.
-        
+
         Args:
             layer: Current layer
             layer_props: Layer properties from PROJECT_LAYERS
         """
         dw = self.dockwidget
-        widgets = getattr(dw, 'widgets', {})
+        getattr(dw, 'widgets', {})
         layer_properties_tuples_dict = getattr(dw, 'layer_properties_tuples_dict', {})
-        
+
         for group_name, tuple_group in layer_properties_tuples_dict.items():
             group_state = True
-            
+
             # Skip groups that are always enabled
             if group_name not in ('is', 'selection_expression', 'source_layer'):
                 if len(tuple_group) > 0:
@@ -904,7 +904,7 @@ class LayerSyncController(BaseController):
                     group_state = layer_props.get(
                         group_enabled_property[0], {}
                     ).get(group_enabled_property[1], True)
-                    
+
                     if group_state is False:
                         if hasattr(dw, 'properties_group_state_reset_to_default'):
                             dw.properties_group_state_reset_to_default(
@@ -913,7 +913,7 @@ class LayerSyncController(BaseController):
                     else:
                         if hasattr(dw, 'properties_group_state_enabler'):
                             dw.properties_group_state_enabler(tuple_group)
-            
+
             if group_state is True:
                 self._sync_group_widgets(tuple_group, layer_props, layer)
 
@@ -925,7 +925,7 @@ class LayerSyncController(BaseController):
     ) -> None:
         """
         Sync widgets for a property group.
-        
+
         Args:
             tuple_group: List of property tuples
             layer_props: Layer properties
@@ -933,26 +933,26 @@ class LayerSyncController(BaseController):
         """
         dw = self.dockwidget
         widgets = getattr(dw, 'widgets', {})
-        
+
         for property_tuple in tuple_group:
             # Skip data-only properties
             if property_tuple[0].upper() not in widgets:
                 continue
             if property_tuple[1].upper() not in widgets.get(property_tuple[0].upper(), {}):
                 continue
-            
+
             widget_info = widgets[property_tuple[0].upper()][property_tuple[1].upper()]
             widget_type = widget_info.get("TYPE")
             widget = widget_info.get("WIDGET")
-            
+
             if widget is None:
                 continue
-            
+
             # Get stored value
             stored_value = layer_props.get(
                 property_tuple[0], {}
             ).get(property_tuple[1])
-            
+
             # Sync based on widget type
             self._sync_widget_by_type(
                 widget, widget_type, widget_info, property_tuple,
@@ -971,7 +971,7 @@ class LayerSyncController(BaseController):
     ) -> None:
         """
         Sync a widget based on its type.
-        
+
         Args:
             widget: The widget to sync
             widget_type: Type of widget
@@ -987,15 +987,15 @@ class LayerSyncController(BaseController):
                 if all(k in widget_info for k in ["ICON_ON_TRUE", "ICON_ON_FALSE"]):
                     if hasattr(dw, 'switch_widget_icon'):
                         dw.switch_widget_icon(property_tuple, stored_value)
-                
+
                 if widget.isCheckable():
                     widget.blockSignals(True)
                     widget.setChecked(stored_value)
                     widget.blockSignals(False)
-                    
+
             elif widget_type == 'CheckableComboBox':
                 widget.setCheckedItems(stored_value if stored_value else [])
-                
+
             elif widget_type == 'ComboBox':
                 if property_tuple[1] in ('source_layer_combine_operator', 'other_layers_combine_operator'):
                     if hasattr(dw, '_combine_operator_to_index'):
@@ -1007,58 +1007,58 @@ class LayerSyncController(BaseController):
                     if index == -1:
                         index = 0
                 widget.setCurrentIndex(index)
-                
+
             elif widget_type == 'QgsFieldExpressionWidget':
                 widget.blockSignals(True)
                 widget.setLayer(layer)
                 widget.setExpression(str(stored_value) if stored_value else '')
                 widget.blockSignals(False)
-                
+
             elif widget_type in ('QgsDoubleSpinBox', 'QgsSpinBox'):
                 widget.setValue(stored_value if stored_value is not None else 0)
-                
+
             elif widget_type == 'CheckBox':
                 widget.blockSignals(True)
                 widget.setChecked(stored_value if stored_value else False)
                 widget.blockSignals(False)
-                
+
             elif widget_type == 'LineEdit':
                 widget.setText(str(stored_value) if stored_value else '')
-                
+
             elif widget_type == 'QgsProjectionSelectionWidget':
                 from qgis.core import QgsCoordinateReferenceSystem
                 if stored_value:
                     crs = QgsCoordinateReferenceSystem(stored_value)
                     if crs.isValid():
                         widget.setCrs(crs)
-                        
+
             elif widget_type == 'PropertyOverrideButton':
                 widget.setActive(stored_value if stored_value else False)
-                
+
         except Exception as e:
             logger.warning(f"Error syncing widget {property_tuple}: {e}")
 
     def _sync_layers_to_filter_combobox(self, layer=None) -> None:
         """Populate the layers_to_filter combobox.
-        
+
         Args:
             layer: Source layer to exclude from the list (uses current_layer if None)
         """
         dw = self.dockwidget
-        
+
         # Use current_layer if no layer provided
         if layer is None and hasattr(dw, 'current_layer'):
             layer = dw.current_layer
-        
+
         logger.info(f"_sync_layers_to_filter_combobox: Refreshing combobox for current_layer={layer.name() if layer else 'None'}")
-        
+
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-        
+
         if hasattr(dw, 'filtering_populate_layers_chekableCombobox'):
             dw.filtering_populate_layers_chekableCombobox(layer)
             logger.debug(f"✓ layers_to_filter combobox populated (excluding {layer.name() if layer else 'None'})")
-        
+
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(
                 ["FILTERING", "LAYERS_TO_FILTER"],
@@ -1068,12 +1068,12 @@ class LayerSyncController(BaseController):
 
     def _sync_state_dependent_widgets(self) -> None:
         """Synchronize state-dependent widgets.
-        
+
         v4.0.7: Added filtering_buffer_value_state_changed to ensure buffer widgets
                 (spinbox and property button) are properly enabled/disabled.
         """
         dw = self.dockwidget
-        
+
         method_names = [
             'filtering_layers_to_filter_state_changed',
             'filtering_combine_operator_state_changed',
@@ -1082,7 +1082,7 @@ class LayerSyncController(BaseController):
             'filtering_buffer_property_changed',
             'filtering_buffer_type_state_changed'
         ]
-        
+
         for method_name in method_names:
             if hasattr(dw, method_name):
                 try:
@@ -1094,32 +1094,32 @@ class LayerSyncController(BaseController):
         """Reconnect legend link signal if enabled."""
         dw = self.dockwidget
         project_props = getattr(dw, 'project_props', {})
-        
+
         legend_link_enabled = project_props.get(
             "OPTIONS", {}
         ).get("LAYERS", {}).get("LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG", False)
-        
+
         if not legend_link_enabled:
             return
-        
+
         # Reconnect signal
         if hasattr(dw, 'manageSignal'):
             dw.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'connect')
-        
+
         # Sync Layer Tree View with current_layer
         current_layer = getattr(dw, 'current_layer', None)
         if current_layer is None:
             return
-        
+
         iface = getattr(dw, 'iface', None)
         if iface is None:
             return
-        
+
         active_layer = iface.activeLayer()
         if active_layer is None or active_layer.id() != current_layer.id():
             widgets = getattr(dw, 'widgets', {})
             layer_tree_widget = widgets.get("QGIS", {}).get("LAYER_TREE_VIEW", {}).get("WIDGET")
-            
+
             if layer_tree_widget:
                 if hasattr(dw, 'manageSignal'):
                     dw.manageSignal(["QGIS", "LAYER_TREE_VIEW"], 'disconnect')
@@ -1131,10 +1131,10 @@ class LayerSyncController(BaseController):
         """Connect selectionChanged signal for current layer."""
         dw = self.dockwidget
         current_layer = getattr(dw, 'current_layer', None)
-        
+
         if current_layer is None:
             return
-        
+
         try:
             if hasattr(dw, 'on_layer_selection_changed'):
                 current_layer.selectionChanged.connect(dw.on_layer_selection_changed)
@@ -1147,51 +1147,51 @@ class LayerSyncController(BaseController):
     def _restore_exploring_groupbox_state(self, layer_props: dict) -> None:
         """
         Restore exploring groupbox UI state.
-        
+
         Args:
             layer_props: Layer properties
         """
         dw = self.dockwidget
-        
+
         saved_groupbox = layer_props.get("exploring", {}).get("current_exploring_groupbox")
         current_groupbox = getattr(dw, 'current_exploring_groupbox', None)
-        
+
         if saved_groupbox:
             target_groupbox = saved_groupbox
         elif current_groupbox:
             target_groupbox = current_groupbox
         else:
             target_groupbox = "single_selection"
-        
+
         if hasattr(dw, '_restore_groupbox_ui_state'):
             dw._restore_groupbox_ui_state(target_groupbox)
 
     def _restore_feature_selection_state(self, layer_props: dict) -> None:
         """
         Restore feature selection state after layer change.
-        
+
         Args:
             layer_props: Layer properties
         """
         dw = self.dockwidget
         current_layer = getattr(dw, 'current_layer', None)
-        
+
         if current_layer is None:
             return
-        
+
         # Link widgets
         if hasattr(dw, 'exploring_link_widgets'):
             dw.exploring_link_widgets()
-        
+
         # Trigger feature update based on groupbox mode
         current_groupbox = getattr(dw, 'current_exploring_groupbox', 'single_selection')
         widgets = getattr(dw, 'widgets', {})
-        
+
         if current_groupbox == "single_selection":
             picker = widgets.get("EXPLORING", {}).get(
                 "SINGLE_SELECTION_FEATURES", {}
             ).get("WIDGET")
-            
+
             if picker:
                 # FIX 2026-01-22: Prefer saved FID over picker.feature() when is_selecting is active
                 # picker.feature() may return wrong feature if layer has a filter (subsetString)
@@ -1201,7 +1201,7 @@ class LayerSyncController(BaseController):
                 saved_fid = getattr(dw, '_last_single_selection_fid', None)
                 saved_layer_id = getattr(dw, '_last_single_selection_layer_id', None)
                 current_layer = getattr(dw, 'current_layer', None)
-                
+
                 # If is_selecting AND saved FID matches current layer, use it first
                 if is_selecting and saved_fid is not None and current_layer and saved_layer_id == current_layer.id():
                     try:
@@ -1210,26 +1210,26 @@ class LayerSyncController(BaseController):
                             feature = None
                     except Exception:
                         feature = None
-                
+
                 # Fallback to picker.feature()
                 if feature is None:
                     feature = picker.feature()
-                
+
                 if feature is not None and feature.isValid():
                     if hasattr(dw, 'exploring_features_changed'):
                         dw.exploring_features_changed(feature)
-                        
+
         elif current_groupbox == "multiple_selection":
             multi_picker = widgets.get("EXPLORING", {}).get(
                 "MULTIPLE_SELECTION_FEATURES", {}
             ).get("WIDGET")
-            
+
             if multi_picker and hasattr(multi_picker, 'currentSelectedFeatures'):
                 features = multi_picker.currentSelectedFeatures()
                 if features:
                     if hasattr(dw, 'exploring_features_changed'):
                         dw.exploring_features_changed(features, True)
-                        
+
         elif current_groupbox == "custom_selection":
             custom_expression = layer_props.get("exploring", {}).get(
                 "custom_selection_expression", ""
@@ -1237,29 +1237,29 @@ class LayerSyncController(BaseController):
             if custom_expression:
                 if hasattr(dw, 'exploring_custom_selection'):
                     dw.exploring_custom_selection()
-        
+
         # Initialize selection sync if is_selecting is enabled
         is_selecting = layer_props.get("exploring", {}).get("is_selecting", False)
         if is_selecting:
             logger.debug("reconnect_layer_signals: is_selecting=True, initializing selection sync")
             if hasattr(dw, 'exploring_select_features'):
                 dw.exploring_select_features()
-    
+
     # === FIX 2026-01-16: Methods required by integration.py signal handlers ===
-    
+
     def on_layers_ready(self) -> None:
         """
         Handle project layers ready notification.
-        
+
         Called by integration._on_project_layers_ready() when PROJECT_LAYERS is populated.
         Can be used to refresh layer list or update sync state.
         """
         logger.info("LayerSyncController: Project layers ready")
-        
+
         dw = self.dockwidget
         if not dw:
             return
-        
+
         # Refresh current layer state if one is selected
         current_layer = getattr(dw, 'current_layer', None)
         if current_layer:

@@ -6,7 +6,7 @@ Resilience patterns: Circuit breaker, connection pooling.
 """
 
 # Signal management utilities
-from .signal_utils import (
+from .signal_utils import (  # noqa: F401
     SignalBlocker,
     SignalBlockerGroup,
     SignalConnection,
@@ -17,7 +17,7 @@ from .signal_utils import (
 )
 
 # State management
-from .state_manager import (
+from .state_manager import (  # noqa: F401
     LayerStateManager,
     ProjectStateManager,
     get_layer_state_manager,
@@ -26,7 +26,7 @@ from .state_manager import (
 )
 
 # Resilience patterns (v4.0.4 - restored from before_migration)
-from .resilience import (
+from .resilience import (  # noqa: F401
     CircuitBreaker,
     CircuitBreakerRegistry,
     CircuitBreakerStats,

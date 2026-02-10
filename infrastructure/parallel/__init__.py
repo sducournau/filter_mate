@@ -27,7 +27,7 @@ Migration History:
     - v3.0: Migrated from modules/tasks/parallel_executor.py
 """
 
-from .parallel_executor import (
+from .parallel_executor import (  # noqa: F401
     FilterResult,
     ParallelFilterExecutor,
     ParallelConfig

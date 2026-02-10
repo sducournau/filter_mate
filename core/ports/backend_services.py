@@ -8,7 +8,7 @@ backend-specific functionality without direct imports from adapters/.
 
 Usage:
     from core.ports.backend_services import BackendServices
-    
+
     services = BackendServices.get_instance()
     pg_executor = services.get_postgresql_executor()
     sl_executor = services.get_spatialite_executor()
@@ -32,13 +32,13 @@ class PostgreSQLAvailability:
 class BackendServices:
     """
     Facade for backend adapter services.
-    
+
     Provides lazy loading of backend executors and utilities,
     maintaining separation between core and adapters layers.
     """
-    
+
     _instance: Optional['BackendServices'] = None
-    
+
     def __init__(self):
         self._pg_availability: Optional[PostgreSQLAvailability] = None
         self._pg_executor = None
@@ -46,25 +46,25 @@ class BackendServices:
         self._ogr_executor = None
         self._task_bridge = None
         self._geometry_adapter = None
-        
+
     @classmethod
     def get_instance(cls) -> 'BackendServices':
         """Get singleton instance."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     @classmethod
     def reset_instance(cls) -> None:
         """Reset singleton for testing."""
         cls._instance = None
-    
+
     # ==================== PostgreSQL Services ====================
-    
+
     def get_postgresql_availability(self) -> PostgreSQLAvailability:
         """
         Get PostgreSQL availability status.
-        
+
         Returns:
             PostgreSQLAvailability with psycopg2 module and flags
         """
@@ -82,11 +82,11 @@ class BackendServices:
                 logger.debug("PostgreSQL availability module not found")
                 self._pg_availability = PostgreSQLAvailability()
         return self._pg_availability
-    
+
     def get_postgresql_executor(self) -> Optional[Any]:
         """
         Get PostgreSQL filter executor module.
-        
+
         Returns:
             pg_executor module or None if unavailable
         """
@@ -97,11 +97,11 @@ class BackendServices:
             except ImportError as e:
                 logger.debug(f"PostgreSQL executor not available: {e}")
         return self._pg_executor
-    
+
     def get_postgresql_filter_actions(self) -> Optional[Dict[str, Callable]]:
         """
         Get PostgreSQL filter action functions.
-        
+
         Returns:
             Dict with action functions or None
         """
@@ -119,11 +119,11 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"PostgreSQL filter actions not available: {e}")
             return None
-    
+
     def get_postgresql_schema_manager(self) -> Optional[Any]:
         """
         Get PostgreSQL schema manager module.
-        
+
         Returns:
             Schema manager module or None
         """
@@ -133,11 +133,11 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"PostgreSQL schema manager not available: {e}")
             return None
-    
+
     def prepare_postgresql_source_geom(self, *args, **kwargs) -> Any:
         """
         Delegate to PostgreSQL source geometry preparation.
-        
+
         Returns:
             Result from pg_prepare_source_geom
         """
@@ -149,13 +149,13 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"Cannot prepare PostgreSQL source geom: {e}")
             raise
-    
+
     # ==================== Spatialite Services ====================
-    
+
     def get_spatialite_executor(self) -> Optional[Any]:
         """
         Get Spatialite filter executor module.
-        
+
         Returns:
             sl_executor module or None if unavailable
         """
@@ -166,11 +166,11 @@ class BackendServices:
             except ImportError as e:
                 logger.debug(f"Spatialite executor not available: {e}")
         return self._sl_executor
-    
+
     def get_spatialite_functions(self) -> Optional[Dict[str, Callable]]:
         """
         Get Spatialite utility functions.
-        
+
         Returns:
             Dict with utility functions or None
         """
@@ -188,13 +188,13 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"Spatialite functions not available: {e}")
             return None
-    
+
     def get_spatialite_filter_actions(self) -> Optional[Dict[str, Callable]]:
         """
         Get Spatialite filter action functions (reset/unfilter).
-        
+
         Phase 1 v4.1: Added Spatialite backend actions.
-        
+
         Returns:
             Dict with action functions or None
         """
@@ -212,13 +212,13 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"Spatialite filter actions not available: {e}")
             return None
-    
+
     # ==================== OGR Services ====================
-    
+
     def get_ogr_executor(self) -> Optional[Any]:
         """
         Get OGR filter executor module.
-        
+
         Returns:
             ogr_executor module or None if unavailable
         """
@@ -229,13 +229,13 @@ class BackendServices:
             except ImportError as e:
                 logger.debug(f"OGR executor not available: {e}")
         return self._ogr_executor
-    
+
     def get_ogr_filter_actions(self) -> Optional[Dict[str, Callable]]:
         """
         Get OGR filter action functions.
-        
+
         EPIC-1 Phase E4-S8: OGR Reset and Unfilter Actions
-        
+
         Returns:
             Dict with action functions or None
         """
@@ -255,19 +255,19 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"OGR filter actions not available: {e}")
             return None
-    
+
     # ==================== Materialized View Services ====================
-    
+
     def get_view_manager_for_layer(self, layer, session_id: Optional[str] = None) -> Optional[Any]:
         """
         Get appropriate view manager for a layer.
-        
+
         v4.2: Unified API for PostgreSQL MVs and Spatialite temp tables.
-        
+
         Args:
             layer: QgsVectorLayer
             session_id: Session ID for scoping
-            
+
         Returns:
             MaterializedViewPort implementation or None
         """
@@ -277,7 +277,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"View manager factory not available: {e}")
             return None
-    
+
     def get_postgresql_mv_manager(
         self,
         connection_pool: Any = None,
@@ -285,17 +285,16 @@ class BackendServices:
     ) -> Optional[Any]:
         """
         Get PostgreSQL MaterializedViewManager.
-        
+
         Args:
             connection_pool: Database connection pool
             session_id: Session ID for scoping
-            
+
         Returns:
             MaterializedViewManager or None
         """
         try:
             from ...adapters.backends.postgresql.mv_manager import (
-                MaterializedViewManager,
                 create_mv_manager
             )
             return create_mv_manager(
@@ -305,7 +304,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"PostgreSQL MV manager not available: {e}")
             return None
-    
+
     def get_spatialite_temp_table_manager(
         self,
         db_path: Optional[str] = None,
@@ -314,20 +313,19 @@ class BackendServices:
     ) -> Optional[Any]:
         """
         Get Spatialite TempTableManager.
-        
+
         v4.2: Spatialite equivalent to PostgreSQL materialized views.
-        
+
         Args:
             db_path: Path to Spatialite database
             connection: Existing connection
             session_id: Session ID for scoping
-            
+
         Returns:
             SpatialiteTempTableManager or None
         """
         try:
             from ...adapters.backends.spatialite.temp_table_manager import (
-                SpatialiteTempTableManager,
                 create_temp_table_manager
             )
             return create_temp_table_manager(
@@ -338,7 +336,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"Spatialite temp table manager not available: {e}")
             return None
-    
+
     def create_view_manager(
         self,
         backend_type: str,
@@ -348,15 +346,15 @@ class BackendServices:
     ) -> Optional[Any]:
         """
         Create a view manager for the specified backend.
-        
+
         v4.2: Factory method for unified view management.
-        
+
         Args:
             backend_type: 'postgresql' or 'spatialite'
             connection: Database connection
             db_path: Database path (Spatialite only)
             session_id: Session ID for scoping
-            
+
         Returns:
             MaterializedViewPort implementation or None
         """
@@ -371,13 +369,13 @@ class BackendServices:
         except (ImportError, ValueError) as e:
             logger.debug(f"View manager creation failed: {e}")
             return None
-    
+
     # ==================== OGR Services (continued) ====================
-    
+
     def cleanup_ogr_temp_layers(self) -> int:
         """
         Cleanup OGR temporary layers.
-        
+
         Returns:
             Number of layers cleaned up
         """
@@ -389,11 +387,11 @@ class BackendServices:
         except Exception as e:
             logger.debug(f"OGR cleanup failed: {e}")
             return 0
-    
+
     def simplify_source_for_ogr_fallback(self, *args, **kwargs) -> Any:
         """
         Delegate to OGR geometry optimizer.
-        
+
         Returns:
             Simplified geometry
         """
@@ -403,13 +401,13 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"OGR geometry optimizer not available: {e}")
             raise
-    
+
     # ==================== Task Bridge Services ====================
-    
+
     def get_task_bridge(self) -> Tuple[Optional[Callable], Optional[Any]]:
         """
         Get task bridge factory and status enum.
-        
+
         Returns:
             Tuple of (get_task_bridge function, BridgeStatus enum)
         """
@@ -419,13 +417,13 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"Task bridge not available: {e}")
             return None, None
-    
+
     # ==================== Geometry Preparation Services ====================
-    
+
     def get_geometry_preparation_adapter(self) -> Optional[Any]:
         """
         Get QGIS geometry preparation adapter.
-        
+
         Returns:
             GeometryPreparationAdapter class or None
         """
@@ -436,9 +434,9 @@ class BackendServices:
             except ImportError as e:
                 logger.debug(f"Geometry preparation adapter not available: {e}")
         return self._geometry_adapter
-    
+
     # ==================== Spatialite Extended Functions ====================
-    
+
     def apply_spatialite_subset(self, *args, **kwargs) -> Any:
         """Delegate to Spatialite apply_spatialite_subset."""
         try:
@@ -447,7 +445,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"Spatialite apply_subset not available: {e}")
             raise
-    
+
     def manage_spatialite_subset(self, *args, **kwargs) -> Any:
         """Delegate to Spatialite manage_spatialite_subset."""
         try:
@@ -456,7 +454,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"Spatialite manage_subset not available: {e}")
             raise
-    
+
     def get_last_subset_info(self, *args, **kwargs) -> Any:
         """Delegate to Spatialite get_last_subset_info."""
         try:
@@ -465,11 +463,11 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"Spatialite get_last_subset_info not available: {e}")
             raise
-    
+
     def get_spatialite_source_context_class(self) -> Optional[type]:
         """
         Get SpatialiteSourceContext class for building context objects.
-        
+
         Returns:
             SpatialiteSourceContext class or None
         """
@@ -479,7 +477,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"SpatialiteSourceContext not available: {e}")
             return None
-    
+
     def prepare_spatialite_source_geom(self, *args, **kwargs) -> Any:
         """Delegate to Spatialite source geometry preparation."""
         try:
@@ -490,9 +488,9 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"Spatialite prepare_source_geom not available: {e}")
             raise
-    
+
     # ==================== PostgreSQL Schema Manager ====================
-    
+
     def create_simple_materialized_view_sql(self, *args, **kwargs) -> str:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -501,7 +499,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def parse_case_to_where_clauses(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -510,7 +508,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def ensure_temp_schema_exists(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -519,7 +517,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def get_session_prefixed_name(self, *args, **kwargs) -> str:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -528,7 +526,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def cleanup_session_materialized_views(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -537,7 +535,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def cleanup_orphaned_materialized_views(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -546,7 +544,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def execute_postgresql_commands(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager execute_commands."""
         try:
@@ -555,7 +553,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     def ensure_table_stats(self, *args, **kwargs) -> Any:
         """Delegate to PostgreSQL schema manager."""
         try:
@@ -564,13 +562,13 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"PostgreSQL schema manager not available: {e}")
             raise
-    
+
     # ==================== Backend Factory ====================
-    
+
     def get_backend_factory(self) -> Optional[type]:
         """
         Get BackendFactory class for creating backend instances.
-        
+
         Returns:
             BackendFactory class or None
         """
@@ -580,7 +578,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"BackendFactory not available: {e}")
             return None
-    
+
     def get_optimization_plan(self, *args, **kwargs) -> Any:
         """Get optimization plan from factory."""
         try:
@@ -589,7 +587,7 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"get_optimization_plan not available: {e}")
             raise
-    
+
     def is_auto_optimizer_available(self) -> bool:
         """Check if auto optimizer is available."""
         try:
@@ -597,9 +595,9 @@ class BackendServices:
             return AUTO_OPTIMIZER_AVAILABLE
         except ImportError:
             return False
-    
+
     # ==================== Backend Classes ====================
-    
+
     def get_postgresql_geometric_filter(self) -> Optional[type]:
         """Get PostgreSQLGeometricFilter class."""
         try:
@@ -608,7 +606,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"PostgreSQLGeometricFilter not available: {e}")
             return None
-    
+
     def get_spatialite_geometric_filter(self) -> Optional[type]:
         """Get SpatialiteGeometricFilter class."""
         try:
@@ -617,7 +615,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"SpatialiteGeometricFilter not available: {e}")
             return None
-    
+
     def get_spatialite_backend(self) -> Optional[type]:
         """Get SpatialiteBackend class (alias for SpatialiteGeometricFilter)."""
         try:
@@ -626,7 +624,7 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"SpatialiteBackend not available: {e}")
             return None
-    
+
     def get_ogr_geometric_filter(self) -> Optional[type]:
         """Get OGRGeometricFilter class."""
         try:
@@ -635,9 +633,9 @@ class BackendServices:
         except ImportError as e:
             logger.debug(f"OGRGeometricFilter not available: {e}")
             return None
-    
+
     # ==================== OGR Utilities ====================
-    
+
     def register_ogr_temp_layer(self, *args, **kwargs) -> Any:
         """Register OGR temporary layer."""
         try:
@@ -646,13 +644,13 @@ class BackendServices:
         except ImportError as e:
             logger.error(f"OGR register_temp_layer not available: {e}")
             raise
-    
+
     # ==================== Layer Validation ====================
-    
+
     def is_valid_layer(self, *args, **kwargs) -> bool:
         """
         Validate layer. Delegates to infrastructure or adapter.
-        
+
         Returns:
             bool: True if layer is valid
         """
@@ -662,7 +660,7 @@ class BackendServices:
             return is_layer_valid(*args, **kwargs)
         except ImportError:
             pass
-        
+
         # Fallback to adapter
         try:
             from ...adapters.layer_validator import is_valid_layer

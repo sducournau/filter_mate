@@ -17,17 +17,17 @@ Legacy imports (still supported but deprecated):
 Part of FilterMate Hexagonal Architecture v3.0
 
 Migration Guide (MIG-011):
-    
+
     # Old v2.x code:
     from ..adapters.backends.postgresql import PostgreSQLBackend
     backend = PostgreSQLBackend(task_params)
     backend.apply_filter(layer, expression)
-    
+
     # New v3.0 code with adapter (transitional):
     from ..adapters.legacy_adapter import wrap_legacy_postgresql_backend
     adapted = wrap_legacy_postgresql_backend(task_params)
     result = adapted.execute(expression, layer_info)
-    
+
     # New v3.0 code (preferred):
     from ..adapters.backends.postgresql.backend import PostgreSQLBackend
     from ..core.services.filter_service import FilterService
@@ -91,15 +91,15 @@ from .legacy_adapter import (
 __all__ = [
     # Factory
     'BackendFactory',
-    'BackendSelector', 
+    'BackendSelector',
     'create_backend_factory',
-    
+
     # Backends
     'MemoryBackend',
     'OgrBackend',
     'SpatialiteBackend',
     'PostgreSQLBackend',
-    
+
     # AutoOptimizer
     'AutoOptimizer',
     'OptimizationType',
@@ -110,7 +110,7 @@ __all__ = [
     'get_auto_optimizer',
     'create_auto_optimizer',
     'recommend_optimizations',
-    
+
     # FilterOptimizer
     'QgisFilterOptimizer',
     'QgisSelectivityEstimator',
@@ -119,7 +119,7 @@ __all__ = [
     'MemorySpatialIndex',
     'get_filter_optimizer',
     'create_filter_optimizer',
-    
+
     # Ports
     'FilterStrategy',
     'FilterPlan',
@@ -128,7 +128,7 @@ __all__ = [
     'PlanBuilderConfig',
     'IFilterOptimizer',
     'ISelectivityEstimator',
-    
+
     # MIG-011: Legacy Adapters
     'LegacyBackendAdapter',
     'wrap_legacy_postgresql_backend',

@@ -22,9 +22,8 @@ Date: January 14, 2026
 """
 
 import logging
-from typing import Dict, Optional, TypeVar, Generic, Any, List
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from typing import Dict, Optional, TypeVar, Any, List
+from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger('FilterMate.Infrastructure.CacheManager')
@@ -45,7 +44,7 @@ class CachePolicy(Enum):
 class CacheConfig:
     """
     Configuration for cache instances.
-    
+
     Attributes:
         max_size: Maximum number of entries (0 = unlimited)
         policy: Eviction policy
@@ -64,7 +63,7 @@ class CacheConfig:
 class CacheStats:
     """
     Cache statistics for monitoring and debugging.
-    
+
     Attributes:
         hits: Number of successful cache retrievals
         misses: Number of cache misses
@@ -78,18 +77,18 @@ class CacheStats:
     evictions: int = 0
     total_size: int = 0
     max_size: int = 0
-    
+
     @property
     def hit_rate(self) -> float:
         """Calculate hit rate."""
         total = self.hits + self.misses
         return self.hits / total if total > 0 else 0.0
-    
+
     @property
     def requests(self) -> int:
         """Total number of requests."""
         return self.hits + self.misses
-    
+
     def __str__(self) -> str:
         """String representation."""
         return (
@@ -102,56 +101,56 @@ class CacheStats:
 class CacheManager:
     """
     Singleton cache manager for unified cache operations.
-    
+
     Provides centralized access to all cache instances with consistent
     configuration and statistics.
-    
+
     Usage:
         # Get singleton instance
         manager = CacheManager.get_instance()
-        
+
         # Register caches
         manager.register_cache('geometry', geometry_cache)
         manager.register_cache('expression', expression_cache)
-        
+
         # Get cache
         geom_cache = manager.get_cache('geometry')
-        
+
         # Global operations
         manager.clear_all()
         stats = manager.get_global_stats()
     """
-    
+
     _instance: Optional['CacheManager'] = None
-    
+
     def __init__(self):
         """
         Initialize cache manager.
-        
+
         Note: Use get_instance() instead of direct instantiation.
         """
         self._caches: Dict[str, Any] = {}
         self._configs: Dict[str, CacheConfig] = {}
         self._stats: Dict[str, CacheStats] = {}
         logger.info("CacheManager initialized")
-    
+
     @classmethod
     def get_instance(cls) -> 'CacheManager':
         """
         Get singleton instance of CacheManager.
-        
+
         Returns:
             CacheManager singleton instance
         """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
-    
+
     @classmethod
     def reset_instance(cls):
         """Reset singleton (useful for testing)."""
         cls._instance = None
-    
+
     def register_cache(
         self,
         name: str,
@@ -160,7 +159,7 @@ class CacheManager:
     ):
         """
         Register a cache instance.
-        
+
         Args:
             name: Unique cache name
             cache_instance: Cache instance implementing CachePort
@@ -168,62 +167,62 @@ class CacheManager:
         """
         if name in self._caches:
             logger.warning(f"Cache '{name}' already registered, replacing")
-        
+
         self._caches[name] = cache_instance
         self._configs[name] = config or CacheConfig(name=name)
         self._stats[name] = CacheStats()
-        
+
         logger.info(f"Registered cache: {name} with policy {config.policy if config else 'default'}")
-    
+
     def get_cache(self, name: str) -> Optional[Any]:
         """
         Get registered cache by name.
-        
+
         Args:
             name: Cache name
-            
+
         Returns:
             Cache instance or None if not found
         """
         return self._caches.get(name)
-    
+
     def get_config(self, name: str) -> Optional[CacheConfig]:
         """
         Get cache configuration.
-        
+
         Args:
             name: Cache name
-            
+
         Returns:
             Cache configuration or None
         """
         return self._configs.get(name)
-    
+
     def get_stats(self, name: str) -> Optional[CacheStats]:
         """
         Get cache statistics.
-        
+
         Args:
             name: Cache name
-            
+
         Returns:
             Cache statistics or None
         """
         return self._stats.get(name)
-    
+
     def get_global_stats(self) -> Dict[str, CacheStats]:
         """
         Get statistics for all caches.
-        
+
         Returns:
             Dictionary of cache name -> statistics
         """
         return self._stats.copy()
-    
+
     def clear_cache(self, name: str):
         """
         Clear specific cache.
-        
+
         Args:
             name: Cache name
         """
@@ -233,17 +232,17 @@ class CacheManager:
             logger.info(f"Cleared cache: {name}")
         else:
             logger.warning(f"Cache '{name}' not found or doesn't support clear()")
-    
+
     def clear_all(self):
         """Clear all registered caches."""
         for name in list(self._caches.keys()):
             self.clear_cache(name)
         logger.info("Cleared all caches")
-    
+
     def update_stats(self, name: str, hit: bool = False, miss: bool = False, eviction: bool = False):
         """
         Update cache statistics.
-        
+
         Args:
             name: Cache name
             hit: Increment hit counter
@@ -252,7 +251,7 @@ class CacheManager:
         """
         if name not in self._stats:
             self._stats[name] = CacheStats()
-        
+
         stats = self._stats[name]
         if hit:
             stats.hits += 1
@@ -260,37 +259,37 @@ class CacheManager:
             stats.misses += 1
         if eviction:
             stats.evictions += 1
-        
+
         # Update size
         cache = self._caches.get(name)
         if cache and hasattr(cache, 'size'):
             stats.total_size = cache.size()
-        
+
         config = self._configs.get(name)
         if config:
             stats.max_size = config.max_size
-    
+
     def get_summary(self) -> str:
         """
         Get summary of all caches.
-        
+
         Returns:
             Formatted string with cache statistics
         """
         lines = ["Cache Manager Summary", "=" * 50]
-        
+
         for name, stats in self._stats.items():
             config = self._configs.get(name)
             lines.append(f"\n{name}:")
             lines.append(f"  Policy: {config.policy.value if config else 'unknown'}")
             lines.append(f"  {stats}")
-        
+
         return "\n".join(lines)
-    
+
     def list_caches(self) -> List[str]:
         """
         Get list of registered cache names.
-        
+
         Returns:
             List of cache names
         """
@@ -302,7 +301,7 @@ class CacheManager:
 def get_cache_manager() -> CacheManager:
     """
     Get global cache manager instance.
-    
+
     Returns:
         CacheManager singleton
     """
@@ -317,7 +316,7 @@ def clear_all_caches():
 def get_cache_summary() -> str:
     """
     Get summary of all caches.
-    
+
     Returns:
         Formatted summary string
     """

@@ -16,7 +16,7 @@ from enum import Enum
 class FilterStatus(Enum):
     """
     Status of a filter operation.
-    
+
     Represents the outcome state of a filter execution.
     """
     SUCCESS = "success"
@@ -52,7 +52,7 @@ class FilterResult:
         timestamp: When the result was created
         error_message: Error message if status is ERROR
         backend_name: Name of backend that executed the filter
-        
+
     Example:
         >>> result = FilterResult.success(
         ...     feature_ids=(1, 2, 3),
@@ -86,14 +86,14 @@ class FilterResult:
     ) -> 'FilterResult':
         """
         Create a successful filter result.
-        
+
         Args:
             feature_ids: Sequence of matching feature IDs
             layer_id: Target layer QGIS ID
             expression_raw: Original expression string
             execution_time_ms: Execution time in milliseconds
             backend_name: Name of backend that executed the filter
-            
+
         Returns:
             FilterResult with SUCCESS or NO_MATCHES status
         """
@@ -118,13 +118,13 @@ class FilterResult:
     ) -> 'FilterResult':
         """
         Create an error filter result.
-        
+
         Args:
             layer_id: Target layer QGIS ID
             expression_raw: Original expression string
             error_message: Description of the error
             backend_name: Name of backend that failed
-            
+
         Returns:
             FilterResult with ERROR status
         """
@@ -145,11 +145,11 @@ class FilterResult:
     ) -> 'FilterResult':
         """
         Create a cancelled filter result.
-        
+
         Args:
             layer_id: Target layer QGIS ID
             expression_raw: Original expression string
-            
+
         Returns:
             FilterResult with CANCELLED status
         """
@@ -171,14 +171,14 @@ class FilterResult:
     ) -> 'FilterResult':
         """
         Create a cached filter result.
-        
+
         Args:
             feature_ids: Sequence of matching feature IDs
             layer_id: Target layer QGIS ID
             expression_raw: Original expression string
             original_execution_time_ms: Original execution time
             backend_name: Name of backend that originally executed
-            
+
         Returns:
             FilterResult marked as is_cached=True
         """
@@ -206,7 +206,7 @@ class FilterResult:
     ) -> 'FilterResult':
         """
         Create a partial success result (some succeeded, some failed).
-        
+
         Args:
             feature_ids: Sequence of successfully matched feature IDs
             layer_id: Target layer QGIS ID
@@ -214,7 +214,7 @@ class FilterResult:
             error_message: Description of partial failure
             execution_time_ms: Execution time in milliseconds
             backend_name: Name of backend
-            
+
         Returns:
             FilterResult with PARTIAL status
         """
@@ -247,7 +247,7 @@ class FilterResult:
     def is_success(self) -> bool:
         """
         Check if result represents success (with or without matches).
-        
+
         Note: NO_MATCHES is considered success because the operation
         completed without errors.
         """
@@ -266,10 +266,10 @@ class FilterResult:
     def with_cached(self, is_cached: bool = True) -> 'FilterResult':
         """
         Return new result marked as from cache.
-        
+
         Args:
             is_cached: Whether to mark as cached
-            
+
         Returns:
             New FilterResult with updated is_cached flag
         """
@@ -288,10 +288,10 @@ class FilterResult:
     def with_backend(self, backend_name: str) -> 'FilterResult':
         """
         Return new result with updated backend name.
-        
+
         Args:
             backend_name: New backend name
-            
+
         Returns:
             New FilterResult with updated backend
         """
@@ -320,7 +320,7 @@ class FilterResult:
     def __repr__(self) -> str:
         """Detailed representation for debugging."""
         return (
-            f"FilterResult("
+            "FilterResult("
             f"count={self.count}, "
             f"layer_id={self.layer_id!r}, "
             f"status={self.status.value}, "

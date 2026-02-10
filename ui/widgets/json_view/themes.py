@@ -10,7 +10,7 @@ from qgis.PyQt import QtCore, QtGui
 
 class Theme:
     """Base class for color themes."""
-    
+
     def __init__(self, name):
         self.name = name
         self.colors = {
@@ -26,7 +26,7 @@ class Theme:
             'range': QtCore.Qt.black,
             'choices': QtCore.Qt.black,
         }
-    
+
     def get_color(self, type_name):
         """Get color for a given data type."""
         return self.colors.get(type_name.lower(), QtCore.Qt.black)
@@ -34,14 +34,14 @@ class Theme:
 
 class DefaultTheme(Theme):
     """Default theme with black text for all types."""
-    
+
     def __init__(self):
         super().__init__("Default")
 
 
 class MonokaiTheme(Theme):
     """Monokai-inspired dark theme with vibrant colors."""
-    
+
     def __init__(self):
         super().__init__("Monokai")
         self.colors = {
@@ -61,7 +61,7 @@ class MonokaiTheme(Theme):
 
 class SolarizedLightTheme(Theme):
     """Solarized Light theme with warm, readable colors."""
-    
+
     def __init__(self):
         super().__init__("Solarized Light")
         self.colors = {
@@ -81,7 +81,7 @@ class SolarizedLightTheme(Theme):
 
 class SolarizedDarkTheme(Theme):
     """Solarized Dark theme with warm, readable colors on dark background."""
-    
+
     def __init__(self):
         super().__init__("Solarized Dark")
         self.colors = {
@@ -101,7 +101,7 @@ class SolarizedDarkTheme(Theme):
 
 class NordTheme(Theme):
     """Nord theme with cool, arctic colors."""
-    
+
     def __init__(self):
         super().__init__("Nord")
         self.colors = {
@@ -121,7 +121,7 @@ class NordTheme(Theme):
 
 class DraculaTheme(Theme):
     """Dracula theme with vivid colors on dark background."""
-    
+
     def __init__(self):
         super().__init__("Dracula")
         self.colors = {
@@ -141,7 +141,7 @@ class DraculaTheme(Theme):
 
 class OneDarkTheme(Theme):
     """One Dark theme (Atom/VS Code style)."""
-    
+
     def __init__(self):
         super().__init__("One Dark")
         self.colors = {
@@ -161,7 +161,7 @@ class OneDarkTheme(Theme):
 
 class GruvboxTheme(Theme):
     """Gruvbox theme with warm, retro colors."""
-    
+
     def __init__(self):
         super().__init__("Gruvbox")
         self.colors = {
@@ -203,10 +203,10 @@ def get_current_theme():
 def set_theme(theme_name):
     """
     Set the active theme.
-    
+
     Args:
         theme_name (str): Name of the theme to activate (e.g., 'monokai', 'nord')
-    
+
     Returns:
         bool: True if theme was set successfully, False if theme not found
     """
@@ -221,7 +221,7 @@ def set_theme(theme_name):
 def get_available_themes():
     """
     Get list of all available theme names.
-    
+
     Returns:
         list: List of theme names
     """
@@ -231,7 +231,7 @@ def get_available_themes():
 def get_theme_display_names():
     """
     Get dictionary of theme keys to display names.
-    
+
     Returns:
         dict: Dictionary mapping theme keys to display names
     """

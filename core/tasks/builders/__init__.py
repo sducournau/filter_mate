@@ -7,7 +7,7 @@ Contains:
 - SubsetStringBuilder: Build and manage subset strings
 """
 
-from .subset_string_builder import SubsetStringBuilder, SubsetRequest, CombineResult
+from .subset_string_builder import SubsetStringBuilder, SubsetRequest, CombineResult  # noqa: F401
 
 __all__ = [
     'SubsetStringBuilder',

@@ -30,5 +30,5 @@ def classFactory(iface):  # pylint: disable=invalid-name
     :type iface: QgsInterface
     """
     #
-    from .filter_mate import FilterMate
+    from .filter_mate import FilterMate  # noqa: F401
     return FilterMate(iface)

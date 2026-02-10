@@ -44,7 +44,7 @@ DEFAULT_SIMPLIFICATION_CONFIG = {
 def get_optimization_thresholds(task_parameters: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
     """
     Get optimization thresholds configuration from task parameters or defaults.
-    
+
     Thresholds control:
     - large_dataset_warning: Feature count for performance warnings
     - async_expression_threshold: Feature count for async expressions
@@ -54,24 +54,24 @@ def get_optimization_thresholds(task_parameters: Optional[Dict[str, Any]] = None
     - parallel_processing_threshold: Feature count for parallel processing
     - progress_update_batch_size: Features per progress update
     - source_mv_fid_threshold: Max FIDs for inline IN clause (above creates MV)
-    
+
     Args:
         task_parameters: Task parameters dict containing config section
-        
+
     Returns:
         dict: Optimization thresholds
     """
     if not task_parameters:
         return DEFAULT_OPTIMIZATION_THRESHOLDS.copy()
-    
+
     config = task_parameters.get('config', {})
     app_config = config.get('APP', {})
     settings = app_config.get('SETTINGS', {})
     opt_config = settings.get('OPTIMIZATION_THRESHOLDS', {})
-    
+
     if not opt_config:
         return DEFAULT_OPTIMIZATION_THRESHOLDS.copy()
-    
+
     return {
         'large_dataset_warning': opt_config.get('large_dataset_warning', {}).get('value', DEFAULT_OPTIMIZATION_THRESHOLDS['large_dataset_warning']),
         'async_expression_threshold': opt_config.get('async_expression_threshold', {}).get('value', DEFAULT_OPTIMIZATION_THRESHOLDS['async_expression_threshold']),
@@ -87,7 +87,7 @@ def get_optimization_thresholds(task_parameters: Optional[Dict[str, Any]] = None
 def get_simplification_config(task_parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Get geometry simplification configuration from task parameters or defaults.
-    
+
     Configuration controls:
     - enabled: Whether simplification is enabled
     - max_wkt_length: Maximum WKT string length
@@ -95,24 +95,24 @@ def get_simplification_config(task_parameters: Optional[Dict[str, Any]] = None) 
     - min_tolerance_meters: Minimum tolerance in meters
     - max_tolerance_meters: Maximum tolerance in meters
     - show_warnings: Whether to show simplification warnings
-    
+
     Args:
         task_parameters: Task parameters dict containing config section
-        
+
     Returns:
         dict: Simplification configuration
     """
     if not task_parameters:
         return DEFAULT_SIMPLIFICATION_CONFIG.copy()
-    
+
     config = task_parameters.get('config', {})
     app_config = config.get('APP', {})
     settings = app_config.get('SETTINGS', {})
     simp_config = settings.get('GEOMETRY_SIMPLIFICATION', {})
-    
+
     if not simp_config:
         return DEFAULT_SIMPLIFICATION_CONFIG.copy()
-    
+
     return {
         'enabled': simp_config.get('enabled', {}).get('value', DEFAULT_SIMPLIFICATION_CONFIG['enabled']),
         'max_wkt_length': simp_config.get('max_wkt_length', {}).get('value', DEFAULT_SIMPLIFICATION_CONFIG['max_wkt_length']),

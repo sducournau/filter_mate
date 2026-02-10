@@ -1,10 +1,10 @@
-from qgis.core import QgsApplication, QgsProject, QgsUserProfileManager, QgsUserProfile, QgsMessageLog, Qgis
-import os, sys
+from qgis.core import QgsApplication, QgsProject, QgsMessageLog, Qgis
+import os
+import sys
 import json
 
 # Re-export get_optimization_thresholds for backward compatibility
 # Function was moved to core.optimization.config_provider in EPIC-1 Phase E7.5
-from filter_mate.core.optimization.config_provider import get_optimization_thresholds
 
 ENV_VARS = {}
 
@@ -57,10 +57,10 @@ FALLBACK_CONFIG = {
 def get_fallback_config():
     """
     Return a deep copy of the fallback configuration.
-    
+
     This is used when all configuration files fail to load.
     The plugin will continue to work with minimal/default settings.
-    
+
     Returns:
         dict: A copy of FALLBACK_CONFIG
     """
@@ -76,7 +76,7 @@ def merge(a, b, path=None):
             if isinstance(a[key], dict) and isinstance(b[key], dict):
                 merge(a[key], b[key], path + [str(key)])
             elif a[key] == b[key]:
-                pass # same leaf value
+                pass  # same leaf value
 
         else:
             a[key] = b[key]
@@ -86,34 +86,34 @@ def merge(a, b, path=None):
 def init_env_vars():
     """
     Initialize environment variables and configuration paths.
-    
+
     Now reads config.json from PLUGIN_CONFIG_DIRECTORY (same as SQLite database)
     instead of the plugin directory. If config.json doesn't exist there,
     copies config.default.json from the plugin directory.
-    
+
     Automatically detects and migrates/resets obsolete configurations.
     """
     from qgis.core import QgsMessageLog
-    
+
     PROJECT = QgsProject.instance()
     PLATFORM = sys.platform
 
     # Plugin directory (where config.default.json is located)
     DIR_CONFIG = os.path.normpath(os.path.dirname(__file__))
     PATH_ABSOLUTE_PROJECT = os.path.normpath(PROJECT.readPath("./"))
-    if PATH_ABSOLUTE_PROJECT =='./':
+    if PATH_ABSOLUTE_PROJECT == './':
         if PLATFORM.startswith('win'):
-            PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+            PATH_ABSOLUTE_PROJECT = os.path.normpath(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
         else:
-            PATH_ABSOLUTE_PROJECT =  os.path.normpath(os.environ['HOME'])
+            PATH_ABSOLUTE_PROJECT = os.path.normpath(os.environ['HOME'])
 
     QGIS_SETTINGS_PATH = QgsApplication.qgisSettingsDirPath()
     # Remove trailing separator if present
     QGIS_SETTINGS_PATH = QGIS_SETTINGS_PATH.rstrip(os.sep).rstrip('/')
-    
+
     # Start with default PLUGIN_CONFIG_DIRECTORY
     PLUGIN_CONFIG_DIRECTORY = os.path.normpath(os.path.join(QGIS_SETTINGS_PATH, 'FilterMate'))
-    
+
     # Create the plugin config directory if it doesn't exist
     if not os.path.isdir(PLUGIN_CONFIG_DIRECTORY):
         try:
@@ -129,18 +129,18 @@ def init_env_vars():
                 "FilterMate",
                 Qgis.Critical
             )
-    
+
     # Path to config.json in PLUGIN_CONFIG_DIRECTORY
     config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
     config_default_path = os.path.join(DIR_CONFIG, 'config.default.json')
-    
+
     # If config.json doesn't exist in PLUGIN_CONFIG_DIRECTORY, copy default first
     if not os.path.exists(config_json_path):
         try:
             import shutil
             shutil.copy2(config_default_path, config_json_path)
             QgsMessageLog.logMessage(
-                f"FilterMate: Configuration créée avec les valeurs par défaut",
+                "FilterMate: Configuration créée avec les valeurs par défaut",
                 "FilterMate",
                 Qgis.Info
             )
@@ -152,15 +152,15 @@ def init_env_vars():
             )
             # Fallback: use config.json from plugin directory
             config_json_path = os.path.join(DIR_CONFIG, 'config.json')
-    
+
     # Load configuration
     CONFIG_DATA = None
     using_fallback = False
-    
+
     try:
         with open(config_json_path) as f:
             CONFIG_DATA = json.load(f)
-        
+
         # v4.0.7: Validate configuration after loading
         try:
             from .config_validator import validate_and_log
@@ -173,7 +173,7 @@ def init_env_vars():
                 "FilterMate",
                 Qgis.Info
             )
-            
+
     except Exception as e:
         QgsMessageLog.logMessage(
             f"Failed to load config from {config_json_path}: {e}",
@@ -198,20 +198,20 @@ def init_env_vars():
             # Ultimate fallback: use hardcoded minimal config
             CONFIG_DATA = get_fallback_config()
             using_fallback = True
-    
+
     # Validate that CONFIG_DATA has the expected structure
     # Support both uppercase (config.default.json) and lowercase (migrated config.json) keys
     has_app_config = isinstance(CONFIG_DATA, dict) and ("APP" in CONFIG_DATA or "app" in CONFIG_DATA)
     if not has_app_config:
         QgsMessageLog.logMessage(
-            f"FilterMate: Configuration invalide détectée, utilisation de la configuration de secours",
+            "FilterMate: Configuration invalide détectée, utilisation de la configuration de secours",
             "FilterMate",
             Qgis.Warning
         )
         # Use hardcoded fallback instead of raising
         CONFIG_DATA = get_fallback_config()
         using_fallback = True
-        
+
         # Try to write fallback to disk for next time
         try:
             with open(config_json_path, 'w') as outfile:
@@ -227,7 +227,7 @@ def init_env_vars():
                 "FilterMate",
                 Qgis.Warning
             )
-    
+
     # Log if using fallback configuration
     if using_fallback:
         QgsMessageLog.logMessage(
@@ -248,11 +248,11 @@ def init_env_vars():
     app_sqlite_path = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
     if app_sqlite_path != '':
         configured_path = os.path.normpath(app_sqlite_path)
-        
+
         # Validate that parent directories exist and are accessible
         parent_dir = os.path.dirname(configured_path)
         path_is_valid = False
-        
+
         if parent_dir and os.path.exists(parent_dir):
             # Check if parent directory is accessible
             try:
@@ -276,12 +276,12 @@ def init_env_vars():
                 "FilterMate",
                 Qgis.Warning
             )
-        
+
         if path_is_valid:
             PLUGIN_CONFIG_DIRECTORY = configured_path
             # Update config_json_path if directory changed
             config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
-    
+
     # Update APP_SQLITE_PATH in config if needed
     current_sqlite_path = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
     if current_sqlite_path != PLUGIN_CONFIG_DIRECTORY:
@@ -309,17 +309,17 @@ def init_env_vars():
 
 def reset_config_to_default():
     """
-    Reset configuration to default by copying config.default.json 
+    Reset configuration to default by copying config.default.json
     to the active config location (PLUGIN_CONFIG_DIRECTORY/config.json).
-    
+
     Use this when reinitializing the config and SQLite database.
-    
+
     Returns:
         bool: True if reset successful, False otherwise
     """
     try:
         import shutil
-        
+
         if "DIR_CONFIG" not in ENV_VARS or "CONFIG_JSON_PATH" not in ENV_VARS:
             QgsMessageLog.logMessage(
                 "Environment variables not initialized. Call init_env_vars() first.",
@@ -327,10 +327,10 @@ def reset_config_to_default():
                 Qgis.Critical
             )
             return False
-        
+
         config_default_path = os.path.join(ENV_VARS["DIR_CONFIG"], 'config.default.json')
         config_json_path = ENV_VARS["CONFIG_JSON_PATH"]
-        
+
         # Backup existing config if it exists
         if os.path.exists(config_json_path):
             backup_path = config_json_path + '.backup'
@@ -340,22 +340,22 @@ def reset_config_to_default():
                 "FilterMate",
                 Qgis.Info
             )
-        
+
         # Copy default config
         shutil.copy2(config_default_path, config_json_path)
-        
+
         # Reload config
         with open(config_json_path) as f:
             ENV_VARS["CONFIG_DATA"] = json.load(f)
-        
+
         QgsMessageLog.logMessage(
             f"Configuration reset to default: {config_json_path}",
             "FilterMate",
             Qgis.Info
         )
-        
+
         return True
-        
+
     except Exception as e:
         QgsMessageLog.logMessage(
             f"Failed to reset configuration: {e}",
@@ -368,25 +368,25 @@ def reset_config_to_default():
 def reload_config():
     """
     Reload configuration from config.json file.
-    
+
     Use this to apply configuration changes without restarting QGIS.
     Updates ENV_VARS['CONFIG_DATA'] with latest values from disk.
-    
+
     If environment variables are not initialized, calls init_env_vars() first.
-    
+
     Returns:
         bool: True if reload successful, False otherwise
     """
     global ENV_VARS
-    
+
     try:
         config_json_path = ENV_VARS.get("CONFIG_JSON_PATH")
-        
+
         # If CONFIG_JSON_PATH not set, initialize environment first
         if not config_json_path:
             init_env_vars()
             config_json_path = ENV_VARS.get("CONFIG_JSON_PATH")
-        
+
         if not config_json_path or not os.path.exists(config_json_path):
             QgsMessageLog.logMessage(
                 f"Config file not found: {config_json_path}",
@@ -394,20 +394,20 @@ def reload_config():
                 Qgis.Warning
             )
             return False
-        
+
         with open(config_json_path, 'r', encoding='utf-8') as f:
             new_config = json.load(f)
-        
+
         ENV_VARS["CONFIG_DATA"] = new_config
-        
+
         QgsMessageLog.logMessage(
             f"Configuration reloaded from: {config_json_path}",
             "FilterMate",
             Qgis.Info  # DEBUG
         )
-        
+
         return True
-        
+
     except Exception as e:
         QgsMessageLog.logMessage(
             f"Failed to reload configuration: {e}",

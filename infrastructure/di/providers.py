@@ -32,11 +32,11 @@ logger = logging.getLogger('FilterMate.DI.Providers')
 class BackendProvider:
     """
     Provides backend registration for the DI container.
-    
+
     Registers all available backends based on configuration
     and runtime availability.
     """
-    
+
     @staticmethod
     def register_backends(
         container: Container,
@@ -44,16 +44,16 @@ class BackendProvider:
     ) -> None:
         """
         Register all available backends.
-        
+
         Args:
             container: DI container
             config: Optional configuration dictionary
         """
         config = config or {}
-        
+
         # Import backends conditionally to avoid import errors
         # when dependencies are not available
-        
+
         # Memory backend (always available)
         from ...adapters.backends.memory.backend import MemoryBackend
         container.register_singleton(
@@ -61,7 +61,7 @@ class BackendProvider:
             lambda c: MemoryBackend()
         )
         logger.debug("Registered MemoryBackend")
-        
+
         # OGR backend (always available)
         from ...adapters.backends.ogr.backend import OGRBackend
         container.register_singleton(
@@ -69,7 +69,7 @@ class BackendProvider:
             lambda c: OGRBackend()
         )
         logger.debug("Registered OGRBackend")
-        
+
         # Spatialite backend (always available)
         from ...adapters.backends.spatialite.backend import SpatialiteBackend
         container.register_singleton(
@@ -79,7 +79,7 @@ class BackendProvider:
             )
         )
         logger.debug("Registered SpatialiteBackend")
-        
+
         # PostgreSQL backend (conditional on psycopg2)
         try:
             from ...adapters.backends import POSTGRESQL_AVAILABLE
@@ -96,7 +96,7 @@ class BackendProvider:
                 logger.info("PostgreSQL backend not available (psycopg2 not installed)")
         except ImportError as e:
             logger.info(f"PostgreSQL backend not available: {e}")
-        
+
         # Register the backend factory
         container.register_singleton(
             'BackendFactory',
@@ -107,15 +107,15 @@ class BackendProvider:
 class BackendFactory:
     """
     Factory for selecting appropriate backend for a layer.
-    
+
     Implements the Strategy pattern to select the best
     backend based on layer type and configuration.
     """
-    
+
     def __init__(self, container: Container):
         """
         Initialize factory with DI container.
-        
+
         Args:
             container: DI container with registered backends
         """
@@ -126,14 +126,14 @@ class BackendFactory:
             ProviderType.OGR,
             ProviderType.MEMORY,
         ]
-    
+
     def get_backend_for_provider(self, provider_type: ProviderType) -> Optional[BackendPort]:
         """
         Get appropriate backend for a provider type.
-        
+
         Args:
             provider_type: The data provider type
-            
+
         Returns:
             Backend instance or None if not available
         """
@@ -143,7 +143,7 @@ class BackendFactory:
             ProviderType.OGR: 'OGRBackend',
             ProviderType.MEMORY: 'MemoryBackend',
         }
-        
+
         backend_name = backend_map.get(provider_type)
         if backend_name:
             # Try to resolve from container
@@ -163,21 +163,21 @@ class BackendFactory:
                     return self._container.try_resolve(MemoryBackend)
             except Exception as e:
                 logger.warning(f"Failed to resolve backend for {provider_type}: {e}")
-        
+
         return None
-    
+
     def get_best_backend(self, provider_type: ProviderType) -> BackendPort:
         """
         Get the best available backend for a provider type.
-        
+
         Falls back to OGR if preferred backend not available.
-        
+
         Args:
             provider_type: The data provider type
-            
+
         Returns:
             Backend instance
-            
+
         Raises:
             RuntimeError: If no backend is available
         """
@@ -185,7 +185,7 @@ class BackendFactory:
         backend = self.get_backend_for_provider(provider_type)
         if backend is not None:
             return backend
-        
+
         # Fall back through priority list
         for fallback_type in [ProviderType.OGR, ProviderType.MEMORY]:
             if fallback_type != provider_type:
@@ -195,17 +195,17 @@ class BackendFactory:
                         f"Using {fallback_type.value} as fallback for {provider_type.value}"
                     )
                     return backend
-        
+
         raise RuntimeError("No backend available")
 
 
 class ServiceProvider:
     """
     Provides core service registration for the DI container.
-    
+
     Registers domain services, repositories, and infrastructure.
     """
-    
+
     @staticmethod
     def register_services(
         container: Container,
@@ -213,20 +213,20 @@ class ServiceProvider:
     ) -> None:
         """
         Register all core services.
-        
+
         Args:
             container: DI container
             config: Optional configuration dictionary
         """
         config = config or {}
-        
+
         # Register expression service
         container.register_singleton(
             ExpressionService,
             lambda c: ExpressionService()
         )
         logger.debug("Registered ExpressionService")
-        
+
         # Register cache (infrastructure)
         try:
             from ..cache.filter_cache import FilterCache
@@ -241,7 +241,7 @@ class ServiceProvider:
             logger.debug("Registered FilterCache as CachePort")
         except ImportError:
             logger.warning("FilterCache not available, cache disabled")
-        
+
         # Register layer repository
         try:
             from ...adapters.repositories.layer_repository import QGISLayerRepository
@@ -252,7 +252,7 @@ class ServiceProvider:
             logger.debug("Registered QGISLayerRepository")
         except ImportError:
             logger.warning("QGISLayerRepository not available")
-        
+
         # Register filter service
         container.register_singleton(
             FilterService,
@@ -269,23 +269,23 @@ class ServiceProvider:
 def configure_container(config: Optional[Dict] = None) -> Container:
     """
     Configure and return a fully initialized container.
-    
+
     This is the Composition Root for the application.
-    
+
     Args:
         config: Optional configuration dictionary
-        
+
     Returns:
         Configured Container instance
     """
     from .container import get_container
-    
+
     container = get_container()
     config = config or {}
-    
+
     # Register in order of dependencies
     BackendProvider.register_backends(container, config)
     ServiceProvider.register_services(container, config)
-    
+
     logger.info("DI Container configured successfully")
     return container

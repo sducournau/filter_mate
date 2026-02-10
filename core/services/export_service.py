@@ -21,7 +21,7 @@ Responsibilities:
 
 Extracted from:
 - filter_task.py: execute_exporting() (~600 lines)
-- filter_task.py: _export_with_streaming() 
+- filter_task.py: _export_with_streaming()
 - filter_task.py: _validate_export_parameters()
 
 Author: FilterMate Team (BMAD optimization)
@@ -30,10 +30,15 @@ Date: January 14, 2026
 
 import logging
 import os
-from pathlib import Path
-from typing import List, Dict, Optional, Callable, Any
+from typing import List, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+
+try:
+    from qgis.core import QgsVectorLayer, QgsProject
+except ImportError:
+    QgsVectorLayer = None
+    QgsProject = None
 
 from ..ports.qgis_port import get_qgis_factory, IProject
 
@@ -61,7 +66,7 @@ class StyleFormat(Enum):
 class ExportConfig:
     """
     Configuration for export operations.
-    
+
     Attributes:
         format: Export format
         projection: Target CRS (None = keep original)
@@ -86,7 +91,7 @@ class ExportConfig:
 class ExportResult:
     """
     Result of export operation.
-    
+
     Attributes:
         success: Whether export succeeded
         output_path: Path to exported file(s)
@@ -103,7 +108,7 @@ class ExportResult:
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     elapsed_time: float = 0.0
-    
+
     def __str__(self) -> str:
         """String representation."""
         status = "SUCCESS" if self.success else "FAILED"
@@ -116,21 +121,21 @@ class ExportResult:
 class ExportService:
     """
     Service for orchestrating export operations.
-    
+
     Coordinates layer_exporter, style_exporter, and batch_exporter modules
     to provide unified export interface.
-    
+
     Usage:
         factory = get_qgis_factory()
         service = ExportService(project=factory.get_project())
-        
+
         # Single layer export
         result = service.export_layer(
             layer=my_layer,
             output_path="/path/to/output.shp",
             config=ExportConfig(save_styles=True)
         )
-        
+
         # Batch export
         result = service.export_batch(
             layers=[layer1, layer2, layer3],
@@ -138,7 +143,7 @@ class ExportService:
             config=ExportConfig(format=ExportFormat.GEOPACKAGE)
         )
     """
-    
+
     def __init__(
         self,
         project: Optional[IProject] = None,
@@ -147,7 +152,7 @@ class ExportService:
     ):
         """
         Initialize export service.
-        
+
         Args:
             project: QGIS project instance (via adapter)
             progress_callback: Optional callback for progress (0-100)
@@ -157,9 +162,9 @@ class ExportService:
         self.project = project or factory.get_project()
         self.progress_callback = progress_callback
         self.cancel_callback = cancel_callback
-        
+
         logger.debug("ExportService initialized")
-    
+
     def export_layer(
         self,
         layer: QgsVectorLayer,
@@ -168,18 +173,18 @@ class ExportService:
     ) -> ExportResult:
         """
         Export single layer to file.
-        
+
         Args:
             layer: Vector layer to export
             output_path: Output file path
             config: Export configuration
-            
+
         Returns:
             ExportResult with operation details
         """
         config = config or ExportConfig()
         result = ExportResult()
-        
+
         try:
             # Validate parameters
             validation_errors = self._validate_export_parameters(
@@ -187,19 +192,19 @@ class ExportService:
                 output_path=output_path,
                 config=config
             )
-            
+
             if validation_errors:
                 result.errors = validation_errors
                 logger.error(f"Export validation failed: {validation_errors}")
                 return result
-            
+
             # Import here to avoid circular dependencies
             from ...core.export.layer_exporter import export_single_layer
-            
+
             # Report progress
             if self.progress_callback:
                 self.progress_callback(0)
-            
+
             # Execute export
             export_result = export_single_layer(
                 layer=layer,
@@ -210,7 +215,7 @@ class ExportService:
                 style_format=config.style_format.value,
                 overwrite=config.overwrite
             )
-            
+
             if export_result.get('success'):
                 result.success = True
                 result.output_path = output_path
@@ -220,17 +225,17 @@ class ExportService:
             else:
                 result.errors.append(export_result.get('error', 'Unknown error'))
                 logger.error(f"Export failed: {result.errors}")
-            
+
             # Report completion
             if self.progress_callback:
                 self.progress_callback(100)
-        
+
         except Exception as e:
             result.errors.append(str(e))
             logger.exception(f"Export exception: {e}")
-        
+
         return result
-    
+
     def export_batch(
         self,
         layers: List[QgsVectorLayer],
@@ -239,18 +244,18 @@ class ExportService:
     ) -> ExportResult:
         """
         Export multiple layers to folder.
-        
+
         Args:
             layers: List of layers to export
             output_folder: Output folder path
             config: Export configuration
-            
+
         Returns:
             ExportResult with operation details
         """
         config = config or ExportConfig()
         result = ExportResult()
-        
+
         try:
             # Validate parameters
             validation_errors = self._validate_export_parameters(
@@ -258,15 +263,15 @@ class ExportService:
                 output_path=output_folder,
                 config=config
             )
-            
+
             if validation_errors:
                 result.errors = validation_errors
                 logger.error(f"Batch export validation failed: {validation_errors}")
                 return result
-            
+
             # Import here to avoid circular dependencies
             from ...core.export.batch_exporter import export_batch_layers
-            
+
             # Execute batch export
             batch_result = export_batch_layers(
                 layers=layers,
@@ -279,7 +284,7 @@ class ExportService:
                 progress_callback=self.progress_callback,
                 cancel_callback=self.cancel_callback
             )
-            
+
             if batch_result.get('success'):
                 result.success = True
                 result.output_path = batch_result.get('output_path')
@@ -289,13 +294,13 @@ class ExportService:
             else:
                 result.errors.append(batch_result.get('error', 'Unknown error'))
                 logger.error(f"Batch export failed: {result.errors}")
-        
+
         except Exception as e:
             result.errors.append(str(e))
             logger.exception(f"Batch export exception: {e}")
-        
+
         return result
-    
+
     def export_to_geopackage(
         self,
         layers: List[QgsVectorLayer],
@@ -304,12 +309,12 @@ class ExportService:
     ) -> ExportResult:
         """
         Export multiple layers to single GeoPackage.
-        
+
         Args:
             layers: List of layers to export
             output_path: Output GeoPackage path
             save_styles: Whether to save styles
-            
+
         Returns:
             ExportResult with operation details
         """
@@ -317,17 +322,17 @@ class ExportService:
             format=ExportFormat.GEOPACKAGE,
             save_styles=save_styles
         )
-        
+
         result = ExportResult()
-        
+
         try:
             # Validate
             if not output_path.endswith('.gpkg'):
                 output_path += '.gpkg'
-            
+
             # Import here to avoid circular dependencies
             from ...core.export.batch_exporter import export_to_geopackage
-            
+
             # Execute
             gpkg_result = export_to_geopackage(
                 layers=layers,
@@ -335,7 +340,7 @@ class ExportService:
                 save_styles=save_styles,
                 progress_callback=self.progress_callback
             )
-            
+
             if gpkg_result.get('success'):
                 result.success = True
                 result.output_path = output_path
@@ -344,13 +349,13 @@ class ExportService:
                 logger.info(f"GeoPackage export successful: {output_path}")
             else:
                 result.errors.append(gpkg_result.get('error', 'Unknown error'))
-        
+
         except Exception as e:
             result.errors.append(str(e))
             logger.exception(f"GeoPackage export exception: {e}")
-        
+
         return result
-    
+
     def _validate_export_parameters(
         self,
         layers: List[QgsVectorLayer],
@@ -359,25 +364,25 @@ class ExportService:
     ) -> List[str]:
         """
         Validate export parameters.
-        
+
         Args:
             layers: Layers to export
             output_path: Output path
             config: Export configuration
-            
+
         Returns:
             List of validation error messages (empty if valid)
         """
         errors = []
-        
+
         # Validate layers
         if not layers:
             errors.append("No layers provided for export")
-        
+
         for layer in layers:
             if not layer or not layer.isValid():
                 errors.append(f"Invalid layer: {layer.name() if layer else 'None'}")
-        
+
         # Validate output path
         if not output_path:
             errors.append("Output path not specified")
@@ -388,18 +393,18 @@ class ExportService:
                     os.makedirs(output_dir, exist_ok=True)
                 except Exception as e:
                     errors.append(f"Cannot create output directory: {e}")
-            
+
             # Check if file exists and overwrite not allowed
             if os.path.exists(output_path) and not config.overwrite:
                 errors.append(f"Output file exists and overwrite is disabled: {output_path}")
-        
+
         # Validate format compatibility
         if config.format == ExportFormat.GEOPACKAGE and len(layers) > 1:
             # Multiple layers to GeoPackage is OK
             pass
         elif len(layers) > 1 and not os.path.isdir(output_path):
             errors.append("Multiple layers require output folder, not file path")
-        
+
         return errors
 
 
@@ -411,11 +416,11 @@ def create_export_service(
 ) -> ExportService:
     """
     Create export service instance.
-    
+
     Args:
         project: QGIS project
         progress_callback: Progress callback
-        
+
     Returns:
         ExportService instance
     """

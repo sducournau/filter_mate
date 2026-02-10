@@ -7,7 +7,7 @@ EPIC-1 Phase E13: Added geometry_safety module.
 
 This module provides geometry processing functionality:
 - Buffer operations (positive/negative)
-- Geometry repair and validation  
+- Geometry repair and validation
 - Geometry type conversions
 - Geometry simplification
 - GEOS-safe operations
@@ -16,7 +16,7 @@ Used by FilterEngineTask for spatial operations.
 """
 
 # Buffer operations
-from .buffer_processor import (
+from .buffer_processor import (  # noqa: F401
     apply_qgis_buffer,
     create_buffered_memory_layer,
     simplify_buffer_result,
@@ -24,18 +24,18 @@ from .buffer_processor import (
 )
 
 # Geometry repair
-from .geometry_repair import (
+from .geometry_repair import (  # noqa: F401
     aggressive_geometry_repair,
     repair_invalid_geometries
 )
 
 # Geometry converters
-from .geometry_converter import (
+from .geometry_converter import (  # noqa: F401
     convert_geometry_collection_to_multipolygon
 )
 
 # Geometry safety (GEOS-safe operations)
-from .geometry_safety import (
+from .geometry_safety import (  # noqa: F401
     validate_geometry,
     validate_geometry_for_geos,
     get_geometry_type_name,
@@ -58,14 +58,14 @@ __all__ = [
     'create_buffered_memory_layer',
     'simplify_buffer_result',
     'BufferConfig',
-    
+
     # Repair
     'aggressive_geometry_repair',
     'repair_invalid_geometries',
-    
+
     # Convert
     'convert_geometry_collection_to_multipolygon',
-    
+
     # Safety
     'validate_geometry',
     'validate_geometry_for_geos',

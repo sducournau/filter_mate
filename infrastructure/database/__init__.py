@@ -13,7 +13,7 @@ Exports:
     - Connection Pool: PostgreSQL connection pooling (v4.0.4)
 """
 
-from .prepared_statements import (
+from .prepared_statements import (  # noqa: F401
     PreparedStatementManager,
     PostgreSQLPreparedStatements,
     SpatialitePreparedStatements,
@@ -21,7 +21,7 @@ from .prepared_statements import (
     create_prepared_statements,
 )
 
-from .connection_pool import (
+from .connection_pool import (  # noqa: F401
     # Main API
     get_pool_manager,
     get_pooled_connection_from_layer,
@@ -38,13 +38,13 @@ from .connection_pool import (
     unregister_pool,
 )
 
-from .postgresql_support import (
+from .postgresql_support import (  # noqa: F401
     psycopg2,
     PSYCOPG2_AVAILABLE,
     POSTGRESQL_AVAILABLE,
 )
 
-from .style_filter_fixer import (
+from .style_filter_fixer import (  # noqa: F401
     apply_type_casting_to_expression,
     fix_rule_based_renderer_filters,
     fix_layer_style_filters,
@@ -52,7 +52,7 @@ from .style_filter_fixer import (
     fix_expression_for_postgresql,
 )
 
-from .sql_utils import (
+from .sql_utils import (  # noqa: F401
     sanitize_sql_identifier,
     safe_set_subset_string,
     create_temp_spatialite_table,

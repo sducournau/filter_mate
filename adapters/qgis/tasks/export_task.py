@@ -286,7 +286,7 @@ class BatchExportTask(BaseFilterMateTask):
             if self.check_cancelled():
                 return TaskResult.cancelled_result()
 
-            self.report_progress(i, total, f"Exporting layer {i+1}/{total}")
+            self.report_progress(i, total, f"Exporting layer {i + 1}/{total}")
 
             try:
                 layer = QgsProject.instance().mapLayer(layer_id)

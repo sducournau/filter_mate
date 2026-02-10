@@ -15,7 +15,7 @@ Location: core/tasks/collectors/feature_collector.py
 
 import logging
 from typing import Optional, List, Dict, Any, Tuple, Union, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from qgis.core import QgsVectorLayer, QgsFeature, QgsFeatureRequest
 
@@ -32,7 +32,7 @@ class CollectionResult:
     is_numeric: bool = True
     cached: bool = False
     error: Optional[str] = None
-    
+
     @property
     def success(self) -> bool:
         return self.error is None and self.count >= 0
@@ -41,7 +41,7 @@ class CollectionResult:
 class FeatureCollector:
     """
     Collects and manages features from various sources.
-    
+
     Responsibilities:
     - Extract feature IDs from layer selection
     - Extract IDs from QgsFeature list
@@ -49,34 +49,34 @@ class FeatureCollector:
     - Cache results for performance
     - Support batch processing for large datasets
     - Support cancellation via cancel_check callback (v4.2.8)
-    
+
     Consolidated from:
     - core/filter/source_filter_builder.py::extract_feature_ids()
     - FilterEngineTask feature extraction logic
-    
+
     Example:
         collector = FeatureCollector(
             layer=source_layer,
             primary_key_field="id",
             cancel_check=lambda: task.isCanceled()
         )
-        
+
         # From selection
         result = collector.collect_from_selection()
-        
+
         # From feature list
         result = collector.collect_from_features(features)
-        
+
         # From expression
         result = collector.collect_from_expression("field > 10")
-        
+
         # Get cached IDs
         ids = collector.get_cached_ids()
     """
-    
+
     # v4.2.8: Interval for cancel checks during iteration
     CANCEL_CHECK_INTERVAL = 100
-    
+
     def __init__(
         self,
         layer: Optional[QgsVectorLayer] = None,
@@ -87,7 +87,7 @@ class FeatureCollector:
     ):
         """
         Initialize FeatureCollector.
-        
+
         Args:
             layer: Source QGIS vector layer
             primary_key_field: Name of the primary key field
@@ -100,26 +100,26 @@ class FeatureCollector:
         self.is_pk_numeric = is_pk_numeric
         self.cache_enabled = cache_enabled
         self._cancel_check = cancel_check
-        
+
         # Cache for collected IDs
         self._cached_ids: Optional[List[Any]] = None
         self._cache_source: Optional[str] = None
-        
+
         logger.debug(
             f"FeatureCollector initialized: pk={primary_key_field}, "
             f"numeric={is_pk_numeric}, cache={cache_enabled}, cancel_check={cancel_check is not None}"
         )
-    
+
     def is_canceled(self) -> bool:
         """Check if operation should be canceled (v4.2.8)."""
         if self._cancel_check:
             return self._cancel_check()
         return False
-    
+
     def collect_from_selection(self) -> CollectionResult:
         """
         Collect feature IDs from layer selection.
-        
+
         Returns:
             CollectionResult with extracted IDs
         """
@@ -130,10 +130,10 @@ class FeatureCollector:
                 source='selection',
                 error="No layer provided"
             )
-        
+
         try:
             selected_features = list(self.layer.selectedFeatures())
-            
+
             if not selected_features:
                 return CollectionResult(
                     feature_ids=[],
@@ -141,15 +141,15 @@ class FeatureCollector:
                     source='selection',
                     primary_key_field=self.primary_key_field
                 )
-            
+
             # Extract IDs
             ids = self._extract_ids_from_features(selected_features)
-            
+
             # Cache if enabled
             if self.cache_enabled:
                 self._cached_ids = ids
                 self._cache_source = 'selection'
-            
+
             return CollectionResult(
                 feature_ids=ids,
                 count=len(ids),
@@ -157,7 +157,7 @@ class FeatureCollector:
                 primary_key_field=self.primary_key_field,
                 is_numeric=self.is_pk_numeric
             )
-            
+
         except Exception as e:
             logger.error(f"Error collecting from selection: {e}")
             return CollectionResult(
@@ -166,17 +166,17 @@ class FeatureCollector:
                 source='selection',
                 error=str(e)
             )
-    
+
     def collect_from_features(
         self,
         features: List[Union[QgsFeature, Dict]]
     ) -> CollectionResult:
         """
         Collect IDs from a list of features.
-        
+
         Args:
             features: List of QgsFeature objects or dicts
-            
+
         Returns:
             CollectionResult with extracted IDs
         """
@@ -187,15 +187,15 @@ class FeatureCollector:
                 source='list',
                 primary_key_field=self.primary_key_field
             )
-        
+
         try:
             ids = self._extract_ids_from_features(features)
-            
+
             # Cache if enabled
             if self.cache_enabled:
                 self._cached_ids = ids
                 self._cache_source = 'list'
-            
+
             return CollectionResult(
                 feature_ids=ids,
                 count=len(ids),
@@ -203,7 +203,7 @@ class FeatureCollector:
                 primary_key_field=self.primary_key_field,
                 is_numeric=self.is_pk_numeric
             )
-            
+
         except Exception as e:
             logger.error(f"Error collecting from features: {e}")
             return CollectionResult(
@@ -212,7 +212,7 @@ class FeatureCollector:
                 source='list',
                 error=str(e)
             )
-    
+
     def collect_from_expression(
         self,
         expression: str,
@@ -220,11 +220,11 @@ class FeatureCollector:
     ) -> CollectionResult:
         """
         Collect feature IDs matching an expression.
-        
+
         Args:
             expression: QGIS filter expression
             limit: Optional maximum number of features
-            
+
         Returns:
             CollectionResult with extracted IDs
         """
@@ -235,7 +235,7 @@ class FeatureCollector:
                 source='expression',
                 error="No layer provided"
             )
-        
+
         if not expression:
             return CollectionResult(
                 feature_ids=[],
@@ -243,27 +243,27 @@ class FeatureCollector:
                 source='expression',
                 error="No expression provided"
             )
-        
+
         try:
             # Build feature request
             request = QgsFeatureRequest()
             request.setFilterExpression(expression)
-            
+
             if self.primary_key_field:
                 request.setSubsetOfAttributes([self.primary_key_field], self.layer.fields())
-            
+
             if limit:
                 request.setLimit(limit)
-            
+
             # Collect features
             features = list(self.layer.getFeatures(request))
             ids = self._extract_ids_from_features(features)
-            
+
             # Cache if enabled
             if self.cache_enabled:
                 self._cached_ids = ids
                 self._cache_source = 'expression'
-            
+
             return CollectionResult(
                 feature_ids=ids,
                 count=len(ids),
@@ -271,7 +271,7 @@ class FeatureCollector:
                 primary_key_field=self.primary_key_field,
                 is_numeric=self.is_pk_numeric
             )
-            
+
         except Exception as e:
             logger.error(f"Error collecting from expression: {e}")
             return CollectionResult(
@@ -280,17 +280,17 @@ class FeatureCollector:
                 source='expression',
                 error=str(e)
             )
-    
+
     def collect_all(
         self,
         limit: Optional[int] = None
     ) -> CollectionResult:
         """
         Collect all feature IDs from layer.
-        
+
         Args:
             limit: Optional maximum number of features
-            
+
         Returns:
             CollectionResult with all IDs
         """
@@ -301,24 +301,24 @@ class FeatureCollector:
                 source='all',
                 error="No layer provided"
             )
-        
+
         try:
             request = QgsFeatureRequest()
-            
+
             if self.primary_key_field:
                 request.setSubsetOfAttributes([self.primary_key_field], self.layer.fields())
-            
+
             if limit:
                 request.setLimit(limit)
-            
+
             features = list(self.layer.getFeatures(request))
             ids = self._extract_ids_from_features(features)
-            
+
             # Cache if enabled
             if self.cache_enabled:
                 self._cached_ids = ids
                 self._cache_source = 'all'
-            
+
             return CollectionResult(
                 feature_ids=ids,
                 count=len(ids),
@@ -326,7 +326,7 @@ class FeatureCollector:
                 primary_key_field=self.primary_key_field,
                 is_numeric=self.is_pk_numeric
             )
-            
+
         except Exception as e:
             logger.error(f"Error collecting all features: {e}")
             return CollectionResult(
@@ -335,36 +335,36 @@ class FeatureCollector:
                 source='all',
                 error=str(e)
             )
-    
+
     def _extract_ids_from_features(
         self,
         features: List[Union[QgsFeature, Dict]]
     ) -> List[Any]:
         """
         Extract IDs from feature list.
-        
+
         Uses attribute(pk_field) for proper DB primary key extraction,
         NOT f.id() which returns QGIS internal FID.
-        
+
         v4.2.8: Checks for cancellation every CANCEL_CHECK_INTERVAL features.
-        
+
         Args:
             features: List of features
-            
+
         Returns:
             List of primary key values (may be partial if canceled)
         """
         ids = []
         pk_field = self.primary_key_field
         check_interval = self.CANCEL_CHECK_INTERVAL
-        
+
         for i, f in enumerate(features):
             # v4.2.8: Periodic cancellation check
             if i > 0 and i % check_interval == 0:
                 if self.is_canceled():
                     logger.info(f"Feature extraction canceled at {i}/{len(features)} features")
                     break
-            
+
             try:
                 if hasattr(f, 'attribute') and pk_field:
                     # Use attribute() for DB primary key
@@ -381,31 +381,31 @@ class FeatureCollector:
                     ids.append(f[pk_field])
             except Exception as e:
                 logger.debug(f"Could not extract ID from feature: {e}")
-        
+
         return ids
-    
+
     def get_cached_ids(self) -> Optional[List[Any]]:
         """Get cached feature IDs if available."""
         return self._cached_ids
-    
+
     def get_cache_source(self) -> Optional[str]:
         """Get source of cached IDs ('selection', 'list', 'expression', 'all')."""
         return self._cache_source
-    
+
     def clear_cache(self):
         """Clear cached IDs."""
         self._cached_ids = None
         self._cache_source = None
         logger.debug("Feature ID cache cleared")
-    
+
     def has_cache(self) -> bool:
         """Check if cache has IDs."""
         return self._cached_ids is not None and len(self._cached_ids) > 0
-    
+
     def get_cached_count(self) -> int:
         """Get count of cached IDs."""
         return len(self._cached_ids) if self._cached_ids else 0
-    
+
     def collect_in_batches(
         self,
         batch_size: int = 1000,
@@ -414,12 +414,12 @@ class FeatureCollector:
     ) -> Tuple[List[List[Any]], int]:
         """
         Collect feature IDs in batches for large datasets.
-        
+
         Args:
             batch_size: Number of IDs per batch
             source: Collection source ('all', 'selection', 'expression')
             expression: Optional filter expression
-            
+
         Returns:
             Tuple of (list of ID batches, total count)
         """
@@ -430,19 +430,19 @@ class FeatureCollector:
             result = self.collect_from_expression(expression)
         else:
             result = self.collect_all()
-        
+
         if not result.success or not result.feature_ids:
             return [], 0
-        
+
         # Split into batches
         ids = result.feature_ids
         batches = [
             ids[i:i + batch_size]
             for i in range(0, len(ids), batch_size)
         ]
-        
+
         return batches, result.count
-    
+
     @staticmethod
     def format_ids_for_sql(
         ids: List[Any],
@@ -450,23 +450,23 @@ class FeatureCollector:
     ) -> str:
         """
         Format IDs for SQL IN clause.
-        
+
         Args:
             ids: List of IDs
             is_numeric: Whether IDs are numeric
-            
+
         Returns:
             Formatted string for SQL
         """
         if not ids:
             return ""
-        
+
         if is_numeric:
             return ", ".join(str(id_val) for id_val in ids)
         else:
             # Quote non-numeric values
             return ", ".join(f"'{id_val}'" for id_val in ids)
-    
+
     @staticmethod
     def restore_layer_selection(
         layer: QgsVectorLayer,
@@ -474,19 +474,19 @@ class FeatureCollector:
     ) -> bool:
         """
         Restore selection on layer from feature FIDs.
-        
+
         Note: This uses QGIS internal FIDs, not DB primary keys.
-        
+
         Args:
             layer: Target layer
             feature_ids: List of QGIS feature FIDs
-            
+
         Returns:
             True if selection restored successfully
         """
         if not layer or not feature_ids:
             return False
-        
+
         try:
             layer.selectByIds(feature_ids)
             logger.info(f"Restored selection: {len(feature_ids)} features")

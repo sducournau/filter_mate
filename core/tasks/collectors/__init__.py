@@ -7,7 +7,7 @@ Contains:
 - FeatureCollector: Collect and cache feature IDs from various sources
 """
 
-from .feature_collector import FeatureCollector, CollectionResult
+from .feature_collector import FeatureCollector, CollectionResult  # noqa: F401
 
 __all__ = [
     'FeatureCollector',

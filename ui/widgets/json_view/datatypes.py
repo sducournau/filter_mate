@@ -12,6 +12,7 @@ from . import themes
 TypeRole = QtCore.Qt.UserRole + 1
 PLUGIN_DIR = ''
 
+
 class DataType(object):
     """Base class for data types."""
     COLOR = QtCore.Qt.black
@@ -27,12 +28,11 @@ class DataType(object):
 
     def next(self, model, data, parent):
         """Implement if this data type has to add child items to itself."""
-        pass
 
     def actions(self, index):
         """Re-implement to return custom QActions."""
 
-        return ["Rename","Add child","Insert sibling up","Insert sibling down", "Remove"]
+        return ["Rename", "Add child", "Insert sibling up", "Insert sibling down", "Remove"]
 
     def paint(self, painter, option, index):
         """Optionally re-implement for use by the delegate."""
@@ -119,13 +119,13 @@ class StrType(DataType):
     """Strings and unicodes"""
 
     def matches(self, data):
-        return isinstance(data, str) or isinstance(data, unicode)
+        return isinstance(data, str) or isinstance(data, unicode)  # noqa: F821
 
 
 class ColorType(DataType):
     """Hex color strings displayed with QgsColorButton."""
     THEME_COLOR_KEY = 'string'
-    
+
     # Pattern to match hex colors: #RGB, #RRGGBB, #RRGGBBAA
     HEX_COLOR_PATTERN = re.compile(r'^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?([0-9A-Fa-f]{2})?$')
 
@@ -142,21 +142,21 @@ class ColorType(DataType):
         color_button.setShowNoColor(False)
         color_button.setMinimumSize(30, 22)
         color_button.setMaximumHeight(30)
-        
+
         # Set initial color from current value
         current_color = index.data(QtCore.Qt.DisplayRole)
         if current_color:
             qcolor = QtGui.QColor(current_color)
             if qcolor.isValid():
                 color_button.setColor(qcolor)
-        
+
         # Connect signal to update immediately on color change
         color_button.colorChanged.connect(
             lambda: self.setModelData(color_button, index.model(), index)
         )
-        
+
         return color_button
-    
+
     def setEditorData(self, editor, index):
         """Set the editor data from the model."""
         if isinstance(editor, QgsColorButton):
@@ -175,17 +175,17 @@ class ColorType(DataType):
                 hex_color = color.name(QtGui.QColor.HexArgb)
             else:
                 hex_color = color.name(QtGui.QColor.HexRgb)
-            
+
             model.setData(index, hex_color, QtCore.Qt.EditRole)
 
     def paint(self, painter, option, index):
         """Paint a color preview rectangle next to the color value."""
         painter.save()
-        
+
         # Get color value
         color_str = index.data(QtCore.Qt.DisplayRole)
         qcolor = QtGui.QColor(color_str)
-        
+
         if qcolor.isValid():
             # Draw color rectangle
             rect = option.rect
@@ -198,7 +198,7 @@ class ColorType(DataType):
             painter.fillRect(color_rect, qcolor)
             painter.setPen(QtGui.QPen(QtCore.Qt.black, 1))
             painter.drawRect(color_rect)
-            
+
             # Draw text after color rectangle
             text_rect = QtCore.QRect(
                 color_rect.right() + 5,
@@ -220,7 +220,7 @@ class ColorType(DataType):
                 QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft,
                 " " + color_str
             )
-        
+
         painter.restore()
 
 
@@ -432,7 +432,7 @@ class RangeType(DataType):
         return wid
 
     def setModelData(self, editor, model, index):
-        #if isinstance(model, QtWidgets.QAbstractProxyModel):
+        # if isinstance(model, QtWidgets.QAbstractProxyModel):
         #    index = model.mapToSource(index)
         #    model = model.sourceModel()
         data = index.data(QtCore.Qt.UserRole)
@@ -464,7 +464,7 @@ class UrlType(DataType):
     REGEX = re.compile(r'(?:https?):\/\/|(?:file):\/\\/')
 
     def matches(self, data):
-        if isinstance(data, str) or isinstance(data, unicode):
+        if isinstance(data, str) or isinstance(data, unicode):  # noqa: F821
             if self.REGEX.match(data) is not None:
                 return True
         return False
@@ -483,7 +483,7 @@ class FilepathType(DataType):
     NEGATIVE_REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
 
     def matches(self, data):
-        if isinstance(data, str) or isinstance(data, unicode):
+        if isinstance(data, str) or isinstance(data, unicode):  # noqa: F821
             if self.POSITIVE_REGEX.search(data) is not None:
                 if self.NEGATIVE_REGEX.search(data) is None:
                     return True
@@ -500,7 +500,6 @@ class FilepathType(DataType):
                 value_item.setData(os.path.normcase(value), QtCore.Qt.UserRole)
         return value_item
 
-
     def actions(self, index):
         view = QtWidgets.QAction('View', None)
         self.change = QtWidgets.QAction('Change', None)
@@ -508,7 +507,7 @@ class FilepathType(DataType):
         view.triggered.connect(partial(webbrowser.open, path))
         self.change.triggered.connect(partial(self.change_path, path, index))
         return [view, self.change]
-    
+
     def change_path(self, input_path, index):
         new_path = None
         filename = None
@@ -517,11 +516,11 @@ class FilepathType(DataType):
         else:
             if os.path.exists(input_path):
                 extension = os.path.basename(input_path).split('.')[-1]
-                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
+                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select a file', input_path, '*.{extension}'.format(extension=extension))[0]))
                 filename = os.path.basename(new_path)
             else:
                 extension = os.path.basename(input_path).split('.')[-1]
-                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getSaveFileName(None, 'Save to a file', input_path, '*.{extension}'.format(extension=extension))[0]))   
+                new_path = os.path.normcase(str(QtWidgets.QFileDialog.getSaveFileName(None, 'Save to a file', input_path, '*.{extension}'.format(extension=extension))[0]))
                 filename = os.path.basename(new_path)
         if new_path is not None:
             if filename is not None:
@@ -536,7 +535,7 @@ class FilepathTypeImages(DataType):
     REGEX = re.compile(r'(\.png)|(\.jpg)|(\.jpeg)|(\.gif)$')
 
     def matches(self, data):
-        if isinstance(data, str) or isinstance(data, unicode):
+        if isinstance(data, str) or isinstance(data, unicode):  # noqa: F821
             if self.REGEX.search(data) is not None:
                 return True
         return False
@@ -556,7 +555,6 @@ class FilepathTypeImages(DataType):
         view.triggered.connect(partial(webbrowser.open, path_view))
         self.change.triggered.connect(partial(self.change_icon, path_change, index))
         return [view, self.change]
-        
 
     def change_icon(self, folder_path, index):
         filepath = os.path.normcase(str(QtWidgets.QFileDialog.getOpenFileName(None, 'Select an icon', folder_path, 'Images (*.png *.jpg *.jpeg *.gif)')[0]))
@@ -569,20 +567,18 @@ class FilepathTypeImages(DataType):
             self.change.setData([filename, new_filepath])
 
 
-
-
 class ChoicesType(DataType):
     """A combobox that allows for a number of choices.
 
     The data has to be a dict with at least 'value' and 'choices' keys.
     Supports extended format with optional 'description' and other metadata.
-    
+
     Basic format:
     {
         "value": "A",
         "choices": ["A", "B", "C"]
     }
-    
+
     Extended format (v2.0 config):
     {
         "value": "auto",
@@ -645,21 +641,21 @@ class ConfigValueType(DataType):
 
     The data has to be a dict with 'value' key and optionally 'description'.
     This type handles config values that have metadata but no choices.
-    
+
     Format:
     {
         "value": true,
         "description": "Auto-activate plugin when project loaded"
     }
-    
+
     Or with additional metadata:
     {
         "value": "path/to/file",
         "description": "Database file path",
         "applies_to": "Plugin initialization"
     }
-    
-    NOTE: This type must NOT match if 'choices' key is present - 
+
+    NOTE: This type must NOT match if 'choices' key is present -
     those should be handled by ChoicesType.
     """
     THEME_COLOR_KEY = 'string'
@@ -680,7 +676,7 @@ class ConfigValueType(DataType):
         """Create appropriate editor based on value type."""
         data = index.data(QtCore.Qt.UserRole)
         value = data.get('value')
-        
+
         if isinstance(value, bool):
             # Use checkbox for boolean
             cbx = QtWidgets.QCheckBox(parent)
@@ -719,7 +715,7 @@ class ConfigValueType(DataType):
         """Set model data based on editor type."""
         data = index.data(QtCore.Qt.UserRole)
         original_value = data.get('value')
-        
+
         if isinstance(editor, QtWidgets.QCheckBox):
             new_value = editor.isChecked()
         elif isinstance(editor, QtWidgets.QSpinBox):
@@ -743,7 +739,7 @@ class ConfigValueType(DataType):
                     new_value = text
             else:
                 new_value = text
-        
+
         data['value'] = new_value
         # Display the value, not the full dict
         display_text = str(new_value)
@@ -760,7 +756,7 @@ class ConfigValueType(DataType):
             display_text = 'true' if actual_value else 'false'
         else:
             display_text = str(actual_value) if actual_value is not None else ''
-        
+
         value_item = QtGui.QStandardItem(display_text)
         value_item.setData(display_text, QtCore.Qt.DisplayRole)
         value_item.setData(value, QtCore.Qt.UserRole)
@@ -771,11 +767,11 @@ class ConfigValueType(DataType):
             QtCore.Qt.ItemIsEnabled)
         if model.editable_values:
             value_item.setFlags(value_item.flags() | QtCore.Qt.ItemIsEditable)
-        
+
         # Set tooltip from description if available
         if isinstance(value, dict) and 'description' in value:
             value_item.setData(str(value['description']), QtCore.Qt.ToolTipRole)
-        
+
         return value_item
 
     def serialize(self, model, item, data, parent):
@@ -819,6 +815,7 @@ def match_type(data):
     for type_ in DATA_TYPES:
         if type_.matches(data):
             return type_
+
 
 def set_plugin_dir(plugin_dir):
     """Set the global PLUGIN_DIR variable used by FilepathTypeImages."""

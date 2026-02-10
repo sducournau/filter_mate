@@ -53,11 +53,11 @@ class ConfigController(BaseController):
     Example:
         controller = ConfigController(dockwidget)
         controller.setup()
-        
+
         # React to config changes
         controller.config_changed.connect(on_config_changed)
         controller.theme_changed.connect(on_theme_changed)
-        
+
         # Apply or cancel pending changes
         controller.apply_pending_config_changes()
         controller.cancel_pending_config_changes()
@@ -702,7 +702,7 @@ class ConfigController(BaseController):
     def __repr__(self) -> str:
         """String representation for debugging."""
         return (
-            f"<ConfigController "
+            "<ConfigController "
             f"pending={len(self._pending_changes)} "
             f"active={self._is_active}>"
         )

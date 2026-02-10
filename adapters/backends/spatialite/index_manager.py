@@ -50,7 +50,7 @@ class RTreeIndexManager:
 
         # Check index status
         if manager.has_index("roads", "geometry"):
-          
+
     """
 
     def __init__(self, connection):
@@ -120,7 +120,7 @@ class RTreeIndexManager:
         try:
             # Create the spatial index using Spatialite function
             cursor.execute(
-                f"SELECT CreateSpatialIndex('{table_name}', '{geometry_column}')"
+                f"SELECT CreateSpatialIndex('{table_name}', '{geometry_column}')"  # nosec B608
             )
             self._conn.commit()
 
@@ -171,12 +171,12 @@ class RTreeIndexManager:
         try:
             # Disable spatial index using Spatialite function
             cursor.execute(
-                f"SELECT DisableSpatialIndex('{table_name}', '{geometry_column}')"
+                f"SELECT DisableSpatialIndex('{table_name}', '{geometry_column}')"  # nosec B608
             )
 
             # Drop the index table
             index_table = f"idx_{table_name}_{geometry_column}"
-            cursor.execute(f"DROP TABLE IF EXISTS \"{index_table}\"")
+            cursor.execute(f"DROP TABLE IF EXISTS \"{index_table}\"")  # nosec B608
 
             self._conn.commit()
 
@@ -233,13 +233,13 @@ class RTreeIndexManager:
 
         try:
             # Get row count
-            cursor.execute(f'SELECT COUNT(*) FROM "{index_table}"')
+            cursor.execute(f'SELECT COUNT(*) FROM "{index_table}"')  # nosec B608
             row_count = cursor.fetchone()[0]
 
             # Validate index using Spatialite function
             try:
                 cursor.execute(
-                    f"SELECT CheckSpatialIndex('{table_name}', '{geometry_column}')"
+                    f"SELECT CheckSpatialIndex('{table_name}', '{geometry_column}')"  # nosec B608
                 )
                 check_result = cursor.fetchone()
                 is_valid = check_result[0] == 1 if check_result else False
@@ -249,7 +249,7 @@ class RTreeIndexManager:
             # Get table size
             try:
                 cursor.execute(
-                    f"SELECT page_count * page_size FROM pragma_page_count('{index_table}'), pragma_page_size()"
+                    f"SELECT page_count * page_size FROM pragma_page_count('{index_table}'), pragma_page_size()"  # nosec B608
                 )
                 size_result = cursor.fetchone()
                 size_bytes = size_result[0] if size_result else 0

@@ -156,7 +156,7 @@ compile_translations.bat
 ## UI Development
 ```cmd
 # After modifying .ui file, regenerate .py
-compile_ui.bat
+scripts/compile_ui.bat
 
 # Fix widget naming issues
 cd tools/ui

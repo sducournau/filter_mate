@@ -18,16 +18,16 @@ logger = logging.getLogger(__name__)
 class LayerHistory:
     """
     Per-layer history wrapper for backward compatibility with old HistoryManager API.
-    
+
     This class provides the old FilterHistory-like interface while delegating
     to the global HistoryService. It's used by undo_redo_handler.py which expects
     the old per-layer API.
     """
-    
+
     def __init__(self, layer_id: str, parent_service: 'HistoryService'):
         """
         Initialize per-layer history wrapper.
-        
+
         Args:
             layer_id: Layer ID this wrapper represents
             parent_service: Parent HistoryService instance
@@ -35,14 +35,14 @@ class LayerHistory:
         self.layer_id = layer_id
         self._parent = parent_service
         self._states = []  # Simulated per-layer states for compatibility
-    
-    def push_state(self, expression: str, feature_count: int, 
+
+    def push_state(self, expression: str, feature_count: int,
                    description: str = "", metadata: Optional[Dict] = None):
         """
         Push a filter state for this layer (compatibility method).
-        
+
         This creates a HistoryEntry and pushes it to the parent service.
-        
+
         Args:
             expression: Filter expression
             feature_count: Feature count (stored in metadata)
@@ -52,7 +52,7 @@ class LayerHistory:
         # Build metadata with feature count
         full_metadata = metadata or {}
         full_metadata['feature_count'] = feature_count
-        
+
         # Get previous filter state for this layer (for undo functionality)
         # Look at the last history entry that affected this layer
         previous_expression = ""
@@ -61,7 +61,7 @@ class LayerHistory:
             # The expression in the last entry is what we're replacing
             last_entry = previous_entries[-1]
             previous_expression = last_entry.expression
-        
+
         # Create history entry with correct previous_filters for undo
         entry = HistoryEntry.create(
             expression=expression,
@@ -70,10 +70,10 @@ class LayerHistory:
             description=description or f"Filter on layer {self.layer_id}",
             metadata=full_metadata
         )
-        
+
         # CRITICAL: Push to parent service for actual undo/redo functionality
         self._parent.push(entry)
-        
+
         # Add to simulated per-layer states (for backward compatibility)
         self._states.append({
             'expression': expression,
@@ -82,7 +82,7 @@ class LayerHistory:
             'timestamp': entry.timestamp,
             'metadata': full_metadata
         })
-        
+
         prev_display = previous_expression[:30] + '...' if len(previous_expression) > 30 else previous_expression
         logger.debug(f"LayerHistory: Pushed state for layer {self.layer_id} (previous: '{prev_display}')")
 
@@ -123,28 +123,28 @@ class HistoryEntry:
     ) -> 'HistoryEntry':
         """
         Factory method for creating history entry.
-        
+
         Args:
             expression: Filter expression applied
             layer_ids: List of layer IDs affected
             previous_filters: List of (layer_id, previous_filter) tuples
             description: Human-readable description
             metadata: Optional additional metadata
-            
+
         Returns:
             New HistoryEntry instance
         """
         # Generate unique ID
         entry_id = f"hist_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
-        
+
         # Create description if not provided
         if not description:
             expr_preview = expression[:30] + "..." if len(expression) > 30 else expression
             description = f"Filter: {expr_preview}"
-        
+
         # Convert metadata to immutable tuple of tuples
         meta_tuple = tuple(sorted(metadata.items())) if metadata else tuple()
-        
+
         return cls(
             entry_id=entry_id,
             expression=expression,
@@ -167,10 +167,10 @@ class HistoryEntry:
     def get_previous_filter(self, layer_id: str) -> Optional[str]:
         """
         Get previous filter for a specific layer.
-        
+
         Args:
             layer_id: Layer ID to look up
-            
+
         Returns:
             Previous filter string or None
         """
@@ -195,7 +195,7 @@ class HistoryEntry:
 class HistoryState:
     """
     State information about history position.
-    
+
     Attributes:
         can_undo: Whether undo is available
         can_redo: Whether redo is available
@@ -225,7 +225,7 @@ class HistoryService:
 
     Example:
         history = HistoryService(max_depth=50)
-        
+
         # Record a filter operation
         entry = HistoryEntry.create(
             expression="name = 'test'",
@@ -233,12 +233,12 @@ class HistoryService:
             previous_filters=[("layer_123", "")]
         )
         history.push(entry)
-        
+
         # Undo
         if history.can_undo:
             undone = history.undo()
             # Restore layer filters from undone.previous_filters
-        
+
         # Redo
         if history.can_redo:
             redone = history.redo()
@@ -262,7 +262,7 @@ class HistoryService:
         self._max_depth = max_depth
         self._on_change = on_change
         self._is_performing_undo_redo = False
-        
+
         # Per-layer history wrappers (for backward compatibility)
         self._layer_histories: Dict[str, LayerHistory] = {}
 
@@ -279,11 +279,11 @@ class HistoryService:
         if self._is_performing_undo_redo:
             # Don't push during undo/redo operations
             return
-            
+
         self._undo_stack.append(entry)
         self._redo_stack.clear()
         self._notify_change()
-        
+
         logger.debug(f"History: pushed {entry.entry_id}, undo depth={len(self._undo_stack)}")
 
     def undo(self) -> Optional[HistoryEntry]:
@@ -301,7 +301,7 @@ class HistoryService:
             entry = self._undo_stack.pop()
             self._redo_stack.append(entry)
             self._notify_change()
-            
+
             logger.debug(f"History: undo {entry.entry_id}")
             return entry
         finally:
@@ -322,7 +322,7 @@ class HistoryService:
             entry = self._redo_stack.pop()
             self._undo_stack.append(entry)
             self._notify_change()
-            
+
             logger.debug(f"History: redo {entry.entry_id}")
             return entry
         finally:
@@ -331,7 +331,7 @@ class HistoryService:
     def peek_undo(self) -> Optional[HistoryEntry]:
         """
         Peek at next undo entry without modifying stacks.
-        
+
         Returns:
             Next entry to undo, or None if stack empty
         """
@@ -340,7 +340,7 @@ class HistoryService:
     def peek_redo(self) -> Optional[HistoryEntry]:
         """
         Peek at next redo entry without modifying stacks.
-        
+
         Returns:
             Next entry to redo, or None if stack empty
         """
@@ -374,18 +374,18 @@ class HistoryService:
     def get_state(self) -> HistoryState:
         """
         Get current history state.
-        
+
         Returns:
             HistoryState with current undo/redo availability
         """
         undo_desc = ""
         redo_desc = ""
-        
+
         if self._undo_stack:
             undo_desc = self._undo_stack[-1].description
         if self._redo_stack:
             redo_desc = self._redo_stack[-1].description
-            
+
         return HistoryState(
             can_undo=self.can_undo,
             can_redo=self.can_redo,
@@ -398,7 +398,7 @@ class HistoryService:
     def get_undo_stack(self) -> List[HistoryEntry]:
         """
         Get copy of undo stack (newest last).
-        
+
         Returns:
             List of history entries
         """
@@ -407,7 +407,7 @@ class HistoryService:
     def get_redo_stack(self) -> List[HistoryEntry]:
         """
         Get copy of redo stack (next-to-redo last).
-        
+
         Returns:
             List of history entries
         """
@@ -416,10 +416,10 @@ class HistoryService:
     def get_history_for_layer(self, layer_id: str) -> List[HistoryEntry]:
         """
         Get history entries that affected a specific layer.
-        
+
         Args:
             layer_id: Layer ID to filter by
-            
+
         Returns:
             List of relevant history entries (oldest first)
         """
@@ -428,17 +428,17 @@ class HistoryService:
             if layer_id in entry.layer_ids:
                 entries.append(entry)
         return entries
-    
+
     def get_or_create_history(self, layer_id: str) -> LayerHistory:
         """
         Get or create per-layer history wrapper (backward compatibility).
-        
+
         This method provides compatibility with the old HistoryManager API
         that returned FilterHistory objects per layer.
-        
+
         Args:
             layer_id: Layer ID
-            
+
         Returns:
             LayerHistory wrapper for this layer
         """
@@ -459,14 +459,14 @@ class HistoryService:
     ) -> None:
         """
         Push a global state that captures multiple layers.
-        
+
         This method creates a HistoryEntry that includes the source layer
         and all associated remote layers, allowing undo/redo across the
         entire filter operation.
-        
+
         v4.1.3: Fixed fallback logic to correctly extract per-layer expressions
         from global history entries.
-        
+
         Args:
             source_layer_id: ID of the source layer
             source_expression: Filter expression for source layer (CURRENT/NEW expression)
@@ -480,10 +480,10 @@ class HistoryService:
         """
         # Build list of all affected layer IDs
         all_layer_ids = [source_layer_id] + list(remote_layers.keys())
-        
+
         # Build previous_filters list with PREVIOUS state of all layers (for undo)
         previous_filters = []
-        
+
         if previous_expressions:
             # Use provided previous expressions (preferred - caller knows the true previous state)
             for layer_id in all_layer_ids:
@@ -493,12 +493,12 @@ class HistoryService:
         else:
             # Fallback: Query history (less reliable due to timing issues)
             # v4.1.3: Fixed to correctly extract per-layer expressions
-            
+
             for layer_id in all_layer_ids:
                 layer_entries = self.get_history_for_layer(layer_id)
                 if layer_entries:
                     last_entry = layer_entries[-1]
-                    
+
                     # Determine the expression for this specific layer
                     if layer_id in last_entry.layer_ids:
                         if layer_id == last_entry.layer_ids[0]:
@@ -516,11 +516,11 @@ class HistoryService:
                         prev_expr = ""
                 else:
                     prev_expr = ""
-                
+
                 previous_filters.append((layer_id, prev_expr))
-            
+
             logger.debug(f"Queried history for previous_expressions ({len(previous_filters)} layers)")
-        
+
         # Build metadata with feature counts
         full_metadata = metadata or {}
         full_metadata['source_feature_count'] = source_feature_count
@@ -528,7 +528,7 @@ class HistoryService:
             lid: {'expression': expr, 'feature_count': count}
             for lid, (expr, count) in remote_layers.items()
         }
-        
+
         # Create history entry
         entry = HistoryEntry.create(
             expression=source_expression,
@@ -537,10 +537,10 @@ class HistoryService:
             description=description or f"Global filter ({len(all_layer_ids)} layers)",
             metadata=full_metadata
         )
-        
+
         # Push to history
         self.push(entry)
-        
+
         logger.debug(
             f"HistoryService: Pushed global state for {len(all_layer_ids)} layers "
             f"(source: {source_layer_id})"
@@ -549,7 +549,7 @@ class HistoryService:
     def clear(self) -> int:
         """
         Clear all history.
-        
+
         Returns:
             Number of entries cleared
         """
@@ -557,14 +557,14 @@ class HistoryService:
         self._undo_stack.clear()
         self._redo_stack.clear()
         self._notify_change()
-        
+
         logger.debug(f"History: cleared {count} entries")
         return count
 
     def clear_redo(self) -> int:
         """
         Clear redo stack only.
-        
+
         Returns:
             Number of entries cleared
         """
@@ -574,12 +574,12 @@ class HistoryService:
         return count
 
     def set_on_change(
-        self, 
+        self,
         callback: Optional[Callable[['HistoryState'], None]]
     ) -> None:
         """
         Set or clear the change callback.
-        
+
         Args:
             callback: Callback function or None to clear
         """
@@ -601,10 +601,10 @@ class HistoryService:
     def set_max_depth(self, depth: int) -> None:
         """
         Change maximum history depth.
-        
+
         Note: Does not truncate existing entries beyond new depth.
         They will be removed as new entries are added.
-        
+
         Args:
             depth: New maximum depth
         """
@@ -618,7 +618,7 @@ class HistoryService:
     def serialize(self) -> Dict[str, Any]:
         """
         Serialize history for persistence.
-        
+
         Returns:
             Dictionary representation of history
         """
@@ -632,7 +632,7 @@ class HistoryService:
                 'description': entry.description,
                 'metadata': dict(entry.metadata),
             }
-        
+
         return {
             'undo_stack': [entry_to_dict(e) for e in self._undo_stack],
             'redo_stack': [entry_to_dict(e) for e in self._redo_stack],
@@ -642,7 +642,7 @@ class HistoryService:
     def deserialize(self, data: Dict[str, Any]) -> None:
         """
         Restore history from serialized data.
-        
+
         Args:
             data: Dictionary from serialize()
         """
@@ -656,7 +656,7 @@ class HistoryService:
                 description=d['description'],
                 metadata=tuple(sorted(d.get('metadata', {}).items())),
             )
-        
+
         self._max_depth = data.get('max_depth', 50)
         self._undo_stack = deque(
             [dict_to_entry(d) for d in data.get('undo_stack', [])],

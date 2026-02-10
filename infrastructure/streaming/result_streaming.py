@@ -12,10 +12,10 @@ Performance Benefits:
 - Configurable batch sizes
 
 Usage:
-    from ...infrastructure.streaming import StreamingExporter, StreamingConfig    
+    from ...infrastructure.streaming import StreamingExporter, StreamingConfig
     config = StreamingConfig(batch_size=5000)
     exporter = StreamingExporter(config)
-    
+
     exporter.export_layer_streaming(
         source_layer=layer,
         output_path='/path/to/output.gpkg',
@@ -25,7 +25,6 @@ Usage:
 """
 
 import os
-import logging
 from typing import Optional, Callable, Dict, Any, Iterator, List
 from dataclasses import dataclass
 import time
@@ -38,22 +37,22 @@ logger = get_logger(__name__)
 @dataclass
 class StreamingConfig:
     """Configuration for streaming export operations."""
-    
+
     # Batch size for feature processing
     batch_size: int = 5000
-    
+
     # Memory limit in MB (0 = unlimited)
     memory_limit_mb: int = 500
-    
+
     # Commit interval (features between commits)
     commit_interval: int = 10000
-    
+
     # Enable compression for output files
     enable_compression: bool = True
-    
+
     # Timeout per batch in seconds
     batch_timeout: int = 60
-    
+
     @classmethod
     def for_large_dataset(cls) -> 'StreamingConfig':
         """Config optimized for large datasets (> 100k features)."""
@@ -62,7 +61,7 @@ class StreamingConfig:
             memory_limit_mb=1000,
             commit_interval=25000
         )
-    
+
     @classmethod
     def for_memory_constrained(cls) -> 'StreamingConfig':
         """Config for memory-constrained environments."""
@@ -73,10 +72,10 @@ class StreamingConfig:
         )
 
 
-@dataclass 
+@dataclass
 class ExportProgress:
     """Progress information for streaming export."""
-    
+
     features_processed: int
     total_features: int
     bytes_written: int
@@ -84,14 +83,14 @@ class ExportProgress:
     estimated_remaining_ms: float
     current_batch: int
     total_batches: int
-    
+
     @property
     def percent_complete(self) -> float:
         """Get completion percentage."""
         if self.total_features <= 0:
             return 0.0
         return min(100.0, (self.features_processed / self.total_features) * 100)
-    
+
     @property
     def features_per_second(self) -> float:
         """Get processing rate."""
@@ -103,15 +102,15 @@ class ExportProgress:
 class FeatureBatchIterator:
     """
     Iterator that yields features in batches.
-    
+
     Memory-efficient iteration over large feature sets by
     only loading one batch at a time.
     """
-    
+
     def __init__(self, layer, batch_size: int = 5000, request=None):
         """
         Initialize batch iterator.
-        
+
         Args:
             layer: QgsVectorLayer to iterate
             batch_size: Number of features per batch
@@ -122,28 +121,28 @@ class FeatureBatchIterator:
         self.request = request
         self.total_features = layer.featureCount()
         self._current_batch = 0
-    
+
     def __iter__(self) -> Iterator[List]:
         """Iterate over feature batches."""
         from qgis.core import QgsFeatureRequest
-        
+
         request = self.request or QgsFeatureRequest()
         features = self.layer.getFeatures(request)
-        
+
         batch = []
         for feature in features:
             batch.append(feature)
-            
+
             if len(batch) >= self.batch_size:
                 self._current_batch += 1
                 yield batch
                 batch = []
-        
+
         # Yield remaining features
         if batch:
             self._current_batch += 1
             yield batch
-    
+
     @property
     def estimated_batches(self) -> int:
         """Estimate total number of batches."""
@@ -155,15 +154,15 @@ class FeatureBatchIterator:
 class StreamingExporter:
     """
     Streaming exporter for large datasets.
-    
+
     Processes features in configurable batches to minimize memory usage
     while maintaining good performance.
-    
+
     Performance:
     - Standard export (100k features): 500MB memory
     - Streaming export (100k features, 5k batches): 50MB memory
     - Memory reduction: ~90%
-    
+
     Example:
         >>> exporter = StreamingExporter(StreamingConfig(batch_size=5000))
         >>> result = exporter.export_layer_streaming(
@@ -174,18 +173,18 @@ class StreamingExporter:
         ... )
         >>> print(f"Exported {result['features_exported']} features")
     """
-    
+
     def __init__(self, config: Optional[StreamingConfig] = None):
         """
         Initialize streaming exporter.
-        
+
         Args:
             config: Streaming configuration (defaults to StreamingConfig())
         """
         self.config = config or StreamingConfig()
         self._canceled = False
         logger.info(f"✓ StreamingExporter initialized (batch_size: {self.config.batch_size})")
-    
+
     def export_layer_streaming(
         self,
         source_layer,
@@ -197,7 +196,7 @@ class StreamingExporter:
     ) -> Dict[str, Any]:
         """
         Export layer features using streaming/batching.
-        
+
         Args:
             source_layer: QgsVectorLayer to export
             output_path: Path for output file
@@ -205,7 +204,7 @@ class StreamingExporter:
             field_mapping: Optional field name mapping
             progress_callback: Callback for progress updates
             cancel_check: Callback to check for cancellation
-        
+
         Returns:
             Dict with export results:
             - features_exported: Number of features exported
@@ -216,14 +215,14 @@ class StreamingExporter:
         """
         self._canceled = False
         start_time = time.time()
-        
+
         total_features = source_layer.featureCount()
         features_exported = 0
         bytes_written = 0
-        
+
         logger.info(f"🚀 Starting streaming export: {total_features:,} features → {output_path}")
         logger.info(f"  Format: {format}, Batch size: {self.config.batch_size}")
-        
+
         try:
             # Import QGIS writer
             from qgis.core import (
@@ -231,7 +230,7 @@ class StreamingExporter:
                 QgsCoordinateTransformContext,
                 QgsFields
             )
-            
+
             # Determine driver name
             driver_map = {
                 'gpkg': 'GPKG',
@@ -245,36 +244,36 @@ class StreamingExporter:
                 'gml': 'GML'
             }
             driver_name = driver_map.get(format.lower(), format.upper())
-            
+
             # Create batch iterator
             batch_iterator = FeatureBatchIterator(
                 source_layer,
                 self.config.batch_size
             )
-            
+
             total_batches = batch_iterator.estimated_batches
             current_batch = 0
-            
+
             # Setup writer options
             transform_context = QgsCoordinateTransformContext()
-            
+
             # Create writer with first batch to initialize file
             writer = None
-            
+
             for batch in batch_iterator:
                 current_batch += 1
-                
+
                 # Check for cancellation
                 if cancel_check and cancel_check():
                     self._canceled = True
                     logger.warning("⚠️ Export canceled")
                     break
-                
+
                 # Create writer on first batch
                 if writer is None:
                     # Get fields from layer
                     fields = source_layer.fields()
-                    
+
                     # Apply field mapping if provided
                     if field_mapping:
                         # Create new QgsFields with mapped names
@@ -284,12 +283,12 @@ class StreamingExporter:
                                 field.setName(field_mapping[field.name()])
                             mapped_fields.append(field)
                         fields = mapped_fields
-                    
+
                     # Create save options
                     options = QgsVectorFileWriter.SaveVectorOptions()
                     options.driverName = driver_name
                     options.fileEncoding = 'UTF-8'
-                    
+
                     # Create writer
                     writer = QgsVectorFileWriter.create(
                         output_path,
@@ -299,7 +298,7 @@ class StreamingExporter:
                         transform_context,
                         options
                     )
-                    
+
                     if writer.hasError() != QgsVectorFileWriter.NoError:
                         error_msg = writer.errorMessage()
                         logger.error(f"Failed to create writer: {error_msg}")
@@ -310,25 +309,25 @@ class StreamingExporter:
                             'success': False,
                             'error': error_msg
                         }
-                
+
                 # Write batch features
                 for feature in batch:
                     if writer.addFeature(feature):
                         features_exported += 1
                     else:
                         logger.warning(f"Failed to write feature {feature.id()}")
-                
+
                 # Progress callback
                 if progress_callback:
                     elapsed_ms = (time.time() - start_time) * 1000
-                    
+
                     if features_exported > 0:
                         ms_per_feature = elapsed_ms / features_exported
                         remaining = total_features - features_exported
                         estimated_remaining = remaining * ms_per_feature
                     else:
                         estimated_remaining = 0
-                    
+
                     progress = ExportProgress(
                         features_processed=features_exported,
                         total_features=total_features,
@@ -339,25 +338,25 @@ class StreamingExporter:
                         total_batches=total_batches
                     )
                     progress_callback(progress)
-                
+
                 logger.debug(f"Batch {current_batch}/{total_batches}: {features_exported:,} features exported")
-            
+
             # Cleanup
             if writer:
                 del writer
-            
+
             # Get final file size
             if os.path.exists(output_path):
                 bytes_written = os.path.getsize(output_path)
-            
+
             elapsed_ms = (time.time() - start_time) * 1000
-            
+
             if self._canceled:
                 logger.warning(f"Export canceled: {features_exported:,} features exported before cancellation")
             else:
                 logger.info(f"✓ Export complete: {features_exported:,} features in {elapsed_ms:.0f}ms")
                 logger.info(f"  Output size: {bytes_written / 1024 / 1024:.2f} MB")
-            
+
             return {
                 'features_exported': features_exported,
                 'bytes_written': bytes_written,
@@ -366,11 +365,11 @@ class StreamingExporter:
                 'canceled': self._canceled,
                 'error': None
             }
-            
+
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
             logger.error(f"Export failed: {e}")
-            
+
             return {
                 'features_exported': features_exported,
                 'bytes_written': bytes_written,
@@ -378,35 +377,35 @@ class StreamingExporter:
                 'success': False,
                 'error': str(e)
             }
-    
+
     def should_use_streaming(self, layer) -> bool:
         """
         Determine if streaming should be used for a layer.
-        
+
         Args:
             layer: QgsVectorLayer to check
-        
+
         Returns:
             bool: True if streaming recommended
         """
         feature_count = layer.featureCount()
-        
+
         # Streaming recommended for:
         # - Large datasets (> 50k features)
         # - Memory-constrained config
         if feature_count > 50000:
             return True
-        
+
         if self.config.memory_limit_mb < 500 and feature_count > 10000:
             return True
-        
+
         return False
-    
+
     def cancel(self) -> None:
         """Cancel the current export operation."""
         self._canceled = True
         logger.info("Export cancellation requested")
-    
+
     def was_canceled(self) -> bool:
         """Check if export was canceled."""
         return self._canceled
@@ -415,11 +414,11 @@ class StreamingExporter:
 def estimate_export_memory(feature_count: int, avg_geometry_vertices: int = 100) -> int:
     """
     Estimate memory usage for a full export.
-    
+
     Args:
         feature_count: Number of features
         avg_geometry_vertices: Average geometry vertices per feature
-    
+
     Returns:
         int: Estimated memory in bytes
     """
@@ -427,6 +426,6 @@ def estimate_export_memory(feature_count: int, avg_geometry_vertices: int = 100)
     # - Feature overhead: ~200 bytes
     # - Geometry per vertex: ~16 bytes (x, y as doubles)
     # - Attributes: ~500 bytes average
-    
+
     feature_size = 200 + (avg_geometry_vertices * 16) + 500
     return feature_count * feature_size

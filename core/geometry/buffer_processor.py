@@ -23,10 +23,9 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, List
 
 from qgis.core import (
-    QgsCoordinateReferenceSystem,
-    QgsExpression,
     QgsExpressionContext,
     QgsFeature,
+    QgsFeatureRequest,
     QgsGeometry,
     QgsProcessing,
     QgsProcessingContext,
@@ -55,11 +54,11 @@ logger = logging.getLogger('FilterMate.Core.Geometry.Buffer')
 @dataclass
 class BufferConfig:
     """Configuration for buffer operations."""
-    
+
     buffer_type: int = 0  # 0=Round, 1=Flat, 2=Square
     buffer_segments: int = 5  # Number of segments for round caps
     dissolve: bool = True  # Dissolve overlapping buffers
-    
+
     def __post_init__(self):
         """Validate configuration."""
         if self.buffer_segments < 1:
@@ -74,11 +73,11 @@ def evaluate_buffer_distance(
 ) -> float:
     """
     Evaluate buffer distance from parameter (handles expressions).
-    
+
     Args:
         layer: Layer to use for expression evaluation
         buffer_param: QgsProperty (expression) or float value
-        
+
     Returns:
         float: Evaluated buffer distance (0 if cannot be evaluated)
     """
@@ -96,14 +95,14 @@ def evaluate_buffer_distance(
 def create_memory_layer_for_buffer(layer: QgsVectorLayer) -> QgsVectorLayer:
     """
     Create empty memory layer for buffered features.
-    
+
     Buffers ALWAYS produce polygon geometries regardless of source type
     (Point/Line/Polygon). Uses MultiPolygon to handle both single and
     multi-part results.
-    
+
     Args:
         layer: Source layer for CRS
-        
+
     Returns:
         QgsVectorLayer: Empty memory layer configured for MultiPolygon
     """
@@ -123,18 +122,18 @@ def buffer_all_features(
 ) -> Tuple[List[QgsGeometry], int, int, int]:
     """
     Buffer all features from layer.
-    
+
     STABILITY FIX v2.3.9: Uses safe_buffer wrapper to prevent
     access violations on certain machines.
-    
+
     NOTE: Negative buffers (erosion) may produce empty geometries if the buffer
     distance is larger than the feature width. This is expected behavior.
-    
+
     Args:
         layer: Source layer
         buffer_dist: Buffer distance (can be negative for erosion)
         buffer_segments: Number of segments for round caps (default: 5)
-        
+
     Returns:
         tuple: (geometries, valid_count, invalid_count, eroded_count)
             - geometries: List of buffered QgsGeometry objects
@@ -146,33 +145,33 @@ def buffer_all_features(
     valid_features = 0
     invalid_features = 0
     eroded_features = 0  # Count features that eroded completely
-    
+
     is_negative_buffer = buffer_dist < 0
     logger.debug(
         f"Buffering features: layer type={layer.geometryType()}, "
         f"wkb type={layer.wkbType()}, buffer_dist={buffer_dist}"
     )
-    
+
     if is_negative_buffer:
         logger.info(
             f"⚠️ Applying NEGATIVE BUFFER (erosion) of {buffer_dist}m - "
-            f"some features may disappear completely"
+            "some features may disappear completely"
         )
-    
+
     for idx, feature in enumerate(layer.getFeatures()):
         geom = feature.geometry()
-        
+
         # STABILITY FIX: Use validate_geometry for proper checking
         if not validate_geometry(geom):
             logger.debug(f"Feature {idx}: Invalid or empty geometry, skipping")
             invalid_features += 1
             continue
-        
+
         try:
             # STABILITY FIX: Use safe_buffer wrapper instead of direct buffer()
             # This handles invalid geometries gracefully and prevents GEOS crashes
             buffered_geom = safe_buffer(geom, buffer_dist, buffer_segments)
-            
+
             if buffered_geom is not None:
                 geometries.append(buffered_geom)
                 valid_features += 1
@@ -185,11 +184,11 @@ def buffer_all_features(
                 else:
                     logger.warning(f"Feature {idx}: safe_buffer returned None")
                     invalid_features += 1
-                
+
         except Exception as buffer_error:
             logger.warning(f"Feature {idx}: Buffer operation failed: {buffer_error}")
             invalid_features += 1
-    
+
     # Enhanced logging for negative buffers
     if is_negative_buffer and eroded_features > 0:
         logger.info(
@@ -199,13 +198,13 @@ def buffer_all_features(
         if valid_features == 0:
             logger.warning(
                 f"⚠️ TOUTES les features ont été érodées par le buffer de {buffer_dist}m! "
-                f"Réduisez la distance du buffer."
+                "Réduisez la distance du buffer."
             )
     else:
         logger.debug(
             f"Manual buffer results: {valid_features} valid, {invalid_features} invalid features"
         )
-    
+
     return geometries, valid_features, invalid_features, eroded_features
 
 
@@ -216,37 +215,37 @@ def dissolve_and_add_to_layer(
 ) -> QgsVectorLayer:
     """
     Dissolve geometries and add to memory layer.
-    
+
     STABILITY FIX v2.3.9: Uses geometry_safety module to prevent
     access violations when handling GeometryCollections.
-    
+
     Args:
         geometries: List of buffered geometries
         buffered_layer: Target memory layer
         verify_spatial_index_fn: Optional callback to create spatial index
             Signature: verify_spatial_index_fn(layer, layer_name)
-            
+
     Returns:
         QgsVectorLayer: Layer with dissolved geometry added
     """
     # Filter out invalid geometries first (STABILITY FIX)
     valid_geometries = [g for g in geometries if validate_geometry(g)]
-    
+
     if not valid_geometries:
         logger.warning("dissolve_and_add_to_layer: No valid geometries to dissolve")
         return buffered_layer
-    
+
     # Dissolve all geometries into one using safe wrapper
     dissolved_geom = safe_unary_union(valid_geometries)
-    
+
     if dissolved_geom is None:
         logger.error("dissolve_and_add_to_layer: safe_unary_union returned None")
         return buffered_layer
-    
+
     # STABILITY FIX: Use safe conversion to MultiPolygon
     final_type = get_geometry_type_name(dissolved_geom)
     logger.debug(f"Dissolved geometry type: {final_type}")
-    
+
     if 'GeometryCollection' in final_type or 'Polygon' not in final_type:
         logger.info(f"Converting {final_type} to MultiPolygon using safe wrapper")
         converted = safe_convert_to_multi_polygon(dissolved_geom)
@@ -269,12 +268,12 @@ def dissolve_and_add_to_layer(
             else:
                 logger.error("Could not extract any polygons from geometry")
                 return buffered_layer
-    
+
     # FINAL SAFETY CHECK: Ensure geometry is MultiPolygon before adding to layer
     if validate_geometry(dissolved_geom):
         final_type = get_geometry_type_name(dissolved_geom)
         logger.info(f"Final geometry type before adding: {final_type}")
-        
+
         # Ensure it's MultiPolygon (not single Polygon)
         if dissolved_geom.wkbType() == QgsWkbTypes.Polygon:
             # Convert single Polygon to MultiPolygon using safe wrapper
@@ -285,24 +284,24 @@ def dissolve_and_add_to_layer(
     else:
         logger.error("Final dissolved geometry is invalid")
         return buffered_layer
-    
+
     # Create feature with dissolved geometry
     feat = QgsFeature()
     feat.setGeometry(dissolved_geom)
-    
+
     provider = buffered_layer.dataProvider()
     success, _ = provider.addFeatures([feat])
     if not success:
         logger.error(
-            f"Failed to add feature to buffer layer. "
+            "Failed to add feature to buffer layer. "
             f"Geometry type: {get_geometry_type_name(dissolved_geom)}"
         )
     buffered_layer.updateExtents()
-    
+
     # Create spatial index for improved performance (if callback provided)
     if verify_spatial_index_fn:
         verify_spatial_index_fn(buffered_layer, "buffered_temp")
-    
+
     return buffered_layer
 
 
@@ -315,14 +314,14 @@ def create_buffered_memory_layer(
 ) -> QgsVectorLayer:
     """
     Manually buffer layer features and create memory layer (fallback method).
-    
+
     This is a fallback when qgis:buffer processing fails. It:
     1. Validates CRS (warns about geographic CRS)
     2. Evaluates buffer distance (handles expressions)
     3. Buffers all features individually
     4. Dissolves results into single geometry
     5. Returns memory layer with buffered geometry
-    
+
     Args:
         layer: Input layer
         buffer_distance: QgsProperty (expression) or float value
@@ -330,10 +329,10 @@ def create_buffered_memory_layer(
         verify_spatial_index_fn: Optional callback to create spatial index
         warning_callback: Optional callback for user warnings (erosion, etc.)
             Signature: warning_callback(message: str)
-            
+
     Returns:
         QgsVectorLayer: Memory layer with buffered geometries
-        
+
     Raises:
         Exception: If source layer has no features
     """
@@ -342,41 +341,41 @@ def create_buffered_memory_layer(
         f"Manual buffer: Layer has {feature_count} features, "
         f"geomType={layer.geometryType()}, wkbType={layer.wkbType()}"
     )
-    
+
     # CRS diagnostic
     crs = layer.crs()
     is_geographic = crs.isGeographic()
     logger.info(f"Manual buffer CRS: {crs.authid()}, isGeographic={is_geographic}")
-    
+
     if feature_count == 0:
         raise Exception("Cannot buffer layer: source layer has no features")
-    
+
     # Evaluate buffer distance
     buffer_dist = evaluate_buffer_distance(layer, buffer_distance)
     logger.debug(f"Manual buffer distance: {buffer_dist}")
-    
+
     # Warn about geographic CRS
     if is_geographic and buffer_dist > 1:
         logger.warning(
             f"⚠️ Manual buffer with geographic CRS ({crs.authid()}) and distance {buffer_dist}°\n"
             f"   This is {buffer_dist * 111:.1f}km at equator - likely too large!"
         )
-    
+
     # Create memory layer
     buffered_layer = create_memory_layer_for_buffer(layer)
-    
+
     # Buffer all features
     geometries, valid_features, invalid_features, eroded_features = buffer_all_features(
         layer, buffer_dist, buffer_segments
     )
-    
+
     # MODIFIED: Accept result even with 0 valid geometries (return empty layer instead of error)
     if not geometries:
         # Enhanced warning message for negative buffers
         if buffer_dist < 0:
             msg = (
                 f"Le buffer négatif de {buffer_dist}m a complètement érodé toutes les géométries. "
-                f"Réduisez la distance du buffer."
+                "Réduisez la distance du buffer."
             )
             logger.warning(
                 f"⚠️ Buffer négatif ({buffer_dist}m) a complètement érodé toutes les géométries. "
@@ -388,12 +387,12 @@ def create_buffered_memory_layer(
                 warning_callback(msg)
         else:
             logger.warning(
-                f"⚠️ Manual buffer produced no geometries. "
+                "⚠️ Manual buffer produced no geometries. "
                 f"Total: {feature_count}, Valid: {valid_features}, Invalid: {invalid_features}"
             )
         # Return empty layer instead of raising exception
         return buffered_layer
-    
+
     # Dissolve and add to layer if we have geometries
     return dissolve_and_add_to_layer(geometries, buffered_layer, verify_spatial_index_fn)
 
@@ -406,23 +405,23 @@ def apply_qgis_buffer(
 ) -> QgsVectorLayer:
     """
     Apply buffer using QGIS processing algorithm.
-    
+
     This is the preferred buffer method. Uses qgis:buffer algorithm with:
     - Automatic dissolve
     - Configurable buffer type (round/flat/square)
     - GeometryCollection to MultiPolygon conversion
     - Geographic CRS validation
-    
+
     Args:
         layer: Input layer
         buffer_distance: QgsProperty (expression) or float value
         config: BufferConfig with buffer_type, buffer_segments, dissolve
         convert_geometry_collection_fn: Optional callback to convert result
             Signature: convert_geometry_collection_fn(layer) -> layer
-            
+
     Returns:
         QgsVectorLayer: Buffered layer (temporary)
-        
+
     Raises:
         Exception: If buffer operation fails or geographic CRS detected with large value
     """
@@ -430,7 +429,7 @@ def apply_qgis_buffer(
     crs = layer.crs()
     is_geographic = crs.isGeographic()
     crs_units = crs.mapUnits()
-    
+
     # Log layer info with enhanced CRS diagnostics
     logger.info(
         f"QGIS buffer: {layer.featureCount()} features, "
@@ -440,7 +439,7 @@ def apply_qgis_buffer(
         f"buffer_distance: {buffer_distance}"
     )
     logger.info(f"CRS diagnostics: isGeographic={is_geographic}, mapUnits={crs_units}")
-    
+
     # CRITICAL: Check if CRS is geographic with large buffer value
     if is_geographic:
         # Evaluate buffer distance to get actual value
@@ -451,23 +450,23 @@ def apply_qgis_buffer(
                 context = QgsExpressionContext()
                 context.setFeature(features[0])
                 eval_distance = buffer_distance.value(context, 0)
-        
+
         if eval_distance and float(eval_distance) > 1:
             logger.warning(
-                f"⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
+                "⚠️ GEOGRAPHIC CRS DETECTED with large buffer value!\n"
                 f"  CRS: {crs.authid()} (units: degrees)\n"
                 f"  Buffer: {eval_distance} DEGREES (this is likely wrong!)\n"
                 f"  → A buffer of {eval_distance}° = ~{float(eval_distance) * 111}km at equator\n"
-                f"  → This will likely fail or create invalid geometries\n"
-                f"  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
+                "  → This will likely fail or create invalid geometries\n"
+                "  SOLUTION: Reproject layer to a projected CRS (e.g., EPSG:3857, EPSG:2154) first"
             )
             raise Exception(
                 f"Cannot apply buffer: Geographic CRS detected ({crs.authid()}) with buffer value {eval_distance}. "
-                f"Buffer units would be DEGREES, not meters. "
-                f"Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
-                f"or EPSG:2154 Lambert 93 for France) before applying buffer."
+                "Buffer units would be DEGREES, not meters. "
+                "Please reproject your layer to a projected coordinate system (e.g., EPSG:3857 Web Mercator, "
+                "or EPSG:2154 Lambert 93 for France) before applying buffer."
             )
-    
+
     # Apply buffer with dissolve
     # CRITICAL: Configure to skip invalid geometries instead of failing
     alg_params = {
@@ -480,32 +479,32 @@ def apply_qgis_buffer(
         'SEGMENTS': int(config.buffer_segments),
         'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
     }
-    
+
     logger.debug(f"Calling processing.run('qgis:buffer') with params: {alg_params}")
-    
+
     # CRITICAL: Configure processing context to skip invalid geometries
     context = QgsProcessingContext()
     context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
     feedback = QgsProcessingFeedback()
-    
+
     result = processing.run(
-        'qgis:buffer', 
-        alg_params, 
-        context=context, 
+        'qgis:buffer',
+        alg_params,
+        context=context,
         feedback=feedback
     )
     buffered_layer = result['OUTPUT']
-    
+
     # CRITICAL FIX: Convert GeometryCollection to MultiPolygon
-    # This prevents "Impossible d'ajouter l'objet avec une géométrie de type 
+    # This prevents "Impossible d'ajouter l'objet avec une géométrie de type
     # GeometryCollection à une couche de type MultiPolygon" errors when using
     # the buffer result for spatial operations on typed GPKG layers
     if convert_geometry_collection_fn:
         buffered_layer = convert_geometry_collection_fn(buffered_layer)
-    
+
     # Create spatial index
     processing.run('qgis:createspatialindex', {"INPUT": buffered_layer})
-    
+
     return buffered_layer
 
 
@@ -518,15 +517,15 @@ def simplify_buffer_result(
 ) -> QgsVectorLayer:
     """
     Simplify the polygon(s) resulting from buffer operations.
-    
+
     EPIC-1 Phase E7.5: Extracted from filter_task.py _simplify_buffer_result.
-    
+
     v2.8.6: Reduces vertex count after buffer operations,
     particularly useful for complex polygons from negative/positive buffer sequences.
-    
-    Uses topology-preserving simplification (Douglas-Peucker) to maintain polygon 
+
+    Uses topology-preserving simplification (Douglas-Peucker) to maintain polygon
     validity while reducing complexity.
-    
+
     Args:
         layer: QgsVectorLayer with buffered polygon(s)
         buffer_distance: Original buffer distance (used to calculate tolerance).
@@ -535,9 +534,9 @@ def simplify_buffer_result(
         tolerance: Base simplification tolerance in map units
         verify_spatial_index_fn: Optional callback to create spatial index
             Signature: verify_spatial_index_fn(layer, layer_name)
-            
+
     Returns:
-        QgsVectorLayer: Layer with simplified geometries, or original if 
+        QgsVectorLayer: Layer with simplified geometries, or original if
                         simplification fails/disabled
     """
     from qgis.core import (
@@ -547,15 +546,15 @@ def simplify_buffer_result(
         QgsFeature,
         QgsWkbTypes
     )
-    
+
     if not auto_simplify:
         logger.debug("Post-buffer simplification disabled")
         return layer
-    
+
     # Validate input
     if layer is None or not layer.isValid() or layer.featureCount() == 0:
         return layer
-    
+
     # Evaluate buffer distance if it's a QgsProperty
     buffer_dist = buffer_distance
     if isinstance(buffer_distance, QgsProperty):
@@ -564,12 +563,12 @@ def simplify_buffer_result(
             context = QgsExpressionContext()
             context.setFeature(features[0])
             buffer_dist = buffer_distance.value(context, 0)
-    
+
     try:
         buffer_dist = abs(float(buffer_dist)) if buffer_dist else 0
     except (ValueError, TypeError):
         buffer_dist = 0
-    
+
     # Adjust tolerance based on buffer distance (larger buffers can use larger tolerance)
     # Use 1% of buffer distance as base, but at least the configured minimum
     if buffer_dist > 0:
@@ -578,16 +577,16 @@ def simplify_buffer_result(
         adaptive_tolerance = min(adaptive_tolerance, buffer_dist * 0.05)
     else:
         adaptive_tolerance = tolerance
-    
+
     # Check if CRS is geographic (degrees) - need to convert tolerance
     crs = layer.crs()
     if crs.isGeographic():
         # Convert meters to degrees (approximate: 1 degree ≈ 111km at equator)
         adaptive_tolerance = adaptive_tolerance / 111000.0
         logger.debug(f"Geographic CRS detected, converted tolerance to degrees: {adaptive_tolerance}")
-    
+
     logger.info(f"🔧 Simplifying buffer result: tolerance={adaptive_tolerance:.6f} ({'degrees' if crs.isGeographic() else 'meters'})")
-    
+
     try:
         # Count vertices before simplification
         vertices_before = 0
@@ -597,7 +596,7 @@ def simplify_buffer_result(
                 # Count vertices in geometry
                 for part in geom.parts():
                     vertices_before += len(list(part.vertices()))
-        
+
         # Create new memory layer for simplified geometries
         fields = layer.fields()
         simplified_layer = QgsMemoryProviderUtils.createMemoryLayer(
@@ -606,23 +605,23 @@ def simplify_buffer_result(
             QgsWkbTypes.MultiPolygon,
             crs
         )
-        
+
         if not simplified_layer.isValid():
             logger.warning("Failed to create simplified layer, returning original")
             return layer
-        
+
         # Process each feature
         simplified_features = []
         vertices_after = 0
-        
+
         for feature in layer.getFeatures():
             geom = feature.geometry()
             if geom is None or geom.isEmpty():
                 continue
-            
+
             # Simplify geometry using Douglas-Peucker algorithm
             simplified_geom = geom.simplify(adaptive_tolerance)
-            
+
             # Validate simplified geometry
             if simplified_geom is None or simplified_geom.isEmpty():
                 logger.debug("Simplification produced empty geometry, keeping original")
@@ -635,34 +634,34 @@ def simplify_buffer_result(
                 else:
                     logger.debug("Simplified geometry invalid and could not be repaired, keeping original")
                     simplified_geom = geom
-            
+
             # Count vertices in simplified geometry
             for part in simplified_geom.parts():
                 vertices_after += len(list(part.vertices()))
-            
+
             # Create feature with simplified geometry
             new_feature = QgsFeature(feature)
             new_feature.setGeometry(simplified_geom)
             simplified_features.append(new_feature)
-        
+
         # Add features to layer
         if simplified_features:
             simplified_layer.dataProvider().addFeatures(simplified_features)
             simplified_layer.updateExtents()
-            
+
             # Create spatial index if callback provided
             if verify_spatial_index_fn:
                 verify_spatial_index_fn(simplified_layer, "simplified_buffer")
-            
+
             # Log simplification statistics
             reduction_pct = ((vertices_before - vertices_after) / vertices_before * 100) if vertices_before > 0 else 0
             logger.info(f"✓ Buffer simplified: {vertices_before:,} → {vertices_after:,} vertices ({reduction_pct:.1f}% reduction)")
-            
+
             return simplified_layer
         else:
             logger.warning("No features after simplification, returning original")
             return layer
-            
+
     except Exception as e:
         logger.warning(f"Post-buffer simplification failed: {e}, returning original layer")
         return layer

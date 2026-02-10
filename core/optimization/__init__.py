@@ -42,7 +42,7 @@ Migration History:
     - v4.1.0-beta.2: Added MultiStepFilterOptimizer (Phase 2)
 """
 
-from .combined_query_optimizer import (
+from .combined_query_optimizer import (  # noqa: F401
     OptimizationType,
     MaterializedViewInfo,
     FidListInfo,
@@ -57,21 +57,21 @@ from .combined_query_optimizer import (
     optimize_for_backend
 )
 
-from .auto_backend_selector import (
+from .auto_backend_selector import (  # noqa: F401
     AutoBackendSelector,
     BackendRecommendation,
     BackendType,
     get_auto_backend_selector
 )
 
-from .multi_step_filter import (
+from .multi_step_filter import (  # noqa: F401
     MultiStepFilterOptimizer,
     FilterStep,
     get_multi_step_optimizer
 )
 
 # Auto Optimizer (v4.1.0 migrated from before_migration)
-from .auto_optimizer import (
+from .auto_optimizer import (  # noqa: F401
     AUTO_OPTIMIZER_AVAILABLE,
     AutoOptimizer,
     LayerAnalyzer,

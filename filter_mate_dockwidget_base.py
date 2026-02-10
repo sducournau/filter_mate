@@ -330,7 +330,7 @@ class Ui_FilterMateDockWidgetBase(object):
         font.setStyleStrategy(QtGui.QFont.PreferDefault)
         self.mGroupBox_exploring_single_selection.setFont(font)
         self.mGroupBox_exploring_single_selection.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.mGroupBox_exploring_single_selection.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.mGroupBox_exploring_single_selection.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTrailing | QtCore.Qt.AlignVCenter)
         self.mGroupBox_exploring_single_selection.setFlat(True)
         self.mGroupBox_exploring_single_selection.setCheckable(True)
         self.mGroupBox_exploring_single_selection.setChecked(True)
@@ -409,7 +409,7 @@ class Ui_FilterMateDockWidgetBase(object):
         font.setStyleStrategy(QtGui.QFont.PreferAntialias)
         self.mGroupBox_exploring_multiple_selection.setFont(font)
         self.mGroupBox_exploring_multiple_selection.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self.mGroupBox_exploring_multiple_selection.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.mGroupBox_exploring_multiple_selection.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTrailing | QtCore.Qt.AlignVCenter)
         self.mGroupBox_exploring_multiple_selection.setFlat(True)
         self.mGroupBox_exploring_multiple_selection.setCheckable(True)
         self.mGroupBox_exploring_multiple_selection.setChecked(False)
@@ -1429,7 +1429,7 @@ class Ui_FilterMateDockWidgetBase(object):
         self.verticalLayout_configurationPanel.setSpacing(2)
         self.verticalLayout_configurationPanel.setObjectName("verticalLayout_configurationPanel")
         self.buttonBox = QtWidgets.QDialogButtonBox(self.CONFIGURATION)
-        self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+        self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok)
         self.buttonBox.setCenterButtons(True)
         self.buttonBox.setObjectName("buttonBox")
         self.verticalLayout_configurationPanel.addWidget(self.buttonBox)
@@ -1590,6 +1590,8 @@ class Ui_FilterMateDockWidgetBase(object):
         self.pushButton_action_undo_filter.setStatusTip(_translate("FilterMateDockWidgetBase", "Reset"))
         self.pushButton_action_undo_filter.setWhatsThis(_translate("FilterMateDockWidgetBase", "Reset"))
         self.pushButton_action_export.setToolTip(_translate("FilterMateDockWidgetBase", "Export"))
+
+
 from qgscheckablecombobox import QgsCheckableComboBox
 from qgscollapsiblegroupbox import QgsCollapsibleGroupBox
 from qgsdoublespinbox import QgsDoubleSpinBox

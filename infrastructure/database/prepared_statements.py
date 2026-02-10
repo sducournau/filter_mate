@@ -8,7 +8,7 @@ Supports PostgreSQL (named prepared statements) and Spatialite (parameterized qu
 Location: infrastructure/database/prepared_statements.py (Hexagonal Architecture)
 
 Usage:
-    from ...infrastructure.database import create_prepared_statements    
+    from ...infrastructure.database import create_prepared_statements
     ps_manager = create_prepared_statements(connection, 'postgresql')
     ps_manager.insert_subset_history(...)
 
@@ -16,31 +16,29 @@ Author: FilterMate Team
 Date: January 2026
 """
 import logging
-import uuid
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Any
 
 logger = logging.getLogger('FilterMate.PreparedStatements')
 
 
 class PreparedStatementManager(ABC):
     """Base class for prepared statement managers."""
-    
+
     def __init__(self, connection):
         """
         Initialize prepared statement manager.
-        
+
         Args:
             connection: Database connection (psycopg2 or sqlite3)
         """
         self.connection = connection
         self._prepared = False
-    
+
     @abstractmethod
     def prepare(self) -> bool:
         """Prepare statements. Returns True if successful."""
-        pass
-    
+
     @abstractmethod
     def insert_subset_history(
         self,
@@ -52,34 +50,31 @@ class PreparedStatementManager(ABC):
         subset_string: str
     ) -> bool:
         """Insert subset history record."""
-        pass
-    
+
     @abstractmethod
     def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
         """
         Delete subset history records for a layer.
-        
+
         Args:
             project_uuid: Project UUID
             layer_id: Layer ID
-        
+
         Returns:
             True if successful, False otherwise
         """
-        pass
-    
+
     def close(self):
         """Close/deallocate prepared statements."""
-        pass
 
 
 class PostgreSQLPreparedStatements(PreparedStatementManager):
     """PostgreSQL prepared statement manager using named prepared statements."""
-    
+
     def __init__(self, connection):
         super().__init__(connection)
         self._stmt_names = []
-    
+
     def prepare(self) -> bool:
         """Prepare PostgreSQL named statements."""
         try:
@@ -99,7 +94,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"Failed to prepare PostgreSQL statements: {e}")
             return False
-    
+
     def insert_subset_history(
         self,
         history_id: str,
@@ -122,15 +117,15 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"PostgreSQL prepared insert failed: {e}")
             return False
-    
+
     def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
         """
         Delete subset history records for a layer.
-        
+
         Args:
             project_uuid: Project UUID
             layer_id: Layer ID
-        
+
         Returns:
             True if successful
         """
@@ -146,7 +141,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"PostgreSQL delete_subset_history failed: {e}")
             return False
-    
+
     def close(self):
         """Deallocate prepared statements."""
         try:
@@ -160,11 +155,11 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
 
 class SpatialitePreparedStatements(PreparedStatementManager):
     """Spatialite prepared statement manager using parameterized queries."""
-    
+
     def __init__(self, connection):
         super().__init__(connection)
         self._insert_sql = None
-    
+
     def prepare(self) -> bool:
         """Prepare Spatialite parameterized queries."""
         try:
@@ -181,7 +176,7 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"Failed to prepare Spatialite statements: {e}")
             return False
-    
+
     def insert_subset_history(
         self,
         history_id: str,
@@ -203,15 +198,15 @@ class SpatialitePreparedStatements(PreparedStatementManager):
         except Exception as e:
             logger.warning(f"Spatialite prepared insert failed: {e}")
             return False
-    
+
     def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
         """
         Delete subset history records for a layer.
-        
+
         Args:
             project_uuid: Project UUID
             layer_id: Layer ID
-        
+
         Returns:
             True if successful
         """
@@ -231,11 +226,11 @@ class SpatialitePreparedStatements(PreparedStatementManager):
 
 class NullPreparedStatements(PreparedStatementManager):
     """Null object pattern for when prepared statements are not available."""
-    
+
     def prepare(self) -> bool:
         """No-op prepare."""
         return True
-    
+
     def insert_subset_history(
         self,
         history_id: str,
@@ -247,7 +242,7 @@ class NullPreparedStatements(PreparedStatementManager):
     ) -> bool:
         """Return False to indicate fallback to direct SQL should be used."""
         return False
-    
+
     def delete_subset_history(self, project_uuid: str, layer_id: str) -> bool:
         """Return False to indicate fallback to direct SQL should be used."""
         return False
@@ -259,11 +254,11 @@ def create_prepared_statements(
 ) -> PreparedStatementManager:
     """
     Factory function to create appropriate prepared statement manager.
-    
+
     Args:
         connection: Database connection (psycopg2 or sqlite3)
         provider_type: 'postgresql' or 'spatialite'
-    
+
     Returns:
         PreparedStatementManager instance
     """
@@ -274,7 +269,7 @@ def create_prepared_statements(
     else:
         logger.debug(f"Unknown provider type '{provider_type}', using null manager")
         return NullPreparedStatements(connection)
-    
+
     # Try to prepare statements
     if manager.prepare():
         logger.debug(f"Prepared statements initialized for {provider_type}")

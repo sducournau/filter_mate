@@ -7,18 +7,18 @@ Part of the Hexagonal Architecture refactoring.
 v4.1.0: Added legacy adapters for progressive migration.
 """
 
-from .factory import BackendFactory, BackendSelector, create_backend_factory
+from .factory import BackendFactory, BackendSelector, create_backend_factory  # noqa: F401
 
 # Re-export POSTGRESQL_AVAILABLE for compatibility
 try:
-    from .postgresql_availability import POSTGRESQL_AVAILABLE
+    from .postgresql_availability import POSTGRESQL_AVAILABLE  # noqa: F401
 except ImportError:
     # Default to True (QGIS native PostgreSQL always available)
     POSTGRESQL_AVAILABLE = True
 
 # v4.1.0: Legacy adapters for progressive migration
 try:
-    from .legacy_adapter import (
+    from .legacy_adapter import (  # noqa: F401
         get_legacy_adapter,
         LegacyPostgreSQLAdapter,
         LegacySpatialiteAdapter,
@@ -42,7 +42,7 @@ except ImportError:
 
 __all__ = [
     'BackendFactory',
-    'BackendSelector', 
+    'BackendSelector',
     'create_backend_factory',
     'POSTGRESQL_AVAILABLE',
     # v4.1.0: Legacy adapters
