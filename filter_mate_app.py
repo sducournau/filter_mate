@@ -28,7 +28,7 @@ except ImportError:
 from qgis.utils import iface
 
 import os.path
-from .config.config import init_env_vars
+from .config.config import init_env_vars, ENV_VARS
 import json
 
 # Core tasks (migrated from modules/tasks/)
