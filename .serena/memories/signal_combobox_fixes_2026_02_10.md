@@ -37,10 +37,33 @@ Layers not appearing in filtering and exporting comboboxes due to signal issues.
   2. `add_project_layer` now creates minimal metadata for raster layers
   3. Controllers already handled rasters in populate methods
 
-## Files Modified (6 total)
+## Files Modified (6 total + 2 in round 2)
 1. `adapters/filter_result_handler.py` - BUG 1: safety reset in except
 2. `filter_mate_app.py` - BUG 1: timestamp + stale flag check; BUG 5: raster passthrough
 3. `filter_mate_dockwidget.py` - BUG 1: `_filtering_in_progress_timestamp` init
 4. `filter_mate.py` - BUG 2: blockSignals in _handle_project_cleared
 5. `ui/managers/dockwidget_signal_manager.py` - BUG 3: cache sync; BUG 4: logging
 6. `core/tasks/layer_management_task.py` - BUG 5: raster layer support
+
+### Round 2 Fixes (2026-02-10)
+
+#### BUG 6 (CRITICAL): `ControllerIntegration._on_project_layers_ready()` missing widget state sync
+- **File**: `ui/controllers/integration.py`
+- **Cause**: `projectLayersReady` only connected to ControllerIntegration handler (not dockwidget's).
+  Handler was missing `filtering_layers_to_filter_state_changed()` and `_update_exploring_pages_availability()`
+  calls that were present in the dockwidget's unused `_on_project_layers_ready()`.
+- **Fix**: Added Step 5 with both calls at end of `_on_project_layers_ready()`.
+
+#### BUG 7 (MAJOR): `connect_widgets_signals()` in dockwidget swallowed all exceptions
+- **File**: `filter_mate_dockwidget.py`
+- **Cause**: `except Exception: pass` hid critical connection failures (BUG 4 fix only applied to signal manager)
+- **Fix**: Split to `except TypeError: pass` + `except Exception: logger.warning(...)` in both
+  `connect_widgets_signals()` and `disconnect_widgets_signals()`.
+
+#### BUG 8 (MAJOR): `current_layer_changed` deferred by `_plugin_busy` during init
+- **File**: `filter_mate_dockwidget.py`
+- **Cause**: In `get_project_layers_from_app()`, `_refresh_layer_specific_widgets()` called while
+  `_plugin_busy=True`. `current_layer_changed` checked this flag and deferred via QTimer(150ms).
+  Result: widgets not synced when `projectLayersReady` emitted.
+- **Fix**: Reset `self._plugin_busy = False` BEFORE calling `_refresh_layer_specific_widgets()`.
+  `_updating_layers` flag still prevents reentrance from `get_project_layers_from_app` itself.

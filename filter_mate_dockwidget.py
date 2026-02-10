@@ -936,6 +936,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             
             # Create the container
             self._dual_toolbox_container = DualToolBoxContainer(self)
+            self._dual_toolbox_container.hide()  # Not displayed - used only for signal bridge
             self._toolbox_bridge = self._dual_toolbox_container.get_bridge()
             
             # Connect bridge signals to dockwidget handlers
@@ -3157,24 +3158,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.warning(f"Could not adjust row spacing: {e}")
 
     def _setup_backend_indicator(self):
-        """v4.0 S16: Create header with indicators."""
-        self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
-        self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setMinimumHeight(24)  # Enough for 18px indicators + padding
-        hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(4,2,4,2); hl.setSpacing(6)
-        hl.addSpacerItem(QtWidgets.QSpacerItem(0,0,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Minimum))
-        self.plugin_title_label = None
-        # v4.0: Softer "mousse" style with rounded corners
+        """v4.0 S16: Custom title bar with title + indicators."""
+        title_bar = QtWidgets.QWidget(self)
+        title_bar.setObjectName("custom_title_bar")
+        title_bar.setFixedHeight(28)
+        hl = QtWidgets.QHBoxLayout(title_bar)
+        hl.setContentsMargins(6, 2, 4, 2); hl.setSpacing(6)
+        # Title
+        self.plugin_title_label = QtWidgets.QLabel("FilterMate", title_bar)
+        self.plugin_title_label.setObjectName("plugin_title_label")
+        self.plugin_title_label.setStyleSheet("QLabel#plugin_title_label{font-size:9pt;font-weight:600;color:#2c3e50;}")
+        hl.addWidget(self.plugin_title_label)
+        hl.addSpacerItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+        # Indicators (mousse style)
         bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
-        # v4.0: Softer colors with better hover transitions
-        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator","★",bb+"background-color:#f5b041;",bb+"background-color:#f39c12;","★ Favorites\nClick to manage",self._on_favorite_indicator_clicked,32)
+        self.favorites_indicator_label = self._create_indicator_label(title_bar, "label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 32)
         hl.addWidget(self.favorites_indicator_label)
-        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator","OGR" if self.has_loaded_layers else "...",bb+"background-color:#5dade2;",bb+"background-color:#3498db;","Click to change backend",self._on_backend_indicator_clicked,38)
+        self.backend_indicator_label = self._create_indicator_label(title_bar, "label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked, 38)
         hl.addWidget(self.backend_indicator_label)
+        # Float/Close buttons with native platform icons
+        icon_size = QtCore.QSize(12, 12)
+        btn_style = "QPushButton{border:none;padding:2px;}QPushButton:hover{background-color:rgba(0,0,0,30);border-radius:3px;}"
+        btn_float = QtWidgets.QPushButton(title_bar)
+        btn_float.setFixedSize(20, 20); btn_float.setFlat(True)
+        btn_float.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_TitleBarNormalButton))
+        btn_float.setIconSize(icon_size); btn_float.setToolTip("Float/Dock")
+        btn_float.setStyleSheet(btn_style)
+        btn_float.clicked.connect(lambda: self.setFloating(not self.isFloating()))
+        hl.addWidget(btn_float)
+        btn_close = QtWidgets.QPushButton(title_bar)
+        btn_close.setFixedSize(20, 20); btn_close.setFlat(True)
+        btn_close.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_TitleBarCloseButton))
+        btn_close.setIconSize(icon_size); btn_close.setToolTip("Close")
+        btn_close.setStyleSheet(btn_style)
+        btn_close.clicked.connect(self.close)
+        hl.addWidget(btn_close)
+        # Store refs and apply custom title bar
+        self.frame_header = title_bar
         self.forced_backends = {}
-        if hasattr(self,'verticalLayout_8'): self.verticalLayout_8.insertWidget(0,self.frame_header)
-        
+        self.setTitleBarWidget(title_bar)
+        # Clear residual window icon from base class (prevents OS-level icon overlap)
+        from qgis.PyQt.QtGui import QIcon
+        self.setWindowIcon(QIcon())
+
         # v5.0: Setup global progress bar
         self._setup_global_progress_bar()
     
@@ -3206,9 +3232,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             }
         """)
         
-        # Insert after header (before frame_exploring)
+        # Insert at top of content (title bar is now separate via setTitleBarWidget)
         if hasattr(self, 'verticalLayout_8'):
-            self.verticalLayout_8.insertWidget(1, self._global_progress)
+            self.verticalLayout_8.insertWidget(0, self._global_progress)
         
         logger.debug("Global progress bar initialized")
     
@@ -3267,18 +3293,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._global_progress.setValue(0)
         self._global_progress.setFormat("%p%")
     
-    def _create_indicator_label(self, name, text, style, hover_style, tooltip, click_handler, min_width):
-        """v4.0 S16: Create indicator label with soft "mousse" style."""
-        lbl = ClickableLabel(self.frame_header)
-        lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # v4.0: Fixed height for proper text display with padding
-        lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
-        # CRITICAL: Enable the widget to receive mouse events
-        lbl.setEnabled(True)
-        lbl.setAttribute(Qt.WA_Hover, True)  # Enable hover events
-        lbl.set_click_handler(click_handler)
-        logger.debug(f"Created indicator {name}: enabled={lbl.isEnabled()}, visible={lbl.isVisible()}, handler={click_handler is not None}")
-        return lbl
+    def _create_indicator_label(self, parent, name, text, style, hover_style, tooltip, click_handler, min_width):
+        """v4.0 S16: Create indicator button with soft "mousse" style.
+
+        Uses QPushButton instead of QLabel so Qt recognizes it as interactive
+        inside a custom title bar widget (setTitleBarWidget).
+        """
+        btn = QtWidgets.QPushButton(parent)
+        btn.setObjectName(name); btn.setText(text); btn.setFlat(True)
+        btn.setStyleSheet(f"QPushButton#{name}{{{style}}}QPushButton#{name}:hover{{{hover_style}}}")
+        btn.setMinimumWidth(min_width); btn.setFixedHeight(18)
+        btn.setCursor(Qt.PointingHandCursor); btn.setToolTip(tooltip)
+        btn.clicked.connect(lambda checked=False: click_handler(None))
+        logger.debug(f"Created indicator {name}")
+        return btn
     
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController."""
@@ -3338,11 +3366,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(self.tr("★ {0} Favorites saved\nClick to apply or manage").format(cnt))
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QPushButton#label_favorites_indicator:hover{background-color:#d68910;}")
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip(self.tr("★ No favorites saved\nClick to add current filter"))
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QPushButton#label_favorites_indicator:hover{background-color:#d5dbdb;}")
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -5473,9 +5501,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
-                try: self.manageSignal([grp, w], 'connect')
-                except Exception:  # Signal may already be connected - expected
-                    pass
+                try:
+                    self.manageSignal([grp, w], 'connect')
+                except TypeError:
+                    pass  # Signal already connected - expected
+                except Exception as e:
+                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
+                    logger.warning(f"connect_widgets_signals: Failed to connect [{grp}][{w}]: {e}")
 
     def disconnect_widgets_signals(self):
         """Disconnect all widget signals from their handlers.
@@ -5490,9 +5522,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not self.widgets: return
         for grp in [g for g in self.widgets if g != 'QGIS']:
             for w in self.widgets[grp]:
-                try: self.manageSignal([grp, w], 'disconnect')
-                except Exception:  # Signal may already be disconnected - expected
-                    pass
+                try:
+                    self.manageSignal([grp, w], 'disconnect')
+                except TypeError:
+                    pass  # Signal already disconnected - expected
+                except Exception as e:
+                    # FIX 2026-02-10: Log unexpected errors instead of swallowing them
+                    logger.warning(f"disconnect_widgets_signals: Failed to disconnect [{grp}][{w}]: {e}")
 
     def force_reconnect_action_signals(self):
         """v4.0 Sprint 8: Ultra-simplified - force reconnect ACTION signals bypassing cache.
@@ -9469,12 +9505,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 self.force_reconnect_exploring_signals()
                 layer = self._determine_active_layer()
                 # FIX 2026-02-09: Set current_layer BEFORE emitting projectLayersReady
-                # _refresh_layer_specific_widgets → current_layer_changed is DEFERRED
-                # (_plugin_busy=True) so current_layer stays None at first load.
-                # The integration handler needs current_layer to populate filtering combobox.
                 if layer and self.current_layer is None:
                     self.current_layer = layer
                 self._activate_layer_ui()
+                # FIX 2026-02-10: Reset _plugin_busy BEFORE calling _refresh_layer_specific_widgets
+                # so that current_layer_changed runs synchronously instead of being deferred
+                # via QTimer(150ms). _updating_layers still prevents reentrance from
+                # get_project_layers_from_app itself.
+                self._plugin_busy = False
                 if layer: self._refresh_layer_specific_widgets(layer)
                 # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
                 logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers), current_layer={self.current_layer.name() if self.current_layer else 'None'}")
@@ -9498,7 +9536,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
                 # v4.0: Soft "mousse" style for waiting state
-                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
+                self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
         finally:
             self._updating_layers, self._plugin_busy = False, False
 
@@ -9621,7 +9659,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         # v4.0: Soft "mousse" style with smoother colors
         base_style = f"""
-            QLabel#label_backend_indicator {{
+            QPushButton#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
                 font-size: 8pt;
@@ -9630,7 +9668,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 border-radius: 10px;
                 border: none;
             }}
-            QLabel#label_backend_indicator:hover {{
+            QPushButton#label_backend_indicator:hover {{
                 filter: brightness(1.1);
             }}
         """
@@ -9992,7 +10030,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_reload_layers_shortcut(self):
         """Handle F5 shortcut to reload layers."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
+            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):

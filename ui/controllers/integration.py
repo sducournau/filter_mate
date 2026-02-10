@@ -747,6 +747,7 @@ class ControllerIntegration:
         2. Populates export combobox via ExportingController
         3. Populates filtering layers combobox via FilteringController
         4. Notifies LayerSyncController
+        5. FIX 2026-02-10: Synchronizes dependent widget states (filtering, exploring pages)
         """
         logger.info("✓ Project layers ready - populating comboboxes (unified handler)")
         
@@ -852,6 +853,22 @@ class ControllerIntegration:
                     self._layer_sync_controller.on_layers_ready()
             except Exception as e:
                 logger.debug(f"LayerSyncController layers ready notification failed: {e}")
+
+        # FIX 2026-02-10: Step 5 - Synchronize dependent widget states
+        # These calls were present in dockwidget._on_project_layers_ready() but missing
+        # here, causing filtering buttons to remain disabled and exploring pages to not
+        # reflect available layer types after project load.
+        try:
+            dw.filtering_layers_to_filter_state_changed()
+            logger.info("✓ Filtering layers state synchronized after layers ready")
+        except Exception as e:
+            logger.warning(f"Could not sync filtering layers state: {e}")
+
+        try:
+            dw._update_exploring_pages_availability()
+            logger.info("✓ Exploring pages availability updated after layers ready")
+        except Exception as e:
+            logger.warning(f"Could not update exploring pages availability: {e}")
     
     def _on_getting_project_layers(self) -> None:
         """
