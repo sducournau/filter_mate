@@ -65,5 +65,32 @@ Layers not appearing in filtering and exporting comboboxes due to signal issues.
 - **Cause**: In `get_project_layers_from_app()`, `_refresh_layer_specific_widgets()` called while
   `_plugin_busy=True`. `current_layer_changed` checked this flag and deferred via QTimer(150ms).
   Result: widgets not synced when `projectLayersReady` emitted.
-- **Fix**: Reset `self._plugin_busy = False` BEFORE calling `_refresh_layer_specific_widgets()`.
+- **Fix**: Reset `self._plugin_busy = False` BEFORE calling `_refresh_layer_specific_widgets`.
   `_updating_layers` flag still prevents reentrance from `get_project_layers_from_app` itself.
+
+### Round 3 Fixes (2026-02-10)
+
+#### BUG 9 (CRITICAL): `disconnect_widgets_signals()` never reset `_signals_connected` flag
+- **File**: `filter_mate_dockwidget.py`
+- **Cause**: After first `add_layers` task, `_signals_connected` was set to True by
+  `get_project_layers_from_app()`. The task's `begun` signal called `disconnect_widgets_signals()`
+  which disconnected all signals but never reset `_signals_connected = False`. On subsequent
+  task completions, `get_project_layers_from_app()` checked `not self._signals_connected` and
+  skipped `connect_widgets_signals()`, leaving signals permanently disconnected.
+- **Fix**: Added `self._signals_connected = False` at end of `disconnect_widgets_signals()`.
+
+#### BUG 10 (CRITICAL): ControllerIntegration teardown on close, no re-setup on re-open
+- **Files**: `filter_mate_dockwidget.py`, `core/services/app_initializer.py`
+- **Cause**: `closeEvent()` called `_controller_integration.teardown()` which disconnected
+  `projectLayersReady` from `_on_project_layers_ready` and cleared all controller references.
+  `_reinitialize_existing()` never called `setup()` again, so on re-open comboboxes were
+  never populated (signal handler disconnected, controllers all None).
+- **Fix**: 
+  1. Added `ensure_controller_integration_setup()` method on dockwidget (idempotent, checks `_is_setup`)
+  2. `_reinitialize_existing()` calls it before refreshing layers
+  3. If CI was torn down, forces UI refresh via `get_project_layers_from_app()` (QTimer 200ms)
+     to emit `projectLayersReady` and trigger combobox population.
+
+Also added diagnostic logging to `_ensure_ui_enabled_after_startup` (5s safety timer) that logs:
+widgets_initialized, _signals_connected, PROJECT_LAYERS count, ControllerIntegration state,
+and combobox item counts.

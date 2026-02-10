@@ -460,16 +460,16 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             self.setText(f"★ {count}")
             tooltip = f"★ {count} Favorites saved\nClick to apply or manage"
             style = """
-                QLabel#label_favorites_indicator {
+                QPushButton#label_favorites_indicator {
                     color: white;
-                    font-size: 8pt;
+                    font-size: 6pt;
                     font-weight: 500;
-                    padding: 2px 8px;
-                    border-radius: 10px;
+                    padding: 0px 3px;
+                    border-radius: 6px;
                     border: none;
                     background-color: #f39c12;
                 }
-                QLabel#label_favorites_indicator:hover {
+                QPushButton#label_favorites_indicator:hover {
                     background-color: #d68910;
                 }
             """
@@ -477,16 +477,16 @@ class FavoritesWidget(QLabel if HAS_QGIS else object):
             self.setText("★")
             tooltip = "★ No favorites saved\nClick to add current filter"
             style = """
-                QLabel#label_favorites_indicator {
+                QPushButton#label_favorites_indicator {
                     color: #95a5a6;
-                    font-size: 8pt;
+                    font-size: 6pt;
                     font-weight: 500;
-                    padding: 2px 8px;
-                    border-radius: 10px;
+                    padding: 0px 3px;
+                    border-radius: 6px;
                     border: none;
                     background-color: #ecf0f1;
                 }
-                QLabel#label_favorites_indicator:hover {
+                QPushButton#label_favorites_indicator:hover {
                     background-color: #d5dbdb;
                 }
             """

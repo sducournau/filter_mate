@@ -108,6 +108,7 @@ class LayerTaskCompletionHandler:
             task_name: Type of task ('add_layers', 'remove_layers', 'remove_all_layers')
             loading_new_project: True if loading a new project
         """
+        print(f"[FM-DIAG] LayerTaskCompletionHandler: task={task_name}, layers={len(result_project_layers) if result_project_layers else 0}")
         logger.info(f"Layer task completed: {task_name}, layers={len(result_project_layers) if result_project_layers else 0}")
         
         # CRITICAL: Validate input

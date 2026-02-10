@@ -122,8 +122,10 @@ try:
     
     HEXAGONAL_AVAILABLE = True
     logger.debug("All hexagonal services loaded successfully")
-except ImportError as e:
+except (ImportError, Exception) as e:
     import traceback
+    print(f"[FM-DIAG] HEXAGONAL IMPORT FAILED: {type(e).__name__}: {e}")
+    print(f"[FM-DIAG] Traceback: {traceback.format_exc()}")
     logger.error(f"Failed to import hexagonal services: {e}")
     logger.error(f"Traceback: {traceback.format_exc()}")
     HEXAGONAL_AVAILABLE = False
@@ -262,12 +264,13 @@ class FilterMateApp:
 
     def _on_layers_added(self, layers):
         """Signal handler for layersAdded: ignore broken/invalid layers.
-        
+
         v5.0.1: Optimized to early-exit for non-vector layers (raster, VRT, mesh)
         to avoid freeze with large VRT files (e.g., 333 tiles).
         v5.3 FIX 2026-02-10: Include valid raster layers alongside vectors so they
         appear in filtering/exporting comboboxes (controllers already handle them).
         """
+        print(f"[FM-DIAG] _on_layers_added FIRED: {len(layers) if layers else 0} layers, types={[type(l).__name__ for l in (layers or [])[:5]]}")
         import time
         
         # v5.0.1 PERFORMANCE: Filter out non-vector layers FIRST before any processing
@@ -745,6 +748,7 @@ class FilterMateApp:
 
     def run(self):
         """Initialize and display the FilterMate dockwidget. Delegates to AppInitializer."""
+        print(f"[FM-DIAG] run() ENTRY: dockwidget={self.dockwidget is not None}, app_init={self._app_initializer is not None}")
         logger.debug("FilterMateApp.run() called")
         logger.debug(f"HEXAGONAL_AVAILABLE = {HEXAGONAL_AVAILABLE}")
         logger.debug(f"self._app_initializer = {self._app_initializer}")
@@ -755,8 +759,9 @@ class FilterMateApp:
             logger.debug("Calling AppInitializer.initialize_application()")
             try:
                 is_first_run = (self.dockwidget is None)
+                print(f"[FM-DIAG] run(): calling AppInitializer.initialize_application(is_first_run={is_first_run})")
                 success = self._app_initializer.initialize_application(is_first_run)
-                logger.debug(f"AppInitializer returned {success}")
+                print(f"[FM-DIAG] run(): AppInitializer returned {success}")
                 if success:
                     # v4.5: Ensure signal connections even after AppInitializer success
                     # This is the simplified direct connection system
@@ -1374,9 +1379,10 @@ class FilterMateApp:
     def manage_task(self, task_name, data=None):
         """
         Orchestrate FilterMate tasks via TaskOrchestrator.
-        
+
         v4.1.0: Restored from before_migration with full guards and protections.
         """
+        print(f"[FM-DIAG] manage_task ENTRY: task={task_name}, data={len(data) if isinstance(data, list) else data is not None}, init_proj={self._initializing_project}, pending_add={self._pending_add_layers_tasks}")
         logger.debug(f"manage_task: task_name={task_name}, data={data is not None}")
         
         assert task_name in list(self.tasks_descriptions.keys()), f"Unknown task: {task_name}"
@@ -1539,7 +1545,8 @@ class FilterMateApp:
                 logger.info("No layers available after task termination")
                 if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                     self.dockwidget.backend_indicator_label.setText("...")
-                    self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#7f8c8d;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}")
+                    self.dockwidget.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#7f8c8d;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#ecf0f1;}")
+                    self.dockwidget._resize_indicator(self.dockwidget.backend_indicator_label)
         else:
             logger.info("Task terminated but PROJECT_LAYERS has data, refreshing UI")
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
@@ -1596,6 +1603,7 @@ class FilterMateApp:
 
     def _on_widgets_initialized(self):
         """Callback when dockwidget widgets are initialized (via widgetsInitialized signal)."""
+        print(f"[FM-DIAG] _on_widgets_initialized FIRED: PROJECT_LAYERS={len(self.PROJECT_LAYERS)}")
         logger.info("✓ Received widgetsInitialized signal - dockwidget ready for operations")
         self._widgets_ready = True
         logger.debug(f"_widgets_ready set to: {self._widgets_ready}")
@@ -2435,7 +2443,8 @@ class FilterMateApp:
             self._reload_retry_count = 0
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                 self.dockwidget.backend_indicator_label.setText("!")
-                self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#e74c3c;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#fadbd8;}")
+                self.dockwidget.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#e74c3c;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#fadbd8;}")
+                self.dockwidget._resize_indicator(self.dockwidget.backend_indicator_label)
                 self.dockwidget.backend_indicator_label.setToolTip(
                     "Layer Loading Failed\n\n"
                     "Could not load vector layers after 3 attempts.\n"

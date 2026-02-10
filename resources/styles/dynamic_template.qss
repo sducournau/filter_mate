@@ -247,28 +247,7 @@
     max-height: 24px;
 }
 
-/* label_plugin_title removed - title no longer displayed */
-
-/* Favorites indicator - Harmonized style (matches backend indicator) */
-#dockWidgetContents QLabel#label_favorites_indicator {
-    font-size: 8pt;
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid {color_2};
-    color: {color_font_1};
-    background-color: {color_1};
-}
-
-#dockWidgetContents QLabel#label_backend_indicator {
-    font-size: 8pt;
-    font-weight: 500;
-    padding: 2px 8px;
-    border-radius: 4px;
-    border: 1px solid {color_2};
-    color: {color_font_1};
-    background-color: {color_1};
-}
+/* Indicator badges: colors managed by inline setStyleSheet() on each button */
 
 /* ACTION BAR - Bottom action buttons */
 #dockWidgetContents QFrame#frame_actions {
@@ -344,19 +323,7 @@
     color: {color_font_2};
 }
 
-/* Backend indicator label */
-#dockWidgetContents QLabel#label_backend_indicator {
-    color: {color_font_1};
-    font-size: 8pt;
-    padding: 1px 4px;
-}
-
-/* Favorites indicator label - Harmonized style */
-#dockWidgetContents QLabel#label_favorites_indicator {
-    color: {color_font_1};
-    font-size: 8pt;
-    padding: 1px 4px;
-}
+/* Indicator badges: see inline setStyleSheet() */
 
 /* ========================================================================
    TABS - Dynamic dimensions (SCOPED to FilterMate)

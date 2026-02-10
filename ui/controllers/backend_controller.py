@@ -622,19 +622,16 @@ class BackendController(BaseController):
 
         self._indicator_label.setText(text)
 
-        # Build stylesheet - v4.0: Soft "mousse" style with smoother appearance
+        # Build stylesheet - v4.0: Compact "mousse" style for title bar
         stylesheet = f"""
-            QLabel#label_backend_indicator {{
+            QPushButton#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
-                font-size: 8pt;
+                font-size: 6pt;
                 font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
+                padding: 0px 3px;
+                border-radius: 6px;
                 border: none;
-            }}
-            QLabel#label_backend_indicator:hover {{
-                filter: brightness(1.1);
             }}
         """
         self._indicator_label.setStyleSheet(stylesheet)

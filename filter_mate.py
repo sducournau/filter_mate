@@ -821,12 +821,12 @@ class FilterMate:
                 if hasattr(self.app.dockwidget, 'backend_indicator_label') and self.app.dockwidget.backend_indicator_label:
                     self.app.dockwidget.backend_indicator_label.setText("...")
                     self.app.dockwidget.backend_indicator_label.setStyleSheet("""
-                        QLabel#label_backend_indicator {
+                        QPushButton#label_backend_indicator {
                             color: #7f8c8d;
-                            font-size: 9pt;
-                            font-weight: 600;
-                            padding: 3px 10px;
-                            border-radius: 12px;
+                            font-size: 6pt;
+                            font-weight: 500;
+                            padding: 0px 3px;
+                            border-radius: 6px;
                             border: none;
                             background-color: #ecf0f1;
                         }

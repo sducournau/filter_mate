@@ -192,6 +192,8 @@ class ControllerIntegration:
             
         except Exception as e:
             import traceback
+            print(f"[FM-DIAG] ControllerIntegration.setup() FAILED: {e}")
+            print(f"[FM-DIAG] Traceback: {traceback.format_exc()}")
             logger.error(f"Failed to setup controller integration: {e}", exc_info=True)
             self._cleanup_on_error()
             return False
@@ -737,11 +739,11 @@ class ControllerIntegration:
     def _on_project_layers_ready(self) -> None:
         """
         v4.1.4: Unified handler for project layers ready event.
-        
+
         This is the SINGLE handler for projectLayersReady signal.
         Previously, both app_initializer.py and integration.py connected to this signal,
         causing duplicate operations. Now only integration.py handles this signal.
-        
+
         This handler:
         1. Sets has_loaded_layers flag on dockwidget
         2. Populates export combobox via ExportingController
@@ -749,6 +751,7 @@ class ControllerIntegration:
         4. Notifies LayerSyncController
         5. FIX 2026-02-10: Synchronizes dependent widget states (filtering, exploring pages)
         """
+        print("[FM-DIAG] _on_project_layers_ready FIRED")
         logger.info("✓ Project layers ready - populating comboboxes (unified handler)")
         
         dw = self._dockwidget

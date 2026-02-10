@@ -3196,7 +3196,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         hl2 = QtWidgets.QHBoxLayout(row2)
         hl2.setContentsMargins(6, 0, 6, 2); hl2.setSpacing(4)
         hl2.addSpacerItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-        bb = "color:white;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;"
+        bb = "color:white;font-size:6pt;font-weight:500;padding:1px 4px;border-radius:6px;border:none;min-width:0px;"
         self.favorites_indicator_label = self._create_indicator_label(row2, "label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked)
         hl2.addWidget(self.favorites_indicator_label)
         self.backend_indicator_label = self._create_indicator_label(row2, "label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked)
@@ -3314,26 +3314,35 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         btn.setObjectName(name); btn.setText(text); btn.setFlat(True)
         btn.setStyleSheet(f"QPushButton#{name}{{{style}}}QPushButton#{name}:hover{{{hover_style}}}")
         btn.setFixedHeight(16)
-        btn.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Fixed)
+        btn.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        btn.setMaximumWidth(50)
         btn.setCursor(Qt.PointingHandCursor); btn.setToolTip(tooltip)
-        btn.clicked.connect(lambda checked=False: click_handler(None))
-        logger.debug(f"Created indicator {name}")
+        btn.clicked.connect(click_handler)
         return btn
     
+    def _resize_indicator(self, btn):
+        """Resize indicator button width to fit its text content."""
+        if btn:
+            fm = btn.fontMetrics()
+            w = fm.horizontalAdvance(btn.text()) + 10
+            btn.setFixedWidth(max(w, 20))
+
     def _on_backend_indicator_clicked(self, event):
         """v4.0 Sprint 19: → BackendController (direct, matching favorites pattern)."""
-        logger.debug("_on_backend_indicator_clicked called")
+        logger.info(">>> _on_backend_indicator_clicked FIRED")
+        from qgis.PyQt.QtCore import QTimer
+        ctrl = None
         try:
-            ctrl = self._controller_integration._backend_controller if self._controller_integration else None
-            logger.debug(f"  _controller_integration={self._controller_integration}, backend_ctrl={ctrl}")
-            if ctrl:
-                from qgis.PyQt.QtCore import QTimer
-                QTimer.singleShot(0, ctrl.handle_indicator_clicked)
-                return
+            if self._controller_integration:
+                ctrl = self._controller_integration.backend_controller
+                logger.info(f"  backend_controller={ctrl}, initialized={getattr(ctrl, '_initialized', '?')}")
         except Exception as e:
             logger.warning(f"Backend controller access failed: {e}")
-        # Fallback: show simple backend menu directly
-        self._show_fallback_backend_menu()
+        if ctrl:
+            QTimer.singleShot(0, ctrl.handle_indicator_clicked)
+        else:
+            logger.info("  Using fallback menu")
+            QTimer.singleShot(0, self._show_fallback_backend_menu)
 
     def _show_fallback_backend_menu(self):
         """Fallback backend menu when controller is unavailable."""
@@ -3397,11 +3406,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(self.tr("★ {0} Favorites saved\nClick to apply or manage").format(cnt))
-            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:white;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#f39c12;}QPushButton#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:white;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#f39c12;}QPushButton#label_favorites_indicator:hover{background-color:#d68910;}")
+            self._resize_indicator(self.favorites_indicator_label)
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip(self.tr("★ No favorites saved\nClick to add current filter"))
-            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:#95a5a6;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#ecf0f1;}QPushButton#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet("QPushButton#label_favorites_indicator{color:#95a5a6;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#ecf0f1;}QPushButton#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self._resize_indicator(self.favorites_indicator_label)
 
     def _get_available_backends_for_layer(self, layer):
         """Sprint 18: → BackendController via _backend_ctrl property."""
@@ -5141,6 +5152,57 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.warning(f"⚠️ Failed to update exploring pages availability: {e}")
     
+
+    def _ensure_comboboxes_populated(self, layer=None):
+        """FIX 2026-02-10b: Safety fallback to populate comboboxes.
+        
+        Called after projectLayersReady.emit() as a safety net.
+        If _on_project_layers_ready (ControllerIntegration) already populated
+        the comboboxes, this is a no-op. If not (e.g., signal not connected
+        because ControllerIntegration.setup() failed), this ensures comboboxes
+        are populated and state-dependent widgets are synchronized.
+        """
+        if not layer:
+            layer = self.current_layer
+        if not layer:
+            return
+        
+        # Check if export combobox needs population
+        try:
+            export_widget = self.widgets.get("EXPORTING", {}).get("LAYERS_TO_EXPORT", {}).get("WIDGET")
+            if export_widget and export_widget.count() == 0 and self.PROJECT_LAYERS:
+                logger.info("Safety fallback: populating export combobox directly")
+                self.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
+                self._populate_export_combobox_direct()
+                self.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
+        except Exception as e:
+            logger.warning(f"Safety fallback: export combobox population failed: {e}")
+        
+        # Check if filtering combobox needs population
+        try:
+            filter_widget = self.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
+            if filter_widget and filter_widget.count() == 0 and self.PROJECT_LAYERS:
+                logger.info("Safety fallback: populating filtering combobox directly")
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
+                self.filtering_populate_layers_chekableCombobox(layer)
+                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
+        except Exception as e:
+            logger.warning(f"Safety fallback: filtering combobox population failed: {e}")
+        
+        # Ensure state-dependent widgets are synchronized
+        try:
+            self.filtering_layers_to_filter_state_changed()
+            self.filtering_combine_operator_state_changed()
+            self.filtering_geometric_predicates_state_changed()
+        except Exception as e:
+            logger.warning(f"Safety fallback: state sync failed: {e}")
+        
+        # Ensure exploring pages reflect available layer types
+        try:
+            self._update_exploring_pages_availability()
+        except Exception as e:
+            logger.warning(f"Safety fallback: exploring pages update failed: {e}")
+
     def _populate_export_combobox_direct(self) -> bool:
         """v4.0.6: Direct population of export combobox without controller dependency.
         
@@ -8714,6 +8776,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Manual changes should bypass protection windows and always update widgets
         if self._controller_integration:
             validation_result = self._controller_integration.delegate_current_layer_changed(layer, manual_change=manual_change)
+            print(f"[FM-DIAG] current_layer_changed: delegation result={validation_result}, manual={manual_change}")
             if validation_result is False:
                 if manual_change:
                     # Manual change bypasses protection - continue with update
@@ -9161,8 +9224,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         # Guard: Only process after full initialization
         if not (self.widgets_initialized is True and self.has_loaded_layers is True):
+            print(f"[FM-DIAG] filtering_layers_to_filter_state_changed: BLOCKED by guard (widgets_init={self.widgets_initialized}, has_loaded={self.has_loaded_layers})")
             return
-            
+
         is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
         
         # FIX 2026-02-09d: Use container widget instead of removed hlayout
@@ -9550,6 +9614,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_project_layers_from_app(self, project_layers, project=None):
         """v3.1 Sprint 16: Simplified - update dockwidget with layer info from app."""
+        print(f"[FM-DIAG] get_project_layers_from_app: layers={len(project_layers) if project_layers else 0}, widgets_init={self.widgets_initialized}, filtering={self._filtering_in_progress}, updating={self._updating_layers}, has_loaded={self.has_loaded_layers}")
         if self._filtering_in_progress:
             if project_layers: self.PROJECT_LAYERS = project_layers
             if project: self.PROJECT = project
@@ -9573,6 +9638,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if layer and self.current_layer is None:
                     self.current_layer = layer
                 self._activate_layer_ui()
+                # FIX 2026-02-10b: Set has_loaded_layers BEFORE _refresh_layer_specific_widgets
+                # so that state_changed guards (filtering_layers_to_filter_state_changed etc.)
+                # pass during _synchronize_layer_widgets. Previously, has_loaded_layers was only
+                # set in _on_project_layers_ready (ControllerIntegration signal handler), which
+                # meant all state_changed calls during current_layer_changed returned early.
+                self.has_loaded_layers = True
                 # FIX 2026-02-10: Reset _plugin_busy BEFORE calling _refresh_layer_specific_widgets
                 # so that current_layer_changed runs synchronously instead of being deferred
                 # via QTimer(150ms). _updating_layers still prevents reentrance from
@@ -9582,6 +9653,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
                 logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers), current_layer={self.current_layer.name() if self.current_layer else 'None'}")
                 self.projectLayersReady.emit()
+                # FIX 2026-02-10b: Safety fallback - populate export combobox directly
+                # if _on_project_layers_ready handler didn't fire (e.g. signal not connected)
+                self._ensure_comboboxes_populated(layer)
+                # Diagnostic: report final state
+                export_w = self.widgets.get("EXPORTING", {}).get("LAYERS_TO_EXPORT", {}).get("WIDGET")
+                filter_w = self.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
+                print(f"[FM-DIAG] get_project_layers_from_app DONE: has_loaded={self.has_loaded_layers}, export_items={export_w.count() if export_w else 'N/A'}, filter_items={filter_w.count() if filter_w else 'N/A'}, current_layer={self.current_layer.name() if self.current_layer else 'None'}")
                 return
             if self.current_layer and self.current_layer.isValid():
                 if not self._signals_connected: self.connect_widgets_signals(); self._signals_connected = True
@@ -9600,8 +9678,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.warning(f"Could not update exploring pages availability: {e}")
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
+                self._resize_indicator(self.backend_indicator_label)
                 # v4.0: Soft "mousse" style for waiting state
-                self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#7f8c8d;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#f4f6f6;}")
+                self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#7f8c8d;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#f4f6f6;}")
         finally:
             self._updating_layers, self._plugin_busy = False, False
 
@@ -9721,17 +9800,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         
         style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
         self.backend_indicator_label.setText(style['text'])
-        
+        self._resize_indicator(self.backend_indicator_label)
+
         # v4.0: Soft "mousse" style with smoother colors
         base_style = f"""
             QPushButton#label_backend_indicator {{
                 color: {style['color']};
                 background-color: {style['background']};
-                font-size: 7pt;
+                font-size: 6pt;
                 font-weight: 500;
-                padding: 1px 4px;
-                border-radius: 8px;
+                padding: 0px 3px;
+                border-radius: 6px;
                 border: none;
+                min-width: 0px;
             }}
         """
         self.backend_indicator_label.setStyleSheet(base_style)
@@ -10091,7 +10172,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_reload_layers_shortcut(self):
         """Handle F5 shortcut to reload layers."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#3498db;font-size:7pt;font-weight:500;padding:1px 4px;border-radius:8px;border:none;background-color:#e8f4fc;}")
+            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QPushButton#label_backend_indicator{color:#3498db;font-size:6pt;font-weight:500;padding:0px 3px;border-radius:6px;border:none;min-width:0px;background-color:#e8f4fc;}"); self._resize_indicator(self.backend_indicator_label)
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):

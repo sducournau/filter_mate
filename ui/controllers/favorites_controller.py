@@ -623,16 +623,16 @@ class FavoritesController(BaseController):
         style_data = FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
         # v4.0: Harmonized with BackendIndicatorWidget - soft "mousse" style
         return f"""
-            QLabel#label_favorites_indicator {{
+            QPushButton#label_favorites_indicator {{
                 color: {style_data['color']};
-                font-size: 8pt;
+                font-size: 6pt;
                 font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
+                padding: 0px 3px;
+                border-radius: 6px;
                 border: none;
                 background-color: {style_data['background']};
             }}
-            QLabel#label_favorites_indicator:hover {{
+            QPushButton#label_favorites_indicator:hover {{
                 background-color: {style_data['hover']};
             }}
         """

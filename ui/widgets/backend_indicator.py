@@ -268,16 +268,16 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         
         # v4.0: Soft "mousse" style with rounded corners
         style = """
-            QLabel#label_backend_indicator {
+            QPushButton#label_backend_indicator {
                 color: white;
-                font-size: 8pt;
+                font-size: 6pt;
                 font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
+                padding: 0px 3px;
+                border-radius: 6px;
                 border: none;
                 background-color: #aab7b8;
             }
-            QLabel#label_backend_indicator:hover {
+            QPushButton#label_backend_indicator:hover {
                 background-color: #95a5a6;
             }
         """
@@ -307,16 +307,16 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         
         # v4.0: Soft "mousse" style with smoother appearance
         style = f"""
-            QLabel#label_backend_indicator {{
+            QPushButton#label_backend_indicator {{
                 color: white;
-                font-size: 8pt;
+                font-size: 6pt;
                 font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
+                padding: 0px 3px;
+                border-radius: 6px;
                 border: none;
                 background-color: {config['color']};
             }}
-            QLabel#label_backend_indicator:hover {{
+            QPushButton#label_backend_indicator:hover {{
                 background-color: {config['hover_color']};
             }}
         """

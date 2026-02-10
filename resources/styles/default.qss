@@ -931,25 +931,7 @@ QPushButton[objectName^="pushButton_checkable_exporting_"] {
 
 /* Labels - Base style (détails ci-dessous) */
 
-/* Favorites Indicator Badge - Compact design (harmonized with backend indicator) */
-QLabel#label_favorites_indicator {
-    font-size: 7pt;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 8px;
-    min-width: 28px;
-    max-height: 18px;
-}
-
-/* Backend Indicator Badge - Compact design */
-QLabel#label_backend_indicator {
-    font-size: 7pt;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 8px;
-    min-width: 28px;
-    max-height: 18px;
-}
+/* Indicator badges: colors managed by inline setStyleSheet() */
 
 /* Progress Bar - SCOPED to FilterMate */
 #dockWidgetContents QProgressBar {
@@ -1191,26 +1173,7 @@ QFrame#frame_header {
 
 /* label_plugin_title removed - title no longer displayed */
 
-/* Favorites Indicator - Harmonized style (matches backend indicator) */
-QLabel#label_favorites_indicator {
-    font-size: 9pt;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: 6px;
-    border: 1px solid {color_2};
-    color: {color_font_1};
-    background-color: {color_1};
-}
-
-QLabel#label_backend_indicator {
-    font-size: 9pt;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: 6px;
-    border: 1px solid {color_2};
-    color: {color_font_1};
-    background-color: {color_1};
-}
+/* Indicator badges: colors managed by inline setStyleSheet() */
 
 /* ========================================================================
    FRAME ACTIONS - Bottom action bar with responsive buttons

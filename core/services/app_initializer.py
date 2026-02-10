@@ -156,6 +156,7 @@ class AppInitializer:
         Returns:
             bool: True if initialization succeeded, False otherwise
         """
+        print(f"[FM-DIAG] AppInitializer.initialize_application(is_first_run={is_first_run})")
         if is_first_run:
             return self._initialize_first_run()
         else:
@@ -222,9 +223,11 @@ class AppInitializer:
             logger.info(f"FilterMate App.run(): DockWidget shown at position {dock_position}")
         
         # Process existing layers with retry mechanism
+        print(f"[FM-DIAG] _initialize_first_run: init_layers={len(init_layers) if init_layers else 0}")
         if init_layers is not None and len(init_layers) > 0:
             self._process_initial_layers(init_layers)
         else:
+            print("[FM-DIAG] _initialize_first_run: NO LAYERS - empty project")
             logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
             show_info("Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin.")
         
@@ -243,11 +246,13 @@ class AppInitializer:
         Returns:
             bool: True if reinitialization succeeded
         """
+        print("[FM-DIAG] _reinitialize_existing ENTRY")
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         if not dockwidget:
+            print("[FM-DIAG] _reinitialize_existing: dockwidget is None!")
             logger.warning("FilterMate: Dockwidget is None during reinit")
             return False
-        
+
         logger.info("FilterMate: Dockwidget already exists, showing and refreshing layers")
         
         # Update project reference
@@ -469,21 +474,24 @@ class AppInitializer:
     def _process_initial_layers(self, init_layers: List[QgsVectorLayer]):
         """
         Process existing layers with retry mechanism.
-        
+
         Args:
             init_layers: List of layers to process
         """
+        print(f"[FM-DIAG] _process_initial_layers: {len(init_layers)} layers, scheduling QTimer(600ms)")
         # Wait for widget initialization before adding layers
         def wait_for_widget_initialization(layers_to_add):
             """Wait for widgets to be fully initialized before adding layers."""
             max_retries = 10  # Max 3 seconds (10 * 300ms)
             retry_count = 0
-            
+
             dockwidget = self._get_dockwidget() if self._get_dockwidget else None
-            
+            print(f"[FM-DIAG] wait_for_widget_initialization: dockwidget={dockwidget is not None}, widgets_init={dockwidget.widgets_initialized if dockwidget else 'N/A'}")
+
             def check_and_add():
                 nonlocal retry_count
                 if dockwidget and dockwidget.widgets_initialized:
+                    print(f"[FM-DIAG] check_and_add: widgets ready, calling manage_task('add_layers', {len(layers_to_add)})")
                     logger.info(f"Widgets initialized, adding {len(layers_to_add)} layers")
                     if self._manage_task:
                         self._manage_task('add_layers', layers_to_add)
