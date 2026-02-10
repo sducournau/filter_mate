@@ -104,6 +104,9 @@ from .signal_utils import (  # noqa: F401
     safe_set_layer_variable,
     safe_set_layer_variables,
 )
+from .thread_utils import (  # noqa: F401
+    main_thread_only,
+)
 
 # Import SQL utilities (from infrastructure.database)
 from ..database.sql_utils import (  # noqa: F401
@@ -453,6 +456,8 @@ __all__ = [
     # QGIS safety utilities
     'is_qgis_alive',
     'GdalErrorHandler',
+    # Thread safety utilities
+    'main_thread_only',
     # Signal and layer variable utilities (EPIC-1 migration)
     'is_layer_in_project',
     'safe_disconnect',

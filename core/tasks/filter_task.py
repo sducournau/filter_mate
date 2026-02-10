@@ -48,6 +48,7 @@ from qgis import processing
 
 # Import logging configuration (migrated to infrastructure.logging)
 from ...infrastructure.logging import setup_logger
+from ...infrastructure.utils.thread_utils import main_thread_only
 from ...config.config import ENV_VARS
 
 # EPIC-1 Phase E12: Import extracted orchestration modules (relative import in core/)
@@ -5627,6 +5628,7 @@ class FilterEngineTask(QgsTask):
             collector.restore_layer_selection(feature_fids)
             logger.info(f"✓ Restored source layer selection via FeatureCollector: {len(feature_fids)} feature(s)")
 
+    @main_thread_only
     def finished(self, result: Optional[bool]) -> None:
         """Handle task completion with cleanup and user notifications.
 

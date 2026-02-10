@@ -35,6 +35,7 @@ import re
 
 # Import logging configuration
 from ...infrastructure.logging import setup_logger, safe_log
+from ...infrastructure.utils.thread_utils import main_thread_only
 from ...config.config import ENV_VARS
 
 # Setup logger
@@ -1725,6 +1726,7 @@ class LayersManagementEngineTask(QgsTask):
         # Call parent cancel without any QGIS API calls
         super().cancel()
 
+    @main_thread_only
     def finished(self, result):
         """
         Handle task completion and emit results.
