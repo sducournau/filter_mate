@@ -24,20 +24,12 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from qgis.PyQt.QtCore import QObject
 
+from ...core.domain.exceptions import SignalStateChangeError  # noqa: F401
+
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
 
 logger = logging.getLogger(__name__)
-
-
-class SignalStateChangeError(Exception):
-    """Exception raised when signal state change fails."""
-
-    def __init__(self, state: Optional[bool], widget_path: List[str], message: str = ""):
-        self.state = state
-        self.widget_path = widget_path
-        self.message = message or f"Signal state change failed for {widget_path}"
-        super().__init__(self.message)
 
 
 class DockwidgetSignalManager:
