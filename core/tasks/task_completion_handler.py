@@ -9,7 +9,6 @@ import logging
 from typing import List, Tuple, Optional, Any, Callable
 
 from qgis.core import QgsMessageLog, Qgis, QgsProject
-from qgis.utils import iface
 from qgis.PyQt.QtCore import QTimer
 
 from ...core.ports.qgis_port import get_qgis_factory
@@ -44,6 +43,7 @@ def display_warning_messages(warning_messages: List[str]) -> None:
     if not warning_messages:
         return
 
+    from qgis.utils import iface
     for warning_msg in warning_messages:
         try:
             iface.messageBar().pushWarning("FilterMate", warning_msg)
@@ -289,6 +289,7 @@ def _schedule_deferred_filter_application(
     """
     def apply_deferred_filters():
         """Apply large filter expressions with UI breathing room."""
+        from qgis.utils import iface
         for lyr, expr in large_expressions:
             try:
                 if lyr and is_valid_layer(lyr):
@@ -327,6 +328,7 @@ def schedule_canvas_refresh(
         is_complex_filter_fn: Function to check if filter is complex
         single_refresh_fn: Function to perform single canvas refresh
     """
+    from qgis.utils import iface
     try:
         # Stop any ongoing rendering first
         canvas = iface.mapCanvas()

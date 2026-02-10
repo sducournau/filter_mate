@@ -24,7 +24,6 @@ from qgis.core import (
     QgsVectorLayer
 )
 from qgis.PyQt.QtCore import pyqtSignal, QMetaType, QTimer
-from qgis.utils import iface
 from qgis import processing
 import logging
 import os
@@ -1743,6 +1742,7 @@ class LayersManagementEngineTask(QgsTask):
         Args:
             result (bool): Task result
         """
+        from qgis.utils import iface
         logger.info(f"LayersManagementEngineTask.finished(): task_action={self.task_action}, result={result}, project_layers count={len(self.project_layers) if self.project_layers else 0}")
 
         # THREAD SAFETY (v2.3.10): Apply deferred layer variable operations

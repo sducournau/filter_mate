@@ -44,7 +44,6 @@ from qgis.core import (
     QgsVectorLayer
 )
 from qgis.PyQt.QtCore import pyqtSignal
-from qgis.utils import iface
 from qgis import processing
 
 # Import logging configuration (migrated to infrastructure.logging)
@@ -5438,7 +5437,10 @@ class FilterEngineTask(QgsTask):
 
         This fixes display issues where complex multi-step filters don't show
         all filtered features immediately after the filter task completes.
+
+        Note: iface imported locally to prevent accidental use from worker thread.
         """
+        from qgis.utils import iface
         try:
             from qgis.core import QgsProject
 
@@ -5643,6 +5645,7 @@ class FilterEngineTask(QgsTask):
             - MVs are NOT cleaned on 'filter' action as they're still referenced
             - Warning messages are displayed before being cleared
         """
+        from qgis.utils import iface
         result_action: Optional[str] = None
         message_category = MESSAGE_TASKS_CATEGORIES[self.task_action]
 

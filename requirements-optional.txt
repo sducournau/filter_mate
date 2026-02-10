@@ -1,0 +1,8 @@
+# Optional dependencies for FilterMate QGIS Plugin
+#
+# These packages are NOT required for basic plugin functionality.
+# Install them to enable additional backends and features.
+
+# PostgreSQL/PostGIS backend support
+# Enables: PostgreSQL filtering, materialized views, connection pooling
+psycopg2-binary>=2.8.0
