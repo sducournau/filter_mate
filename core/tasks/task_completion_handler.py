@@ -69,7 +69,7 @@ def should_skip_subset_application(
     Returns:
         bool: True if subset application should be skipped
     """
-    # v3.0.8: Only skip if TRULY canceled (not just marked as canceled)
+    # Only skip if TRULY canceled (not just marked as canceled)
     # Check if we have pending requests AND if the task actually returned False (failed)
     # If the task succeeded (result=True), we should still apply the subsets even if
     # isCanceled() returns True (which can happen due to race conditions in QGIS)
@@ -167,7 +167,7 @@ def apply_pending_subset_requests(
 
                 layer.triggerRepaint()
 
-                # FIX v2.9.24: Clear selection for Spatialite layers after reload
+                # Clear selection for Spatialite layers after reload
                 if layer.providerType() == 'spatialite':
                     try:
                         layer.removeSelection()
@@ -211,7 +211,7 @@ def apply_pending_subset_requests(
 
                     layer.triggerRepaint()
 
-                    # FIX v2.9.24: Clear selection for Spatialite layers
+                    # Clear selection for Spatialite layers
                     if layer.providerType() == 'spatialite':
                         try:
                             layer.removeSelection()

@@ -177,7 +177,7 @@ class ExpressionEvaluationTask(QgsTask):
         self._start_time = time.time()
 
         try:
-            # v2.6.7: Refresh feature source at run() time to get current layer state
+            # Refresh feature source at run() time to get current layer state
             # This fixes stale data when filter was applied between task creation and execution
             self._refresh_feature_source()
 

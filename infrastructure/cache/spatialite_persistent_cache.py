@@ -695,7 +695,7 @@ class SpatialitePersistentCache:
         with self._lock:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(f'DELETE FROM {CACHE_TABLE_NAME}')  # nosec B608
+                cursor.execute(f'DELETE FROM {CACHE_TABLE_NAME}')  # nosec B608 - CACHE_TABLE_NAME is a module-level constant
                 deleted = cursor.rowcount
                 cursor.execute('DELETE FROM filter_steps')
                 cursor.execute('DELETE FROM filter_sessions')
@@ -715,7 +715,7 @@ class SpatialitePersistentCache:
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute(f'SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}')  # nosec B608
+            cursor.execute(f'SELECT COUNT(*) as count FROM {CACHE_TABLE_NAME}')  # nosec B608 - CACHE_TABLE_NAME is a module-level constant
             total_entries = cursor.fetchone()['count']
 
             cursor.execute('''

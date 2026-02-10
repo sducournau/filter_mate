@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Protection window after filter completes (seconds)
 # Must cover refresh_delay (1500ms) + layer.reload() + margin
-POST_FILTER_PROTECTION_WINDOW = 1.5  # v4.1.3: Reduced from 5.0s for faster user interaction
+POST_FILTER_PROTECTION_WINDOW = 1.5  # Reduced from 5.0s for faster user interaction
 
 
 class LayerSyncController(BaseController):
@@ -1078,7 +1078,7 @@ class LayerSyncController(BaseController):
             'filtering_layers_to_filter_state_changed',
             'filtering_combine_operator_state_changed',
             'filtering_geometric_predicates_state_changed',
-            'filtering_buffer_value_state_changed',  # v4.0.7: Added - enables/disables buffer widgets
+            'filtering_buffer_value_state_changed',  # Added - enables/disables buffer widgets
             'filtering_buffer_property_changed',
             'filtering_buffer_type_state_changed'
         ]

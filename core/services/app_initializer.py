@@ -314,7 +314,7 @@ class AppInitializer:
                 screen_width = screen_geometry.width()
                 screen_height = screen_geometry.height()
 
-                # v4.0.2 FIX: Activate NORMAL mode for 1080p and above
+                # Activate NORMAL mode for 1080p and above
                 # COMPACT: Small screens (< 1920x1080) - laptops, tablets
                 # NORMAL: Standard screens (≥ 1920x1080) - desktops, large laptops
                 # Small screens (below 1080p) → COMPACT
@@ -326,7 +326,7 @@ class AppInitializer:
                     UIConfig.set_profile(DisplayProfile.NORMAL)
                     logger.info(f"FilterMate: Using NORMAL profile for resolution {screen_width}x{screen_height}")
             else:
-                # v4.0.2 FIX: Fallback to NORMAL (better for desktop QGIS)
+                # Fallback to NORMAL (better for desktop QGIS)
                 UIConfig.set_profile(DisplayProfile.NORMAL)
                 logger.warning("FilterMate: Could not detect screen, using NORMAL profile (desktop default)")
         except Exception as e:
@@ -364,7 +364,7 @@ class AppInitializer:
             if favorites_manager:
                 dockwidget._favorites_manager = favorites_manager
 
-                # CRITICAL FIX 2026-01-19: Update FavoritesController with the correctly initialized manager
+                # Update FavoritesController with the correctly initialized manager
                 # The controller was setup in dockwidget_widgets_configuration() BEFORE we could
                 # attach the favorites_manager, so it may have created its own uninitialized instance
                 if hasattr(dockwidget, 'favorites_controller') and dockwidget.favorites_controller:
@@ -407,13 +407,13 @@ class AppInitializer:
             dockwidget.widgetsInitialized.connect(self._on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to _on_widgets_initialized")
 
-        # v4.1: Also connect to TaskOrchestrator if available
+        # Also connect to TaskOrchestrator if available
         task_orchestrator = self._get_task_orchestrator() if self._get_task_orchestrator else None
         if task_orchestrator is not None:
             dockwidget.widgetsInitialized.connect(task_orchestrator.on_widgets_initialized)
             logger.debug("widgetsInitialized signal connected to TaskOrchestrator")
 
-        # v4.1.4: REMOVED - projectLayersReady signal is now connected ONLY in
+        # REMOVED - projectLayersReady signal is now connected ONLY in
         # ui/controllers/integration.py to avoid duplicate handler execution.
         # The ControllerIntegration._on_project_layers_ready() method properly
         # delegates to ExportingController.refresh_layers() and LayerSyncController.on_layers_ready()

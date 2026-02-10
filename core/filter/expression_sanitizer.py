@@ -55,7 +55,7 @@ def sanitize_subset_string(subset_string: str) -> str:
     # only understands English operators (AND, OR, NOT). This normalization
     # ensures compatibility with all SQL backends.
     #
-    # FIX v2.5.12: Handle French operators that cause SQL syntax errors like:
+    # Handle French operators that cause SQL syntax errors like:
     # "syntax error at or near 'ET'"
 
     french_operators = [
@@ -83,7 +83,7 @@ def sanitize_subset_string(subset_string: str) -> str:
     # Example: AND ( COALESCE( "LABEL", '<NULL>' ) ) - returns text, not boolean
     # Note: The outer ( ) wraps coalesce(...) with possible spaces
     #
-    # FIX v2.5.13: Handle spaces INSIDE COALESCE( ... ) and around parentheses
+    # Handle spaces INSIDE COALESCE( ... ) and around parentheses
     # Real-world example that FAILED: AND ( COALESCE( "LABEL", '<NULL>' ) )
     coalesce_patterns = [
         # Match coalesce with spaces everywhere: AND ( COALESCE( "field", '<NULL>' ) )
@@ -119,7 +119,7 @@ def sanitize_subset_string(subset_string: str) -> str:
     # Match: AND ( case when ... end ) OR AND ( SELECT CASE when ... end )
     # with multiple closing parentheses (malformed)
     #
-    # CRITICAL FIX v2.5.10: Improved patterns to handle multi-line CASE expressions
+    # Improved patterns to handle multi-line CASE expressions
     # like those from rule-based symbology:
     #   AND ( SELECT CASE
     #     WHEN 'AV' = left("table"."field", 2) THEN true
@@ -138,7 +138,7 @@ def sanitize_subset_string(subset_string: str) -> str:
     match = re.search(select_case_pattern, sanitized, re.IGNORECASE | re.DOTALL)
     if match:
         logger.info(
-            f"FilterMate: Removing SELECT CASE style expression: '{match.group()[:80]}...'"  # nosec B608
+            f"FilterMate: Removing SELECT CASE style expression: '{match.group()[:80]}...'"  # nosec B608 - false positive: logger statement, no SQL execution
         )
         sanitized = re.sub(
             select_case_pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL
@@ -170,7 +170,7 @@ def sanitize_subset_string(subset_string: str) -> str:
                 sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE | re.DOTALL)
 
     # Remove standalone coalesce expressions at start
-    # FIX v2.5.13: Handle spaces inside coalesce expressions
+    # Handle spaces inside coalesce expressions
     standalone_coalesce = r'^\s*\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)\s*(?:AND|OR)?'
     if re.match(standalone_coalesce, sanitized, re.IGNORECASE):
         match = re.match(standalone_coalesce, sanitized, re.IGNORECASE)
@@ -199,7 +199,7 @@ def sanitize_subset_string(subset_string: str) -> str:
     # ========================================================================
     # PHASE 2.5: Remove non-boolean field references
     # ========================================================================
-    # FIX v4.8.0 (2026-01-25): Handle PostgreSQL type errors
+    # Handle PostgreSQL type errors
     #
     # Problem: QGIS expressions can generate clauses like:
     #   1. AND ("field_name") - a text/varchar field used as boolean
@@ -424,7 +424,7 @@ def extract_spatial_clauses_for_exists(filter_expr: str, source_table: Optional[
     cleaned = re.sub(case_pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
 
     # Remove coalesce display expressions
-    # FIX v2.5.13: Handle spaces inside COALESCE( ... )
+    # Handle spaces inside COALESCE( ... )
     coalesce_pattern = r'\s*(?:AND|OR)\s+\(\s*coalesce\s*\([^)]*(?:\([^)]*\)[^)]*)*\)\s*\)'
     cleaned = re.sub(coalesce_pattern, '', cleaned, flags=re.IGNORECASE)
 

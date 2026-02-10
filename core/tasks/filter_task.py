@@ -236,7 +236,7 @@ class FilterEngineTask(QgsTask):
         >>> QgsApplication.taskManager().addTask(task)
     """
 
-    # Signal to apply subset string on main thread (THREAD SAFETY FIX v2.3.21)
+    # Signal to apply subset string on main thread
     # setSubsetString is NOT thread-safe and MUST be called from the main Qt thread.
     # This signal allows background tasks to request filter application on the main thread.
     applySubsetRequest = pyqtSignal(QgsVectorLayer, str)
@@ -287,11 +287,11 @@ class FilterEngineTask(QgsTask):
         self.task_action = task_action
         self.task_parameters = task_parameters
 
-        # v4.0.1: Backend registry for hexagonal architecture compliance
+        # Backend registry for hexagonal architecture compliance
         # If provided, use registry for backend selection instead of direct imports
         self._backend_registry = backend_registry
 
-        # THREAD SAFETY FIX v2.5.6: Store warnings from worker thread for display in finished()
+        # Store warnings from worker thread for display in finished()
         # Cannot call iface.messageBar() from worker thread - would cause crash
         self.warning_messages = []
 
@@ -391,7 +391,7 @@ class FilterEngineTask(QgsTask):
             except Exception as e:
                 logger.debug(f"TaskBridge not available: {e}")
 
-        # THREAD SAFETY FIX v2.3.21: Store subset string requests to apply on main thread
+        # Store subset string requests to apply on main thread
         # Instead of calling setSubsetString directly from background thread (which causes
         # access violations), we store the requests and emit applySubsetRequest signal
         # after the task completes. The signal is connected with Qt.QueuedConnection
@@ -436,7 +436,7 @@ class FilterEngineTask(QgsTask):
         filtering_params = self.task_parameters.get("filtering", {})
         geom_predicates = filtering_params.get("geometric_predicates", [])
 
-        # FIX v4.1.2: Log FULL filtering params for diagnosis
+        # Log FULL filtering params for diagnosis
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
 
         logger.info("=" * 70)
@@ -480,14 +480,14 @@ class FilterEngineTask(QgsTask):
 
         # Reset current_predicates
         self.current_predicates = {}
-        # v2.10.0: Separate numeric predicates for OGR (prevent duplicates in PostgreSQL)
+        # Separate numeric predicates for OGR (prevent duplicates in PostgreSQL)
         self.numeric_predicates = {}
 
         for key in geom_predicates:
             if key in self.predicates:
                 func_name = self.predicates[key]
                 # Store SQL name (for PostgreSQL/Spatialite)
-                # v2.10.0 FIX: Only store string key to prevent duplicate EXISTS generation
+                # Only store string key to prevent duplicate EXISTS generation
                 # Previously, storing BOTH string and numeric keys caused build_expression()
                 # to iterate twice with same predicate → duplicate EXISTS clauses
                 self.current_predicates[func_name] = func_name
@@ -503,7 +503,7 @@ class FilterEngineTask(QgsTask):
                 logger.warning(f"   ⚠️ Unknown predicate key: {key}")
 
         # Log final state
-        # v2.10.0: current_predicates only has string keys, numeric_predicates has numeric keys
+        # Current_predicates only has string keys, numeric_predicates has numeric keys
         logger.info(f"   current_predicates (SQL): {self.current_predicates}")
         logger.info(f"   numeric_predicates (OGR): {self.numeric_predicates}")
         logger.info("   v2.10.0: Predicates now stored separately to prevent duplicate EXISTS")
@@ -663,7 +663,7 @@ class FilterEngineTask(QgsTask):
         elif hasattr(self, 'source_layer') and self.source_layer:
             source_feature_count = self.source_layer.featureCount()
 
-        # CRITICAL FIX 2026-01-16: ALWAYS get fresh predicates (race condition fix)
+        # ALWAYS get fresh predicates (race condition fix)
         predicates_to_pass = getattr(self, 'current_predicates', None) or {}
 
         # Validate predicates are populated
@@ -705,7 +705,7 @@ class FilterEngineTask(QgsTask):
         return self._expression_builder
 
     # ========================================================================
-    # v4.0.1: Hexagonal Architecture - Backend Access Methods
+    # Hexagonal Architecture - Backend Access Methods
     # ========================================================================
 
     def _get_backend_executor(self, layer_info: dict):
@@ -811,7 +811,7 @@ class FilterEngineTask(QgsTask):
         connector = self._get_backend_connector()
         connector.cleanup_backend_resources()
 
-        # FIX v4.1.1: Cleanup temporary OGR layers via BackendServices facade
+        # Cleanup temporary OGR layers via BackendServices facade
         _backend_services.cleanup_ogr_temp_layers()
 
     def queue_subset_request(self, layer: QgsVectorLayer, expression: str) -> bool:
@@ -890,7 +890,7 @@ class FilterEngineTask(QgsTask):
         # Try to get connection from task parameters
         connexion = self.task_parameters.get("task", {}).get("options", {}).get("ACTIVE_POSTGRESQL")
 
-        # FIX v4.0.8: Explicitly reject dict objects - they are NOT valid connections
+        # Explicitly reject dict objects - they are NOT valid connections
         # This fixes "'dict' object has no attribute 'cursor'" errors
         if isinstance(connexion, dict):
             logger.warning("ACTIVE_POSTGRESQL is a dict (connection params), not a connection object - obtaining fresh connection")
@@ -1284,7 +1284,7 @@ class FilterEngineTask(QgsTask):
             if result.success and hasattr(result, 'context'):
                 if hasattr(result.context, 'result_processor'):
                     self._result_processor = result.context.result_processor
-                    # v4.0.2 FIX: Merge pending subset requests instead of overwriting
+                    # Merge pending subset requests instead of overwriting
                     # For 'unfilter' and 'reset' actions, requests are added directly to
                     # self._pending_subset_requests in execute_unfiltering()/execute_reseting().
                     # We must extend the existing list, not replace it.
@@ -1303,7 +1303,7 @@ class FilterEngineTask(QgsTask):
                     self._filter_orchestrator = result.context.filter_orchestrator
                 # Else: lazy-init will handle it with callback pattern
 
-            # v4.0.1 FIX: Retrieve critical configuration values from context
+            # Retrieve critical configuration values from context
             # These are REQUIRED for Spatialite connections and filter history
             if hasattr(result, 'context') and result.context:
                 if result.context.db_file_path is not None:
@@ -1325,7 +1325,7 @@ class FilterEngineTask(QgsTask):
                     self.warning_messages = []
                 self.warning_messages.extend(result.warning_messages)
 
-            # v4.1.0: Enhanced completion logging
+            # Enhanced completion logging
             run_elapsed = time.time() - run_start_time
             logger.info(f"{'=' * 60}")
             logger.info("🏁 FilterEngineTask.run() FINISHED")
@@ -1337,7 +1337,7 @@ class FilterEngineTask(QgsTask):
 
             if not result.success and not result.exception:
                 logger.warning("⚠️ Task returned False without exception - check task logic")
-                # v4.1.1 FIX: If self.exception was set by a callback but not propagated to result,
+                # If self.exception was set by a callback but not propagated to result,
                 # convert it to a message for user display
                 if self.exception and not self.message:
                     self.message = f"Initialization error: {self.exception}"
@@ -1346,7 +1346,7 @@ class FilterEngineTask(QgsTask):
             return result.success
 
         except Exception as e:
-            # v4.1.0: Catch-all exception handler with full traceback
+            # Catch-all exception handler with full traceback
             run_elapsed = time.time() - run_start_time
             self.exception = e
             logger.error(f"{'=' * 60}")
@@ -1439,7 +1439,7 @@ class FilterEngineTask(QgsTask):
 
         # Skip multi-step for complex scenarios
         # Check for buffers which require special handling (both positive and negative)
-        # v4.0.7: FIX - Handle negative buffers (erosion) as well as positive buffers
+        # Handle negative buffers (erosion) as well as positive buffers
         buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
         if buffer_value and buffer_value != 0:
             buffer_type = "expansion" if buffer_value > 0 else "erosion"
@@ -1629,7 +1629,7 @@ class FilterEngineTask(QgsTask):
         self.param_source_old_subset = params.old_subset
         self.source_layer_fields_names = params.field_names
 
-        # FIX v4.2.12 (2026-01-21): Update task_parameters with source table info
+        # Update task_parameters with source table info
         # This is critical for ExpressionBuilder to access param_source_table
         # which is needed for adapting EXISTS clauses when filtering distant layers
         self.task_parameters['param_source_table'] = params.table_name
@@ -1775,13 +1775,13 @@ class FilterEngineTask(QgsTask):
             bool: True if expression was queued successfully
         """
         # Apply type casting for PostgreSQL to fix varchar/numeric comparison issues
-        # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
+        # Use param_source_provider_type instead of providerType()
         # providerType() returns 'postgres' even when using OGR fallback (psycopg2 unavailable)
         # param_source_provider_type correctly accounts for OGR fallback
         if self.param_source_provider_type == PROVIDER_POSTGRES:
             expression = self._apply_postgresql_type_casting(expression, self.source_layer)
 
-        # CRITICAL FIX v2.6.6: Do NOT call setSubsetString from worker thread!
+        # Do NOT call setSubsetString from worker thread!
         # This causes "access violation" crashes on Windows because QGIS layer
         # operations are not thread-safe.
         # Instead, queue the expression for application in finished() which
@@ -1794,7 +1794,7 @@ class FilterEngineTask(QgsTask):
 
         # Only build PostgreSQL SELECT for PostgreSQL providers
         # OGR and Spatialite use subset strings directly
-        # CRITICAL FIX v2.5.12: Use param_source_provider_type instead of providerType()
+        # Use param_source_provider_type instead of providerType()
         # providerType() returns 'postgres' even when using OGR fallback
         if self.param_source_provider_type == PROVIDER_POSTGRES:
             # FIX 2026-01-16: Strip leading "WHERE " from expression to prevent "WHERE WHERE" syntax error
@@ -1805,7 +1805,7 @@ class FilterEngineTask(QgsTask):
 
             # Build full SELECT expression for subset management (PostgreSQL only)
             full_expression = (
-                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '  # nosec B608
+                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
                 f'"{self.param_source_table}"."{self.param_source_geom}" '
                 f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
                 f'WHERE {clean_expression}'
@@ -1946,7 +1946,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             bool: True if all layers processed (some may fail), False if canceled
         """
-        # FIX v3.0.8: Import QgsMessageLog for visible diagnostic logs
+        # Import QgsMessageLog for visible diagnostic logs
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
 
         # DIAGNOSTIC: Log all layers that will be filtered
@@ -1965,7 +1965,7 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  TOTAL: {total_layers} couches à filtrer")
         logger.info("=" * 70)
 
-        # FIX v3.0.8: Log to QGIS message panel for visibility
+        # Log to QGIS message panel for visibility
         QgsMessageLog.logMessage(
             f"🔍 Filtering {total_layers} distant layers: {', '.join(layer_names_list[:5])}{'...' if len(layer_names_list) > 5 else ''}",
             "FilterMate", QgisLevel.Info
@@ -2023,7 +2023,7 @@ class FilterEngineTask(QgsTask):
         executor = ParallelFilterExecutor(config.max_workers)
 
         # Execute parallel filtering with required task_parameters
-        # THREAD SAFETY FIX v2.3.9: Include filtering params for OGR detection
+        # Include filtering params for OGR detection (thread safety)
         task_parameters = {
             'task': self,
             'filter_type': getattr(self, 'filter_type', 'geometric'),
@@ -2031,7 +2031,7 @@ class FilterEngineTask(QgsTask):
                 'filter_type': getattr(self, 'filter_type', 'geometric')
             }
         }
-        # CANCELLATION FIX v2.3.22: Pass cancel_check callback to executor
+        # Pass cancel_check callback to executor
         # This allows parallel workers to check if task was canceled and stop immediately
         results = executor.filter_layers_parallel(
             all_layers,
@@ -2076,7 +2076,7 @@ class FilterEngineTask(QgsTask):
         # Store failed layer names for error message in finished()
         if failed_filters > 0:
             self._failed_layer_names = failed_layer_names
-            # FIX v4.1.2: Set self.message for proper error display in finished()
+            # Set self.message for proper error display in finished()
             layer_list = ', '.join(failed_layer_names[:3])
             suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
             self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
@@ -2105,7 +2105,7 @@ class FilterEngineTask(QgsTask):
 
         for layer_provider_type in self.layers:
             for layer, layer_props in self.layers[layer_provider_type]:
-                # STABILITY FIX v2.3.9: Validate layer before any operations
+                # Validate layer before any operations
                 # This prevents crashes when layer becomes invalid during sequential filtering
                 try:
                     if not is_valid_layer(layer):
@@ -2133,7 +2133,7 @@ class FilterEngineTask(QgsTask):
 
                 result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
 
-                # FIX v4.1.2: Log result VISIBLY for debugging
+                # Log result VISIBLY for debugging
                 logger.info(f"   → execute_geometric_filtering RESULT: {result}")
 
                 if result:
@@ -2163,7 +2163,7 @@ class FilterEngineTask(QgsTask):
         # Store failed layer names for error message in finished()
         if failed_filters > 0:
             self._failed_layer_names = failed_layer_names
-            # FIX v4.1.2: Set self.message for proper error display in finished()
+            # Set self.message for proper error display in finished()
             layer_list = ', '.join(failed_layer_names[:3])
             suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
             self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
@@ -2215,14 +2215,14 @@ class FilterEngineTask(QgsTask):
         # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
         self._initialize_source_subset_and_buffer()
 
-        # FIX v4.2.7: Calculate source_feature_count ONCE and store it for consistent threshold decisions
+        # Calculate source_feature_count ONCE and store it for consistent threshold decisions
         # This ensures _ensure_buffer_expression_mv_exists() and prepare_postgresql_source_geom()
         # use the same value (featureCount can vary if subsetString changes between calls)
         self._cached_source_feature_count = self.source_layer.featureCount() if self.source_layer else None
         logger.info(f"  📊 Cached source_feature_count: {self._cached_source_feature_count}")
 
-        # FIX v4.2.1 (2026-01-21): Ensure buffer expression MV exists BEFORE prepare_geometries
-        # FIX v4.2.11 (2026-01-21): CRITICAL - Only call MV creation if feature count exceeds threshold
+        # Ensure buffer expression MV exists BEFORE prepare_geometries
+        # CRITICAL - Only call MV creation if feature count exceeds threshold
         # When using custom buffer expression with PostgreSQL, the MV must be created BEFORE
         # prepare_postgresql_source_geom() generates the reference to it. Otherwise, the
         # MV won't exist when distant layers try to use it for filtering.
@@ -2240,14 +2240,14 @@ class FilterEngineTask(QgsTask):
             logger.info(f"  ✓ SKIP MV creation: {self._cached_source_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold")
             logger.info("  → Buffer expression will be applied INLINE by prepare_postgresql_source_geom()")
 
-        # v4.2.10: Try to create optimized filter chain MV for PostgreSQL
+        # Try to create optimized filter chain MV for PostgreSQL
         # When multiple spatial filters are chained (zone_pop AND demand_points etc.),
         # creating a single MV reduces N×M EXISTS queries to 1 EXISTS per distant layer
         if self.param_source_provider_type == 'postgresql':
             self._try_create_filter_chain_mv()
 
         # Build unique provider list including source layer provider AND forced backends
-        # CRITICAL FIX v2.4.1: Include forced backends in provider_list
+        # Include forced backends in provider_list
         # Without this, forced backends won't have their source geometry prepared
         provider_list = self.provider_list + [self.param_source_provider_type]
 
@@ -2333,7 +2333,7 @@ class FilterEngineTask(QgsTask):
         Returns:
             str: PostgreSQL geometry expression (e.g., '"schema"."table"."geom"' or buffered variant)
         """
-        # FIX v4.1.2: Add diagnostic logging to trace PostgreSQL geometry preparation
+        # Add diagnostic logging to trace PostgreSQL geometry preparation
         logger.info("=" * 60)
         logger.info("🐘 PREPARING PostgreSQL SOURCE GEOMETRY")
         logger.info("=" * 60)
@@ -2346,7 +2346,7 @@ class FilterEngineTask(QgsTask):
         logger.info(f"   session_id: {getattr(self, 'session_id', None)}")
         logger.info(f"   mv_schema: {getattr(self, 'current_materialized_view_schema', 'filter_mate_temp')}")
 
-        # FIX v4.2.7: Use cached feature count for consistent threshold decisions
+        # Use cached feature count for consistent threshold decisions
         source_fc = getattr(self, '_cached_source_feature_count', None)
         if source_fc is None:
             # Fallback if not cached (e.g., called from different code path)
@@ -2362,19 +2362,19 @@ class FilterEngineTask(QgsTask):
             buffer_segments=getattr(self, 'param_buffer_segments', 5),
             buffer_type=self.task_parameters.get("filtering", {}).get("buffer_type", "Round"),
             primary_key_name=getattr(self, 'primary_key_name', None),
-            session_id=getattr(self, 'session_id', None),  # FIX v4.2.0: Pass session_id for MV name prefix
-            mv_schema=getattr(self, 'current_materialized_view_schema', 'filter_mate_temp'),  # FIX v4.2.0: Pass MV schema
-            source_feature_count=source_fc  # FIX v4.2.7: Use cached value for consistent threshold
+            session_id=getattr(self, 'session_id', None),  # Pass session_id for MV name prefix
+            mv_schema=getattr(self, 'current_materialized_view_schema', 'filter_mate_temp'),  # Pass MV schema
+            source_feature_count=source_fc  # Use cached value for consistent threshold
         )
         self.postgresql_source_geom = result_geom
         if mv_name:
             self.current_materialized_view_name = mv_name
 
-        # FIX v4.1.2: Log result for debugging
+        # Log result for debugging
         logger.info(f"   ✓ postgresql_source_geom = '{str(result_geom)[:100]}...'")
         logger.info("=" * 60)
 
-        # FIX v4.0.3 (2026-01-16): CRITICAL - Return the geometry expression!
+        # CRITICAL - Return the geometry expression!
         # The callback in geometry_preparer.py expects a return value.
         return result_geom
 
@@ -2675,7 +2675,7 @@ class FilterEngineTask(QgsTask):
         """Apply buffer with fallback to manual method. Validates geometries before buffering."""
         logger.info(f"Applying buffer: distance={buffer_distance}")
 
-        # STABILITY FIX v2.3.9: Validate input layer before any operations
+        # Validate input layer before any operations
         if layer is None:
             logger.error("_apply_buffer_with_fallback: Input layer is None")
             return None
@@ -2694,7 +2694,7 @@ class FilterEngineTask(QgsTask):
             # Try QGIS buffer algorithm first
             result = self._apply_qgis_buffer(layer, buffer_distance)
 
-            # STABILITY FIX v2.3.9: Validate result before returning
+            # Validate result before returning
             if result is None or not result.isValid() or result.featureCount() == 0:
                 logger.warning("_apply_qgis_buffer returned invalid/empty result, trying manual buffer")
                 raise Exception("QGIS buffer returned invalid result")
@@ -2705,7 +2705,7 @@ class FilterEngineTask(QgsTask):
             try:
                 result = self._create_buffered_memory_layer(layer, buffer_distance)
 
-                # STABILITY FIX v2.3.9: Validate result before returning
+                # Validate result before returning
                 if result is None or not result.isValid() or result.featureCount() == 0:
                     logger.error("Manual buffer also returned invalid/empty result")
                     return None
@@ -2715,7 +2715,7 @@ class FilterEngineTask(QgsTask):
                 logger.error("Returning None - buffer operation failed completely")
                 return None
 
-        # v2.8.6: Apply post-buffer simplification to reduce vertex count
+        # Apply post-buffer simplification to reduce vertex count
         if result is not None and result.isValid() and result.featureCount() > 0:
             result = self._simplify_buffer_result(result, buffer_distance)
 
@@ -2758,7 +2758,7 @@ class FilterEngineTask(QgsTask):
     def _get_source_reference(self, sub_expression):
         """Determine the source reference for spatial joins (MV or direct table)."""
         if self.current_materialized_view_name:
-            # v4.4.4: fm_temp_mv_ prefix for new MVs
+            # Fm_temp_mv_ prefix for new MVs
             return f'"{self.current_materialized_view_schema}"."fm_temp_mv_{self.current_materialized_view_name}_dump"'
         return sub_expression
 
@@ -2782,7 +2782,7 @@ class FilterEngineTask(QgsTask):
         param_distant_table = layer_props["layer_name"]
         source_ref = self._get_source_reference(sub_expression)
         return (
-            f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '  # nosec B608
+            f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
             f'FROM "{param_distant_schema}"."{param_distant_table}" '
             f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
         )
@@ -2936,7 +2936,7 @@ class FilterEngineTask(QgsTask):
             layer_props=layer_props
         )
 
-        # v2.9.0: Handle source MV creation (kept here as it's task-specific)
+        # Handle source MV creation (kept here as it's task-specific)
         # The builder returns optimization info but doesn't create MVs
         if result.optimization_applied:
             try:
@@ -2982,7 +2982,7 @@ class FilterEngineTask(QgsTask):
 
             self._execute_postgresql_commands(connexion, commands)
 
-            # FIX v4.2.8: Register MV references to prevent premature cleanup
+            # Register MV references to prevent premature cleanup
             from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
             tracker = get_mv_reference_tracker()
 
@@ -3044,7 +3044,7 @@ class FilterEngineTask(QgsTask):
         logger.info(f"   session_id: {self.session_id}")
         logger.info(f"   source_table: {self.param_source_table}")
 
-        # FIX v4.2.7: Use cached feature count for consistent threshold decisions
+        # Use cached feature count for consistent threshold decisions
         source_feature_count = getattr(self, '_cached_source_feature_count', None)
         if source_feature_count is None:
             # Fallback if not cached (should not happen in normal flow)
@@ -3110,7 +3110,7 @@ class FilterEngineTask(QgsTask):
             if source_subset:
                 f" WHERE {source_subset}"
 
-            # SQL commands (v4.4.4: fm_temp_mv_ prefix)
+            # SQL commands (fm_temp_mv_ prefix)
             sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" CASCADE;'
             sql_drop_main = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}" CASCADE;'
 
@@ -3143,11 +3143,11 @@ class FilterEngineTask(QgsTask):
             commands = [sql_drop, sql_drop_main, sql_create_main, sql_index, sql_create_dump]
             self._execute_postgresql_commands(connexion, commands)
 
-            # FIX v4.2.8: Register MV references to prevent premature cleanup
+            # Register MV references to prevent premature cleanup
             from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
             tracker = get_mv_reference_tracker()
 
-            # Register references for source layer and all distant layers (v4.4.4: fm_temp_mv_ prefix)
+            # Register references for source layer and all distant layers (fm_temp_mv_ prefix)
             if self.source_layer:
                 tracker.add_reference(f"fm_temp_mv_{mv_name}", self.source_layer.id())
                 tracker.add_reference(f"fm_temp_mv_{mv_name}_dump", self.source_layer.id())
@@ -3194,7 +3194,7 @@ class FilterEngineTask(QgsTask):
         - Feature count threshold for spatial_filters tables
         - Configuration option to enable/disable
         """
-        # v4.2.10b: DISABLED - Causes task blocking at 14%
+        # DISABLED - Causes task blocking at 14%
         # The MV creation with complex EXISTS subqueries can take very long on large tables
         # without proper indexes. Need to add timeout and better threshold checks.
         logger.info("=" * 60)
@@ -3297,7 +3297,7 @@ class FilterEngineTask(QgsTask):
                 source_geom_column=self.param_source_geom,
                 spatial_filters=spatial_filters,
                 buffer_value=self.param_buffer_value,
-                buffer_expression=self.param_buffer_expression,  # v4.3.5: Include dynamic expression
+                buffer_expression=self.param_buffer_expression,  # Include dynamic expression
                 feature_count_estimate=getattr(self, '_cached_source_feature_count', 0),
                 session_id=self.session_id
             )
@@ -3325,7 +3325,7 @@ class FilterEngineTask(QgsTask):
                 self._filter_chain_optimizer = optimizer
                 self._filter_chain_context = context
 
-                # v4.2.10: Inject MV name into task_parameters for ExpressionBuilder access
+                # Inject MV name into task_parameters for ExpressionBuilder access
                 self.task_parameters['_filter_chain_mv_name'] = mv_name
                 logger.info("   ✓ Injected _filter_chain_mv_name into task_parameters")
 
@@ -3651,7 +3651,7 @@ class FilterEngineTask(QgsTask):
         """Prepare source geometry expression based on provider type (PostgreSQL→SQL/WKT, Spatialite→WKT, OGR→QgsVectorLayer)."""
         # PostgreSQL backend needs SQL expression
         if layer_provider_type == PROVIDER_POSTGRES and POSTGRESQL_AVAILABLE:
-            # v2.7.11 DIAGNOSTIC: Log which path is taken
+            # Log which path is taken
             logger.info("🔍 _prepare_source_geometry(PROVIDER_POSTGRES)")
             logger.info(f"   postgresql_source_geom exists: {hasattr(self, 'postgresql_source_geom')}")
             if hasattr(self, 'postgresql_source_geom'):
@@ -3659,7 +3659,7 @@ class FilterEngineTask(QgsTask):
                 if self.postgresql_source_geom:
                     logger.info(f"   postgresql_source_geom preview: '{str(self.postgresql_source_geom)[:100]}...'")
 
-            # CRITICAL FIX v2.7.2: Only use postgresql_source_geom if source is also PostgreSQL
+            # Only use postgresql_source_geom if source is also PostgreSQL
             # When source is OGR and postgresql_source_geom was NOT prepared (per fix in
             # _prepare_geometries_by_provider), we should use WKT mode.
             # However, if postgresql_source_geom was somehow prepared with invalid data,
@@ -3695,13 +3695,13 @@ class FilterEngineTask(QgsTask):
         if layer_provider_type == PROVIDER_SPATIALITE:
             if hasattr(self, 'spatialite_source_geom') and self.spatialite_source_geom:
                 return self.spatialite_source_geom
-            # CRITICAL FIX v2.4.1: Generate WKT from OGR source if available
+            # Generate WKT from OGR source if available
             if hasattr(self, 'ogr_source_geom') and self.ogr_source_geom:
                 logger.warning("Spatialite source geom not available, generating WKT from OGR layer")
                 try:
                     if isinstance(self.ogr_source_geom, QgsVectorLayer):
                         all_geoms = []
-                        # v4.2.8: Add cancellation check during feature iteration
+                        # Add cancellation check during feature iteration
                         cancel_check_interval = 100
                         for i, feature in enumerate(self.ogr_source_geom.getFeatures()):
                             # Periodic cancellation check
@@ -3859,7 +3859,7 @@ class FilterEngineTask(QgsTask):
         for prov_type, layer_list in (self.layers or {}).items():
             pass  # print statements removed
 
-        # FIX v3.0.7: Log to QGIS message panel for visibility
+        # Log to QGIS message panel for visibility
         from qgis.core import QgsMessageLog, Qgis as QgisLevel
 
         logger.info("\n🔍 Checking if distant layers should be filtered...")
@@ -3878,7 +3878,7 @@ class FilterEngineTask(QgsTask):
         logger.info(f"  task['layers'] content: {layer_names}")
         logger.info(f"  self.layers content: {list(self.layers.keys())} with {sum(len(v) for v in self.layers.values())} total layers")
 
-        # FIX v3.0.10: Log conditions to QGIS message panel for debugging
+        # Log conditions to QGIS message panel for debugging
         # This helps diagnose why distant layers may not be filtered
         if not has_geom_predicates or (not has_layers_to_filter and not has_layers_in_params) or self.layers_count == 0:
             missing_conditions = []
@@ -4726,7 +4726,7 @@ class FilterEngineTask(QgsTask):
         if endcap_style != 'round':
             style_params += f" endcap={endcap_style}"
 
-        # FIX v4.2.8 (2026-01-21): Use source layer subset for buffer MV filtering
+        # Use source layer subset for buffer MV filtering
         #
         # Problem: When creating buffer MV, sql_subset_string contains the SELECT for
         #          the DISTANT layer filter, not the SOURCE layer filter.
@@ -4749,15 +4749,15 @@ class FilterEngineTask(QgsTask):
             # FIX: Use source subset as-is if it's a valid SELECT statement
             if 'SELECT' in source_subset.upper():
                 source_filter_for_mv = source_subset
-                logger.info("   → Using source layer SELECT statement for buffer MV")  # nosec B608
+                logger.info("   Using source layer SELECT statement for buffer MV")  # nosec B608 - false positive: logger statement, no SQL execution
             else:
                 # Fallback: source_subset is a WHERE clause, wrap it in SELECT
                 source_filter_for_mv = (
-                    f'(SELECT "{self.param_source_table}"."{self.primary_key_name}" '  # nosec B608
+                    f'(SELECT "{self.param_source_table}"."{self.primary_key_name}" '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
                     f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
                     f'WHERE {source_subset})'
                 )
-                logger.info("   → Wrapped source WHERE clause in SELECT for buffer MV")  # nosec B608
+                logger.info("   Wrapped source WHERE clause in SELECT for buffer MV")  # nosec B608 - false positive: logger statement, no SQL execution
         else:
             logger.debug("   Buffer MV: No source layer subset, using sql_subset_string")
 
@@ -5079,15 +5079,15 @@ class FilterEngineTask(QgsTask):
         finally:
             history_repo.close()
 
-        # Drop temp table from filterMate_db using session-prefixed name (v4.4.4: fm_temp_ prefix)
+        # Drop temp table from filterMate_db using session-prefixed name (fm_temp_ prefix)
         import sqlite3
         session_name = self._get_session_prefixed_name(name)
         try:
             temp_conn = sqlite3.connect(self.db_file_path)
             temp_cur = temp_conn.cursor()
             # Try to drop both new (fm_temp_) and legacy (mv_) tables
-            temp_cur.execute(f"DROP TABLE IF EXISTS fm_temp_{session_name}")  # nosec B608
-            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")  # nosec B608
+            temp_cur.execute(f"DROP TABLE IF EXISTS fm_temp_{session_name}")  # nosec B608 - session_name from _get_session_prefixed_name() (internal hash-based generation, SpatiaLite: no sql.Identifier equivalent)
+            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")  # nosec B608 - session_name from _get_session_prefixed_name() (internal hash-based generation, SpatiaLite: no sql.Identifier equivalent)
             temp_conn.commit()
             temp_cur.close()
             temp_conn.close()
@@ -5378,7 +5378,7 @@ class FilterEngineTask(QgsTask):
                     logger.debug(f"Could not close database cursor: {e}")
                 if conn in self.active_connections:
                     self.active_connections.remove(conn)
-                # FIX v2.3.9: Reset prepared statements manager when connection closes
+                # Reset prepared statements manager when connection closes
                 # to avoid "Cannot operate on a closed database" errors
                 self._ps_manager = None
 
@@ -5586,10 +5586,10 @@ class FilterEngineTask(QgsTask):
                 # Log but don't fail - connection may already be closed
                 logger.debug(f"Connection cleanup failed (may already be closed): {e}")
         self.active_connections.clear()
-        # FIX v2.3.9: Reset prepared statements manager when connections close
+        # Reset prepared statements manager when connections close
         self._ps_manager = None
 
-        # CRASH FIX (v2.8.7): Use Python logger only, NOT QgsMessageLog
+        # Use Python logger only, NOT QgsMessageLog
         # QgsMessageLog may be destroyed during QGIS shutdown, causing access violation
         try:
             logger.info(f'"{self.description()}" task was canceled')
@@ -5670,7 +5670,7 @@ class FilterEngineTask(QgsTask):
             if hasattr(self, '_pending_subset_requests'):
                 self._pending_subset_requests = []  # Clear to prevent any application
 
-        # THREAD SAFETY FIX v2.3.21: Apply pending subset strings on main thread
+        # Apply pending subset strings on main thread
         # E6: Delegated to task_completion_handler.apply_pending_subset_requests()
         if hasattr(self, '_pending_subset_requests') and self._pending_subset_requests:
             applied_count = apply_pending_subset_requests(
@@ -5687,7 +5687,7 @@ class FilterEngineTask(QgsTask):
                 self._single_canvas_refresh
             )
 
-        # CRITICAL FIX v2.3.13: Only cleanup MVs on reset/unfilter actions, NOT on filter
+        # Only cleanup MVs on reset/unfilter actions, NOT on filter
         # When filtering, materialized views are referenced by the layer's subsetString.
         # Cleaning them up would invalidate the filter expression causing empty results.
         # Cleanup should only happen when:
@@ -5703,7 +5703,7 @@ class FilterEngineTask(QgsTask):
             self.ogr_source_geom = None
 
         if self.exception is None:
-            # v3.0.8: CRITICAL FIX - Only show error message if task was TRULY canceled by user
+            # Only show error message if task was TRULY canceled by user
             # When a new filter task starts, it cancels previous tasks. Those tasks call finished()
             # with result=False and message="Filter task was canceled by user". We should NOT
             # display this as a critical error since it's expected behavior when starting a new filter.
@@ -5720,10 +5720,10 @@ class FilterEngineTask(QgsTask):
                     logger.info('Task was canceled - no error message displayed')
                 else:
                     # Task really failed - display error message
-                    # v4.1.2 FIX: Enhanced error message with failed layer names
+                    # Enhanced error message with failed layer names
                     error_msg = self.message if hasattr(self, 'message') and self.message else 'Task failed'
 
-                    # FIX v4.1.2: Include failed layer names if available
+                    # Include failed layer names if available
                     failed_layers = getattr(self, '_failed_layer_names', [])
                     if failed_layers and error_msg == 'Task failed':
                         error_msg = f"Filter failed for: {', '.join(failed_layers[:3])}"
@@ -5735,7 +5735,7 @@ class FilterEngineTask(QgsTask):
                     logger.error(f"   Source layer: {self.source_layer.name() if self.source_layer else 'None'}")
                     logger.error(f"   Layers count: {getattr(self, 'layers_count', 'N/A')}")
 
-                    # FIX v4.1.2: Log to QGIS message log for visibility
+                    # Log to QGIS message log for visibility
                     from qgis.core import QgsMessageLog
                     QgsMessageLog.logMessage(
                         f"❌ Task failed: {error_msg}",
@@ -5767,14 +5767,14 @@ class FilterEngineTask(QgsTask):
                         f'Filter task : {result_action}',
                         Qgis.Success)
 
-                    # v2.9.23: Restore source layer selection after filter/unfilter
+                    # Restore source layer selection after filter/unfilter
                     # This keeps the selected features visually highlighted on the map
                     try:
                         self._restore_source_layer_selection()
                     except Exception as sel_err:
                         logger.debug(f"Could not restore source layer selection: {sel_err}")
 
-                    # FIX v2.5.12: Ensure canvas is refreshed after successful filter operation
+                    # Ensure canvas is refreshed after successful filter operation
                     # This guarantees filtered features are visible on the map
                     try:
                         iface.mapCanvas().refresh()
@@ -5811,7 +5811,7 @@ class FilterEngineTask(QgsTask):
                     f"Some operations succeeded but an exception occurred: {self.exception}"
                 )
 
-        # FIX v2.9.24: Clean up OGR backend temporary GEOS-safe layers
+        # Clean up OGR backend temporary GEOS-safe layers
         # These accumulate during multi-layer filtering and must be released after task completes
         try:
             # Import cleanup function from OGR backend

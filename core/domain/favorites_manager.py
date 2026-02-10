@@ -162,7 +162,7 @@ class FavoritesManager:
                 for col_name, col_type in required_columns.items():
                     if col_name not in existing_columns:
                         logger.info(f"Adding missing column '{col_name}' to fm_favorites table")
-                        cursor.execute(f"ALTER TABLE fm_favorites ADD COLUMN {col_name} {col_type}")  # nosec B608
+                        cursor.execute(f"ALTER TABLE fm_favorites ADD COLUMN {col_name} {col_type}")  # nosec B608 - col_name/col_type from hardcoded required_columns dict (internal schema migration)
 
                 conn.commit()
                 logger.debug("fm_favorites table migrated to new schema")

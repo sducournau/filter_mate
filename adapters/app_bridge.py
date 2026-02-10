@@ -79,7 +79,7 @@ def initialize_services(config: Optional[Dict[str, Any]] = None) -> None:
     config = config or {}
 
     try:
-        # CRITICAL v4.0: Use existing QGIS factory (already initialized in filter_mate.py)
+        # CRITICAL Use existing QGIS factory (already initialized in filter_mate.py)
         from ..core.ports.qgis_port import get_qgis_factory
 
         try:
@@ -144,7 +144,7 @@ def cleanup_services() -> None:
     global _backend_factory, _initialized
 
     try:
-        # CRITICAL v4.0: Reset QGIS factory
+        # CRITICAL Reset QGIS factory
         from ..core.ports.qgis_port import set_qgis_factory
         set_qgis_factory(None)
         logger.debug("QGIS factory reset")

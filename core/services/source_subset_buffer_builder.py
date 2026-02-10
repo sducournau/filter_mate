@@ -223,7 +223,7 @@ class SourceSubsetBufferBuilder:
         else:
             # Standard mode: Check if expression is a field
             try:
-                # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
+                # HEXAGONAL MIGRATION Use adapter instead of QgsExpression
                 from ..ports.qgis_port import get_qgis_factory
 
                 factory = get_qgis_factory()
@@ -299,7 +299,7 @@ class SourceSubsetBufferBuilder:
         buffer_expr = filtering_params.get("buffer_value_expression")
         buffer_val_raw = filtering_params.get("buffer_value", 0)
 
-        # FIX v3.0.12: Clean buffer value from float precision errors
+        # Clean buffer value from float precision errors
         buffer_val = clean_buffer_value(buffer_val_raw)
 
         logger.info(f"  buffer_value_property (override active): {buffer_property}")
@@ -365,7 +365,7 @@ class SourceSubsetBufferBuilder:
         Previously, the expression was used even when the property override
         button was inactive, causing the spinbox value to be ignored.
         """
-        # FIX v4.2.10: Check buffer_property FIRST - expression is only valid when property is active
+        # Check buffer_property FIRST - expression is only valid when property is active
         if buffer_property and buffer_expr and buffer_expr.strip():
             try:
                 # Try to convert to float - if successful, it's static
@@ -380,7 +380,7 @@ class SourceSubsetBufferBuilder:
                 logger.info("  ✓ Property override button confirmed ACTIVE")
                 return 0.0, buffer_expr
 
-        # FIX v4.2.10: Log when expression exists but property is inactive
+        # Log when expression exists but property is inactive
         if buffer_expr and buffer_expr.strip() and not buffer_property:
             logger.info(f"  ℹ️  Buffer expression exists ('{buffer_expr[:50]}...') but property override is INACTIVE")
             logger.info("  ℹ️  Using spinbox value instead")

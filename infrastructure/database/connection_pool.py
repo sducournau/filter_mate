@@ -231,7 +231,7 @@ class PostgreSQLConnectionPool:
         """
         def health_check_loop():
             while not self._shutdown_event.is_set():
-                # CRASH FIX (v2.8.6): Check if QGIS is still alive before any operation
+                # Check if QGIS is still alive before any operation
                 try:
                     from qgis.PyQt.QtWidgets import QApplication
                     if QApplication.instance() is None:
@@ -965,7 +965,7 @@ def unregister_pool(name: str) -> None:
         logger.debug(f"Unregistered connection pool: {name}")
 
 
-# CRASH FIX (v2.8.6): Register atexit handler to ensure pools are cleaned up
+# Register atexit handler to ensure pools are cleaned up
 def _atexit_cleanup():
     """Cleanup handler called when Python interpreter exits."""
     global _pool_manager

@@ -113,7 +113,7 @@ class HistoryRepository:
 
         try:
             self._cursor.execute(
-                """INSERT INTO fm_subset_history  # nosec B608
+                """INSERT INTO fm_subset_history  # nosec B608 - values from internal QGIS layer IDs and FilterMate UUIDs, subset_string escaped above
                     VALUES('{entry_id}', datetime(), '{project_uuid}', '{layer_id}',
                            '{source_layer_id}', {seq_order}, '{safe_subset}');"""
             )
@@ -144,7 +144,7 @@ class HistoryRepository:
         """
         try:
             self._cursor.execute(
-                """DELETE FROM fm_subset_history  # nosec B608
+                """DELETE FROM fm_subset_history  # nosec B608 - project_uuid/layer_id from internal QGIS layer registry
                     WHERE fk_project = '{project_uuid}' AND layer_id = '{layer_id}';"""
             )
             self._conn.commit()
@@ -177,7 +177,7 @@ class HistoryRepository:
         """
         try:
             self._cursor.execute(
-                """DELETE FROM fm_subset_history  # nosec B608
+                """DELETE FROM fm_subset_history  # nosec B608 - project_uuid/layer_id/entry_id from internal QGIS/FilterMate UUIDs
                     WHERE fk_project = '{project_uuid}'
                       AND layer_id = '{layer_id}'
                       AND id = '{entry_id}';"""
@@ -209,7 +209,7 @@ class HistoryRepository:
         """
         try:
             self._cursor.execute(
-                """SELECT * FROM fm_subset_history  # nosec B608
+                """SELECT * FROM fm_subset_history  # nosec B608 - project_uuid/layer_id from internal QGIS layer registry
                     WHERE fk_project = '{project_uuid}' AND layer_id = '{layer_id}'
                     ORDER BY seq_order DESC LIMIT 1;"""
             )
@@ -265,7 +265,7 @@ class HistoryRepository:
         """
         try:
             self._cursor.execute(
-                """SELECT * FROM fm_subset_history  # nosec B608
+                """SELECT * FROM fm_subset_history  # nosec B608 - project_uuid/layer_id from internal QGIS layer registry, limit is int
                     WHERE fk_project = '{project_uuid}' AND layer_id = '{layer_id}'
                     ORDER BY seq_order DESC LIMIT {limit};"""
             )
@@ -293,7 +293,7 @@ class HistoryRepository:
         """
         try:
             self._cursor.execute(
-                """SELECT COUNT(*) FROM fm_subset_history  # nosec B608
+                """SELECT COUNT(*) FROM fm_subset_history  # nosec B608 - project_uuid/layer_id from internal QGIS layer registry
                     WHERE fk_project = '{project_uuid}' AND layer_id = '{layer_id}';"""
             )
             result = self._cursor.fetchone()

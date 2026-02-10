@@ -27,6 +27,7 @@ from .config_controller import ConfigController
 from .favorites_controller import FavoritesController
 from .property_controller import PropertyController
 from .ui_layout_controller import UILayoutController
+from .raster_exploring_controller import RasterExploringController
 
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer
@@ -87,6 +88,7 @@ class ControllerIntegration:
         self._favorites_controller: Optional[FavoritesController] = None
         self._property_controller: Optional[PropertyController] = None
         self._ui_layout_controller: Optional[UILayoutController] = None
+        self._raster_exploring_controller: Optional[RasterExploringController] = None
 
         # Connection tracking
         self._connections: list = []
@@ -146,6 +148,11 @@ class ControllerIntegration:
     def ui_layout_controller(self) -> Optional[UILayoutController]:
         """Get the UI layout controller."""
         return self._ui_layout_controller
+
+    @property
+    def raster_exploring_controller(self) -> Optional[RasterExploringController]:
+        """Get the raster exploring controller."""
+        return self._raster_exploring_controller
 
     def setup(self) -> bool:
         """
@@ -223,6 +230,7 @@ class ControllerIntegration:
             self._favorites_controller = None
             self._property_controller = None
             self._ui_layout_controller = None
+            self._raster_exploring_controller = None
             self._registry = None
             self._is_setup = False
 
@@ -271,7 +279,7 @@ class ControllerIntegration:
             signal_manager=self._signal_manager
         )
 
-        # v4.0: Create FavoritesController
+        # Create FavoritesController
         self._favorites_controller = FavoritesController(
             dockwidget=self._dockwidget
         )
@@ -284,6 +292,12 @@ class ControllerIntegration:
         # v4.0 Sprint 4: Create UILayoutController
         self._ui_layout_controller = UILayoutController(
             dockwidget=self._dockwidget
+        )
+
+        # Phase 0: Create RasterExploringController
+        self._raster_exploring_controller = RasterExploringController(
+            dockwidget=self._dockwidget,
+            signal_manager=self._signal_manager
         )
 
         logger.debug("All controllers created")
@@ -345,7 +359,7 @@ class ControllerIntegration:
             TabIndex.CONFIGURATION  # Tab for configuration
         )
 
-        # v4.0: Register FavoritesController
+        # Register FavoritesController
         safe_register(
             'favorites',
             self._favorites_controller,
@@ -364,6 +378,13 @@ class ControllerIntegration:
             'ui_layout',
             self._ui_layout_controller,
             TabIndex.FILTERING  # UI layout controller active on all tabs
+        )
+
+        # Phase 0: Register RasterExploringController
+        safe_register(
+            'raster_exploring',
+            self._raster_exploring_controller,
+            None  # Not tab-based, lives in the exploring frame
         )
 
         logger.debug("All controllers registered")
@@ -430,7 +451,7 @@ class ControllerIntegration:
             except Exception as e:
                 logger.warning(f"Could not connect gettingProjectLayers signal: {e}")
 
-        # === v4.0.5: Connect controller signals to integration handlers ===
+        # === Connect controller signals to integration handlers ===
         # This enables proper event-driven communication between controllers and UI
 
         # LayerSyncController signals
@@ -509,7 +530,7 @@ class ControllerIntegration:
                     dw.projectLayersReady.disconnect(handler)
                 elif signal_name == 'gettingProjectLayers' and hasattr(dw, 'gettingProjectLayers'):
                     dw.gettingProjectLayers.disconnect(handler)
-                # v4.0.5: Controller signals
+                # Controller signals
                 elif signal_name.startswith('layer_sync.') and self._layer_sync_controller:
                     if 'layer_synchronized' in signal_name:
                         self._layer_sync_controller.layer_synchronized.disconnect(handler)
@@ -577,7 +598,7 @@ class ControllerIntegration:
         if self._filtering_controller:
             self._filtering_controller.set_source_layer(layer)
 
-    # === v4.0.5: Controller Signal Handlers ===
+    # === Controller Signal Handlers ===
     # These handlers respond to signals emitted by controllers
 
     def _on_layer_synchronized(self, layer) -> None:

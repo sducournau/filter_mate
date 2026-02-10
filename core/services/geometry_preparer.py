@@ -401,21 +401,21 @@ def prepare_geometries_by_provider(
         'spatialite_fallback_mode': False
     }
 
-    # CRITICAL FIX v2.7.3: Use SELECTED/FILTERED feature count, not total table count!
+    # Use SELECTED/FILTERED feature count, not total table count!
     task_features = task_parameters.get("task", {}).get("features", [])
     if task_features and len(task_features) > 0:
         source_feature_count = len(task_features)
         if logger:
             logger.info(f"Using task_features count for WKT decision: {source_feature_count} selected features")
             logger.debug(
-                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {source_layer.featureCount()} total)"  # nosec B608
+                f"v2.7.3 FIX: Using {source_feature_count} SELECTED features for WKT decision (not {source_layer.featureCount()} total)"  # nosec B608 - false positive: logger statement, no SQL execution
             )
     else:
         source_feature_count = source_layer.featureCount()
         if logger:
             logger.info(f"Using source_layer featureCount for WKT decision: {source_feature_count} total features")
 
-    # CRITICAL FIX v2.7.15 + v4.0.3 (2026-01-16): Check if source is PostgreSQL with connection
+    # Check if source is PostgreSQL with connection
     # CRITICAL: IGNORE the stored postgresql_connection_available flag - it may be stale from old config
     # Instead, trust the module-level postgresql_available flag which reflects actual psycopg2 availability
     source_is_postgresql = (
@@ -465,7 +465,7 @@ def prepare_geometries_by_provider(
 
     if 'postgresql' in provider_list and postgresql_available:
 
-        # CRITICAL FIX v4.0.3 (2026-01-16): IGNORE stored postgresql_connection_available - may be stale!
+        # IGNORE stored postgresql_connection_available - may be stale!
         # The module-level postgresql_available flag is the source of truth (psycopg2 actually importable)
         task_parameters.get('infos', {}).get('postgresql_connection_available', 'NOT_SET')
 
@@ -484,7 +484,7 @@ def prepare_geometries_by_provider(
                 if layer_props.get('_postgresql_fallback', False):
                     has_postgresql_fallback_layers = True
 
-        # CRITICAL FIX v2.7.2: ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
+        # ONLY prepare postgresql_source_geom if SOURCE is PostgreSQL
         if source_is_postgresql_with_connection:
             result['postgresql_source_geom'] = prepare_postgresql_geom_callback()
             pg_geom = result['postgresql_source_geom']
@@ -628,7 +628,7 @@ def prepare_geometries_by_provider(
             logger.info("Preparing OGR/Spatialite source geometry...")
         result['ogr_source_geom'] = prepare_ogr_geom_callback()
 
-        # DIAGNOSTIC v2.4.11: Log status of all source geometries after preparation
+        # DIAGNOSTIC Log status of all source geometries after preparation
         if logger:
             logger.info("=" * 60)
             logger.info("📊 SOURCE GEOMETRY STATUS AFTER PREPARATION")
@@ -659,7 +659,7 @@ def prepare_geometries_by_provider(
                 logger.error("    4. Geometry preparation failed")
                 logger.error("=" * 60)
 
-                # v2.8.6: Try to use source_layer directly as emergency fallback
+                # Try to use source_layer directly as emergency fallback
                 if source_layer and source_layer.isValid() and source_layer.featureCount() > 0:
                     logger.warning("  → EMERGENCY FALLBACK: Using source_layer directly as ogr_source_geom")
                     result['ogr_source_geom'] = source_layer

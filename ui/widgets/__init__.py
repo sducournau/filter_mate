@@ -12,6 +12,7 @@ from .custom_widgets import (  # noqa: F401
     QgsCheckableComboBoxLayer,
     QgsCheckableComboBoxFeaturesListPickerWidget
 )
+from .dual_mode_toggle import DualModeToggle, DualMode  # noqa: F401
 
 __all__ = [
     'FavoritesWidget',
@@ -21,4 +22,6 @@ __all__ = [
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
+    'DualModeToggle',
+    'DualMode',
 ]

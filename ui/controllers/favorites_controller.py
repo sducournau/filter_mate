@@ -105,7 +105,7 @@ class FavoritesController(BaseController):
         self._find_indicator_label()
         self._init_favorites_manager()
 
-        # CRITICAL FIX 2026-01-18: Connect to favorites_changed signal from FavoritesService
+        # Connect to favorites_changed signal from FavoritesService
         # This ensures the UI is updated when favorites are loaded from database
         if self._favorites_manager and hasattr(self._favorites_manager, 'favorites_changed'):
             self._favorites_manager.favorites_changed.connect(self._on_favorites_loaded)
@@ -602,7 +602,7 @@ class FavoritesController(BaseController):
             if 'buffer_value' in config:
                 buffer_value = config['buffer_value']
                 logger.info(f"Restoring buffer_value: {buffer_value}")
-                # v5.0: Set buffer widget value
+                # Set buffer widget value
                 if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
                     self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.setValue(float(buffer_value))
                     logger.info(f"  ✓ Buffer widget set to {buffer_value}")
@@ -619,7 +619,7 @@ class FavoritesController(BaseController):
     def _get_indicator_style(self, state: str) -> str:
         """Get stylesheet for indicator state."""
         FAVORITES_STYLES.get(state, FAVORITES_STYLES['empty'])
-        # v4.0: Harmonized with BackendIndicatorWidget - soft "mousse" style
+        # Harmonized with BackendIndicatorWidget - soft "mousse" style
         return """
             QLabel#label_favorites_indicator {{
                 color: {style_data['color']};
@@ -922,7 +922,7 @@ class FavoritesController(BaseController):
                         logger.info(f"Captured predicates: {list(predicates.keys())}")
 
             # Capture buffer value if set
-            # v5.0: Read buffer value from widget
+            # Read buffer value from widget
             if hasattr(self.dockwidget, 'mQgsDoubleSpinBox_filtering_buffer_value'):
                 buffer_value = self.dockwidget.mQgsDoubleSpinBox_filtering_buffer_value.value()
                 if buffer_value != 0.0:
@@ -947,7 +947,7 @@ class FavoritesController(BaseController):
                 elif hasattr(widget, 'setCurrentText'):
                     widget.setCurrentText(favorite.expression)
 
-            # CRITICAL FIX 2026-01-18: Do NOT apply remote layer filters directly via setSubsetString!
+            # Do NOT apply remote layer filters directly via setSubsetString!
             # The filters contain __source alias which _clean_corrupted_subsets() will erase.
             # Instead, we restore the spatial context (task_features, predicates, etc.) from
             # favorite.spatial_config so the filter task can REBUILD the remote filters properly.

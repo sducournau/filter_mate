@@ -134,7 +134,7 @@ class LayerService(QObject):
         self._saved_layer_id_before_filter: Optional[str] = None
 
         # Protection window duration (matches dockwidget)
-        self.POST_FILTER_PROTECTION_WINDOW = 1.5  # v4.1.3: Reduced from 5.0s for faster user interaction
+        self.POST_FILTER_PROTECTION_WINDOW = 1.5  # Reduced from 5.0s for faster user interaction
 
     # ─────────────────────────────────────────────────────────────────
     # Layer Validation
@@ -562,7 +562,7 @@ class LayerService(QObject):
                 return True, None
 
             # Try to validate as QGIS expression
-            # HEXAGONAL MIGRATION v4.1: Use adapter instead of QgsExpression
+            # HEXAGONAL MIGRATION Use adapter instead of QgsExpression
             from ..ports.qgis_port import get_qgis_factory
 
             factory = get_qgis_factory()

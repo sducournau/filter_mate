@@ -35,7 +35,7 @@ from ....core.ports.materialized_view_port import (
 logger = logging.getLogger('FilterMate.Backend.Spatialite.TempTableManager')
 
 
-# v4.0.4: Import centralized spatialite_connect
+# Import centralized spatialite_connect
 try:
     from ....infrastructure.utils.task_utils import spatialite_connect
 except ImportError:
@@ -81,7 +81,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
     TABLE_PREFIX = "fm_tmp_"
     SESSION_PREFIX = "s_"
 
-    # Thresholds - v4.2.12: Increased, only use temp tables for large/complex cases
+    # Thresholds - Increased, only use temp tables for large/complex cases
     DEFAULT_FEATURE_THRESHOLD = 50000  # Increased from 5k to 50k
 
     def __init__(
@@ -136,7 +136,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
         """Create default config optimized for Spatialite."""
         return ViewConfig(
             feature_threshold=self.DEFAULT_FEATURE_THRESHOLD,
-            complexity_threshold=4,  # v4.2.12: Increased from 2 to 4
+            complexity_threshold=4,  # Increased from 2 to 4
             prefix=self.TABLE_PREFIX,
             schema="",  # Spatialite doesn't use schemas
             use_rtree=True,
@@ -260,15 +260,15 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             cursor = conn.cursor()
 
             # Drop if exists (for recreation)
-            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608 - table_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
 
             # Create table from query
-            create_sql = f'CREATE TABLE "{table_name}" AS {query}'  # nosec B608
+            create_sql = f'CREATE TABLE "{table_name}" AS {query}'  # nosec B608 - table_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
             logger.debug(f"[Spatialite] Creating temp table: {create_sql[:100]}...")
             cursor.execute(create_sql)
 
             # Get row count
-            cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')  # nosec B608
+            cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')  # nosec B608 - table_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
             row_count = cursor.fetchone()[0]
 
             # Create spatial index if geometry column specified
@@ -418,11 +418,11 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             cursor = conn.cursor()
 
             exists_clause = "IF EXISTS" if if_exists else ""
-            cursor.execute(f'DROP TABLE {exists_clause} "{view_name}"')  # nosec B608
+            cursor.execute(f'DROP TABLE {exists_clause} "{view_name}"')  # nosec B608 - view_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
 
             # Also drop spatial index if exists
             try:
-                cursor.execute(f"SELECT DisableSpatialIndex('{view_name}', 'geometry')")  # nosec B608
+                cursor.execute(f"SELECT DisableSpatialIndex('{view_name}', 'geometry')")  # nosec B608 - view_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
             except sqlite3.Error as e:
                 logger.debug(f"Ignored in spatial index disable: {e}")
 
@@ -473,7 +473,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
             cursor = conn.cursor()
 
             # Get row count
-            cursor.execute(f'SELECT COUNT(*) FROM "{view_name}"')  # nosec B608
+            cursor.execute(f'SELECT COUNT(*) FROM "{view_name}"')  # nosec B608 - view_name from internal hash-based generation (SpatiaLite: no sql.Identifier equivalent)
             row_count = cursor.fetchone()[0]
 
             # Check for spatial index
@@ -528,7 +528,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
                 for (table_name,) in cursor.fetchall():
                     if table_name not in session_tables:
                         try:
-                            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
+                            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608 - table_name from sqlite_master query (trusted source)
                             dropped += 1
                         except sqlite3.Error as e:
                             logger.debug(f"Ignored in orphan table cleanup ({table_name}): {e}")
@@ -557,7 +557,7 @@ class SpatialiteTempTableManager(MaterializedViewPort):
 
             # Build query
             cols = ", ".join(f'"{c}"' for c in columns) if columns else "*"
-            query = f'SELECT {cols} FROM "{view_name}"'  # nosec B608
+            query = f'SELECT {cols} FROM "{view_name}"'  # nosec B608 - view_name from internal hash-based generation, cols from caller API
 
             if where_clause:
                 query += f" WHERE {where_clause}"

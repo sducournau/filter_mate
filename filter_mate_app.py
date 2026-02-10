@@ -62,7 +62,7 @@ from .resources import *  # noqa: F401,F403 - Qt resources must be imported with
 # Get FilterMate logger BEFORE importing hexagonal services
 logger = get_app_logger()
 
-# v3.0: Hexagonal architecture services bridge
+# Hexagonal architecture services bridge
 # Provides access to new architecture while maintaining backward compatibility
 HEXAGONAL_AVAILABLE = False
 try:
@@ -78,31 +78,31 @@ try:
         parse_expression,
     )
     logger.debug("✓ app_bridge")
-    from .adapters.task_builder import TaskParameterBuilder  # v4.0: Task parameter extraction
+    from .adapters.task_builder import TaskParameterBuilder  # Task parameter extraction
     logger.debug("✓ task_builder")
-    from .core.services.layer_lifecycle_service import (  # v4.0: Layer lifecycle extraction
+    from .core.services.layer_lifecycle_service import (  # Layer lifecycle extraction
         LayerLifecycleService,
         LayerLifecycleConfig
     )
     logger.debug("✓ layer_lifecycle_service")
-    from .core.services.task_management_service import (  # v4.0: Task management extraction
+    from .core.services.task_management_service import (  # Task management extraction
         TaskManagementService,
         TaskManagementConfig
     )
     logger.debug("✓ task_management_service")
-    from .adapters.undo_redo_handler import UndoRedoHandler  # v4.0: Undo/Redo extraction
+    from .adapters.undo_redo_handler import UndoRedoHandler  # Undo/Redo extraction
     logger.debug("✓ undo_redo_handler")
-    from .adapters.database_manager import DatabaseManager  # v4.0: Database operations extraction
+    from .adapters.database_manager import DatabaseManager  # Database operations extraction
     logger.debug("✓ database_manager")
-    from .adapters.variables_manager import VariablesPersistenceManager  # v4.0: Variables persistence extraction
+    from .adapters.variables_manager import VariablesPersistenceManager  # Variables persistence extraction
     logger.debug("✓ variables_manager")
-    from .core.services.task_orchestrator import TaskOrchestrator  # v4.1: Task orchestration extraction
+    from .core.services.task_orchestrator import TaskOrchestrator  # Task orchestration extraction
     logger.debug("✓ task_orchestrator")
-    from .core.services.optimization_manager import OptimizationManager  # v4.2: Optimization management extraction
+    from .core.services.optimization_manager import OptimizationManager  # Optimization management extraction
     logger.debug("✓ optimization_manager")
-    from .adapters.filter_result_handler import FilterResultHandler  # v4.3: Filter result handling extraction
+    from .adapters.filter_result_handler import FilterResultHandler  # Filter result handling extraction
     logger.debug("✓ filter_result_handler")
-    from .core.services.app_initializer import AppInitializer  # v4.4: App initialization extraction
+    from .core.services.app_initializer import AppInitializer  # App initialization extraction
     logger.debug("✓ app_initializer")
     from .core.services.datasource_manager import DatasourceManager
     logger.debug("✓ datasource_manager")
@@ -373,7 +373,7 @@ class FilterMateApp:
         self.favorites_manager = FavoritesService()
         logger.info(f"FilterMate: FavoritesService initialized ({self.favorites_manager.get_favorites_count()} favorites)")
 
-        # v4.0.7: FavoritesMigrationService for orphan favorites handling
+        # FavoritesMigrationService for orphan favorites handling
         self._favorites_migration_service = FavoritesMigrationService()
         logger.debug("FilterMate: FavoritesMigrationService initialized")
 
@@ -396,7 +396,7 @@ class FilterMateApp:
         else:
             logger.warning("FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. For PostgreSQL layers, install psycopg2.")
 
-        # v3.0: Initialize hexagonal architecture services
+        # Initialize hexagonal architecture services
         if HEXAGONAL_AVAILABLE:
             try:
                 _init_hexagonal_services({
@@ -407,7 +407,7 @@ class FilterMateApp:
             except Exception as e:
                 logger.warning(f"FilterMate: Hexagonal services initialization failed: {e}")
 
-        # v4.0.1: Initialize BackendRegistry for hexagonal architecture compliance
+        # Initialize BackendRegistry for hexagonal architecture compliance
         self._backend_registry = None
         try:
             from .adapters.backend_registry import BackendRegistry
@@ -470,7 +470,7 @@ class FilterMateApp:
         if self._app_initializer:
             logger.debug("FilterMate: AppInitializer initialized (v4.4 migration)")
 
-        # v4.5: Initialize DatasourceManager (extracted from FilterMateApp datasource methods)
+        # Initialize DatasourceManager (extracted from FilterMateApp datasource methods)
         if HEXAGONAL_AVAILABLE and DatasourceManager:
             self._datasource_manager = DatasourceManager(
                 get_project_callback=lambda: self.PROJECT,
@@ -486,7 +486,7 @@ class FilterMateApp:
         else:
             self._datasource_manager = None
 
-        # v4.7: Initialize LayerRefreshManager (extracted from _refresh_layers_and_canvas)
+        # Initialize LayerRefreshManager (extracted from _refresh_layers_and_canvas)
         if HEXAGONAL_AVAILABLE and LayerRefreshManager:
             self._layer_refresh_manager = LayerRefreshManager(
                 get_iface=lambda: self.iface,
@@ -497,7 +497,7 @@ class FilterMateApp:
         else:
             self._layer_refresh_manager = None
 
-        # v4.7: Initialize LayerTaskCompletionHandler (extracted from layer_management_engine_task_completed)
+        # Initialize LayerTaskCompletionHandler (extracted from layer_management_engine_task_completed)
         if HEXAGONAL_AVAILABLE and LayerTaskCompletionHandler:
             self._layer_task_completion_handler = LayerTaskCompletionHandler(
                 get_spatialite_connection=self.get_spatialite_connection,
@@ -676,7 +676,7 @@ class FilterMateApp:
                 success = self._app_initializer.initialize_application(is_first_run)
                 logger.debug(f"AppInitializer returned {success}")
                 if success:
-                    # v4.5: Ensure signal connections even after AppInitializer success
+                    # Ensure signal connections even after AppInitializer success
                     # This is the simplified direct connection system
                     self._connect_layer_store_signals()
                     self._connect_dockwidget_signals()
@@ -901,12 +901,12 @@ class FilterMateApp:
         # callback to run as soon as control returns to the event loop.
 
         def deferred_operation():
-            # CRASH FIX (v2.3.18): Check if QGIS is still alive before any operations
+            # Check if QGIS is still alive before any operations
             if not is_qgis_alive():
                 logger.debug("_safe_layer_operation: QGIS is shutting down, skipping")
                 return
 
-            # CRASH FIX (v2.4.13): Check if dockwidget is in the middle of a layer change
+            # Check if dockwidget is in the middle of a layer change
             # This prevents access violations when setLayerVariable is called during
             # _reconnect_layer_signals which can process Qt events and cause instability.
             if hasattr(self, 'dockwidget') and self.dockwidget is not None:
@@ -922,7 +922,7 @@ class FilterMateApp:
                 logger.debug(f"_safe_layer_operation: layer {layer_id} no longer in project, skipping")
                 return
 
-            # CRASH FIX (v2.4.13): Additional sip check before validation
+            # Additional sip check before validation
             if sip.isdeleted(fresh_layer):
                 logger.debug("_safe_layer_operation: fresh layer is sip deleted, skipping")
                 return
@@ -1005,7 +1005,7 @@ class FilterMateApp:
         self.project_datasources = {'postgresql': {}, 'spatialite': {}, 'ogr': {}}
         self.app_postgresql_temp_schema_setted = False
 
-        # v4.5: Sync project_datasources with DatasourceManager
+        # Sync project_datasources with DatasourceManager
         if self._datasource_manager:
             self._datasource_manager.set_project_datasources(self.project_datasources)
 
@@ -1055,7 +1055,7 @@ class FilterMateApp:
                 if temp_layer.id() in layers_ids:
                     layers.append(temp_layer)
 
-        # v4.1.1: Update backend registry with project context
+        # Update backend registry with project context
         # When all layers are PostgreSQL, use PostgreSQL backend even for small datasets
         if self._backend_registry is not None:
             self._backend_registry.update_project_context(layers)
@@ -1066,7 +1066,7 @@ class FilterMateApp:
             self.tasks_descriptions[task_name],
             task_name,
             task_parameters,
-            backend_registry=self._backend_registry  # v4.0.1: Hexagonal DI
+            backend_registry=self._backend_registry  # Hexagonal DI
         )
         logger.info(f"✓ FilterEngineTask created: {self.appTasks[task_name].description()}")
 
@@ -1219,7 +1219,7 @@ class FilterMateApp:
     def _show_filter_start_message(self, task_name, task_parameters, layers_props, layers, current_layer):
         """Show informational message about filtering operation starting."""
         # Determine dominant backend from distant layers
-        # PRIORITY v4.0.8: PostgreSQL > Spatialite > OGR (PostgreSQL first for performance)
+        # PRIORITY PostgreSQL > Spatialite > OGR (PostgreSQL first for performance)
         distant_types = [lp.get("layer_provider_type", "unknown") for lp in layers_props]
         provider_type = ('postgresql' if 'postgresql' in distant_types else
                         'spatialite' if 'spatialite' in distant_types else
@@ -1263,15 +1263,15 @@ class FilterMateApp:
 
         assert task_name in list(self.tasks_descriptions.keys()), f"Unknown task: {task_name}"
 
-        # v4.1.0: STABILITY FIX - Check and reset stale flags before processing
+        # STABILITY FIX - Check and reset stale flags before processing
         self._check_and_reset_stale_flags()
 
-        # v4.1.0: CRITICAL - Skip layersAdded signals during project initialization
+        # CRITICAL - Skip layersAdded signals during project initialization
         if task_name == 'add_layers' and self._initializing_project:
             logger.debug("Skipping add_layers - project initialization in progress")
             return
 
-        # v4.1.0: STABILITY FIX - Queue concurrent add_layers tasks
+        # STABILITY FIX - Queue concurrent add_layers tasks
         if task_name == 'add_layers':
             max_queue_size = STABILITY_CONSTANTS.get('MAX_ADD_LAYERS_QUEUE', 5)
             if self._pending_add_layers_tasks > 0:
@@ -1284,7 +1284,7 @@ class FilterMateApp:
             self._pending_add_layers_tasks += 1
             logger.debug(f"Starting add_layers (pending: {self._pending_add_layers_tasks})")
 
-        # v4.1.0: Guard - Ensure dockwidget is initialized for most tasks
+        # Guard - Ensure dockwidget is initialized for most tasks
         if task_name not in ('remove_all_layers', 'project_read', 'new_project', 'add_layers'):
             if self.dockwidget is None or not hasattr(self.dockwidget, 'widgets_initialized') or not self.dockwidget.widgets_initialized:
                 logger.debug(f"Task '{task_name}' called before dockwidget initialization, deferring by 500ms...")
@@ -1298,7 +1298,7 @@ class FilterMateApp:
                 QTimer.singleShot(500, safe_deferred_task)
                 return
 
-        # v4.1.0: CRITICAL - For filtering tasks, ensure widgets are ready with retry logic
+        # CRITICAL - For filtering tasks, ensure widgets are ready with retry logic
         if task_name in ('filter', 'unfilter', 'reset'):
             if not hasattr(self, '_filter_retry_count'):
                 self._filter_retry_count = {}
@@ -1631,7 +1631,7 @@ class FilterMateApp:
             except Exception as e:
                 logger.warning(f"v4.2: OptimizationManager failed: {e}")
 
-        # v4.7: Minimal fallback - return safe defaults (no optimizations)
+        # Minimal fallback - return safe defaults (no optimizations)
         # Full logic is now in OptimizationManager
         logger.debug("Optimization check skipped (manager unavailable)")
         return {}, False
@@ -1645,7 +1645,7 @@ class FilterMateApp:
             except Exception as e:
                 logger.warning(f"v4.2: OptimizationManager UI update failed: {e}")
 
-        # v4.7: Minimal fallback - full logic is in OptimizationManager
+        # Minimal fallback - full logic is in OptimizationManager
         logger.debug("UI widget optimization skipped (manager unavailable)")
 
     def _build_layers_to_filter(self, current_layer):
@@ -1756,7 +1756,7 @@ class FilterMateApp:
             builder = self._get_task_builder()
             logger.info(f"   builder: {builder is not None}")
 
-            # v4.7: Delegate layer validation
+            # Delegate layer validation
             if builder:
                 error = builder.validate_current_layer_for_task(current_layer, self.PROJECT_LAYERS)
                 if error:
@@ -1769,7 +1769,7 @@ class FilterMateApp:
                 if current_layer.id() not in self.PROJECT_LAYERS.keys():
                     return None
 
-            # v4.4: Delegate UI→PROJECT_LAYERS synchronization
+            # Delegate UI→PROJECT_LAYERS synchronization
             if builder:
                 task_parameters = builder.sync_ui_to_project_layers(current_layer)
                 if task_parameters is None:
@@ -1778,7 +1778,7 @@ class FilterMateApp:
             else:
                 task_parameters = self.PROJECT_LAYERS[current_layer.id()]
 
-            # v4.7: Delegate feature extraction and validation
+            # Delegate feature extraction and validation
             logger.info("   → Calling builder.get_and_validate_features()...")
             try:
                 if builder:
@@ -1794,13 +1794,13 @@ class FilterMateApp:
                 # Build validated list of layers to filter
                 layers_to_filter = self._build_layers_to_filter(current_layer)
 
-                # v4.8 FIX: For unfilter/reset, include ALL layers with active subsetString
+                # For unfilter/reset, include ALL layers with active subsetString
                 # This ensures layers that were filtered are unfiltered even if unchecked
                 if task_name in ('unfilter', 'reset') and len(layers_to_filter) == 0:
                     layers_to_filter = self._build_all_filtered_layers(current_layer)
                     logger.info(f"v4.8: unfilter/reset - found {len(layers_to_filter)} layers with active filters")
 
-                # v4.7: Delegate diagnostic logging
+                # Delegate diagnostic logging
                 if builder:
                     builder.log_filtering_diagnostic(current_layer, layers_to_filter)
 
@@ -1810,7 +1810,7 @@ class FilterMateApp:
                     features, expression, layers_to_filter, include_history
                 )
 
-                # v4.7: Delegate skip_source_filter logic
+                # Delegate skip_source_filter logic
                 skip_source_filter = builder.determine_skip_source_filter(
                     task_name, task_parameters, expression
                 ) if builder else False
@@ -1829,7 +1829,7 @@ class FilterMateApp:
                 return task_parameters
 
             elif task_name == 'export':
-                # v4.7: Delegate export params building
+                # Delegate export params building
                 if builder:
                     export_params = builder.build_export_params(self.PROJECT_LAYERS, self.PROJECT)
                     if export_params:
@@ -1908,7 +1908,7 @@ class FilterMateApp:
             logger.warning(f"handle_{action_name}: layer {source_layer.name()} not in PROJECT_LAYERS; aborting.")
             return
 
-        # v4.1.5: Get layers_to_filter from CURRENT UI selection, not from stored PROJECT_LAYERS
+        # Get layers_to_filter from CURRENT UI selection, not from stored PROJECT_LAYERS
         # This allows undo to respect the current checkbox state
         button_is_checked = self.dockwidget.pushButton_checkable_filtering_layers_to_filter.isChecked()
         if button_is_checked:
@@ -1918,7 +1918,7 @@ class FilterMateApp:
             # Fallback to stored value (for compatibility)
             layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(source_layer.id(), {}).get("filtering", {}).get("layers_to_filter", [])
 
-        # v4.1: Set filtering protection to prevent layer change signals
+        # Set filtering protection to prevent layer change signals
         self.dockwidget._filtering_in_progress = True
         logger.debug(f"handle_{action_name} - Filtering protection enabled")
 
@@ -2125,7 +2125,7 @@ class FilterMateApp:
                 if favorites_count == 0:
                     logger.debug("  → No favorites found for this project (new project or no favorites saved yet)")
 
-                # CRITICAL FIX 2026-01-19: Sync favorites_manager to dockwidget and notify FavoritesController
+                # Sync favorites_manager to dockwidget and notify FavoritesController
                 # This ensures the controller uses the correctly initialized manager with loaded favorites
                 if self.dockwidget is not None:
                     self.dockwidget._favorites_manager = self.favorites_manager
@@ -2259,7 +2259,7 @@ class FilterMateApp:
                 logger.warning(f"v4.7: LayerTaskCompletionHandler failed: {e}")
                 logger.debug(f"v4.7: Traceback: {traceback.format_exc()}")
 
-        # v4.7: Minimal fallback
+        # Minimal fallback
         logger.debug("Layer task completion skipped (handler unavailable)")
 
     def _validate_layer_info(self, layer_key):
@@ -2344,7 +2344,7 @@ class FilterMateApp:
         if hasattr(self.dockwidget, 'set_widgets_enabled_state'): self.dockwidget.set_widgets_enabled_state(True)
         try:
             if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
-                # v4.2: Filter to show only vector layers WITH geometry (exclude non-spatial tables)
+                # Filter to show only vector layers WITH geometry (exclude non-spatial tables)
                 # HasGeometry = PointLayer | LineLayer | PolygonLayer (excludes NoGeometry tables)
                 self.dockwidget.comboBox_filtering_current_layer.setFilters(QgsMapLayerProxyModel.HasGeometry)
         except Exception as e: logger.debug(f"ComboBox filter setup (non-critical): {e}")

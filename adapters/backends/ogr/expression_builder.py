@@ -306,7 +306,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
             self.log_info(f"📍 Applying OGR filter to {layer.name()}")
             self.log_info(f"  - Source: {source_layer.name()} ({source_layer.featureCount()} features)")
 
-            # FIX v4.2.11: Apply buffer to source layer if needed (static or dynamic)
+            # Apply buffer to source layer if needed (static or dynamic)
             if buffer_expression and buffer_expression.strip():
                 self.log_info(f"  - Applying dynamic buffer expression: {buffer_expression[:50]}...")
                 source_layer = self._apply_buffer_expression_to_layer(source_layer, buffer_expression)
@@ -357,7 +357,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
                 safe_set_subset_string(layer, "1 = 0")
                 return True
 
-            # FIX v4.0.8: For PostgreSQL layers via OGR, we need actual PK values, not QGIS internal FIDs
+            # For PostgreSQL layers via OGR, we need actual PK values, not QGIS internal FIDs
             # selectedFeatureIds() returns QGIS internal feature IDs, which don't match PostgreSQL PK values
             pk_field = self._get_primary_key(layer)
             storage_type = ""
@@ -529,7 +529,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
         if not pk_values:
             return "1 = 0"
 
-        # FIX v4.0.9: IMPROVED numeric detection for PostgreSQL via OGR
+        # IMPROVED numeric detection for PostgreSQL via OGR
         # QGIS OGR provider may return incorrect field types for PostgreSQL.
         # Use multiple detection strategies with VALUE-BASED priority.
         is_numeric_pk = None

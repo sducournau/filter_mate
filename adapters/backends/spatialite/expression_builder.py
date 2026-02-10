@@ -159,7 +159,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         """
         self.log_debug(f"Building Spatialite expression for {layer_props.get('layer_name', 'unknown')}")
 
-        # FIX v4.2.13: Spatialite cannot evaluate dynamic buffer expressions with field references
+        # Spatialite cannot evaluate dynamic buffer expressions with field references
         # Unlike PostgreSQL which can create temp tables with pre-calculated buffers,
         # Spatialite's Buffer(GeomFromText(wkt), "field_name" * 2) fails because
         # the field reference is not valid in the context of a WKT literal.
@@ -219,7 +219,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
         self.log_debug(f"SRIDs: source={source_srid}, target={target_srid}")
 
         # Build source geometry SQL
-        # FIX v4.2.11: Pass buffer_expression for dynamic buffer support
+        # Pass buffer_expression for dynamic buffer support
         source_geom_sql = self._build_source_geometry_sql(
             source_geom, source_srid, target_srid, buffer_value, buffer_expression
         )
@@ -308,7 +308,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
     # Private Helper Methods
     # =========================================================================
 
-    # NOTE v4.0.1: _detect_geometry_column, _apply_centroid_transform,
+    # NOTE _detect_geometry_column, _apply_centroid_transform,
     # _get_layer_srid, _get_source_srid are inherited from GeometricFilterPort
 
     def _is_geopackage(self, layer) -> bool:
@@ -352,7 +352,7 @@ class SpatialiteExpressionBuilder(GeometricFilterPort):
             source_geom_sql = f"Transform({source_geom_sql}, {target_srid})"
             self.log_info(f"Applying CRS transform: {source_srid} → {target_srid}")
 
-        # FIX v4.2.11: Support dynamic buffer expressions
+        # Support dynamic buffer expressions
         # Priority: buffer_expression (dynamic) > buffer_value (static)
         if buffer_expression and buffer_expression.strip():
             # Convert QGIS expression to Spatialite SQL

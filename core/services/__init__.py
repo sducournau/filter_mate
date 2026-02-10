@@ -57,7 +57,7 @@ from .buffer_service import (  # noqa: F401
 
 # Note: TaskOrchestrator is NOT exported here because:
 # 1. It has QGIS dependencies (QTimer, QgsApplication) - not pure Python
-# v4.1: Import directly: from core.services.task_orchestrator import TaskOrchestrator
+# Import directly: from core.services.task_orchestrator import TaskOrchestrator
 
 # EPIC-1 Phase 14.5: SourceSubsetBufferBuilder service
 # NOT exported here - has QGIS dependencies (QgsExpression)

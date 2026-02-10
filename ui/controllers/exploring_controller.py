@@ -643,7 +643,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         """
         self._selected_features.clear()
 
-        # v3.1: Also clear QGIS layer selection
+        # Also clear QGIS layer selection
         if self._current_layer and self.is_layer_valid(self._current_layer):
             try:
                 self._current_layer.removeSelection()
@@ -1076,7 +1076,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 if combo:
                     checked_items = combo.checkedItems()
                     if checked_items:
-                        # PERFORMANCE FIX v2.6.5: Limit number of items to process
+                        # PERFORMANCE Limit number of items to process
                         MAX_ITEMS_FOR_EXTENT = 500  # Beyond this, use layer extent
                         if len(checked_items) > MAX_ITEMS_FOR_EXTENT:
                             logger.debug(f"_compute_zoom_extent_for_mode: Too many items ({len(checked_items)}), using layer extent")
@@ -1163,7 +1163,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         if not self._dockwidget.widgets_initialized or self._dockwidget.current_layer is None:
             return
 
-        # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+        # CRITICAL - Use centralized deletion check with full protection
         if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
             logger.debug("zooming_to_features: current_layer C++ object truly deleted")
             self._dockwidget.current_layer = None
@@ -1254,7 +1254,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             layer_crs = self._dockwidget.current_layer.crs()
             canvas_crs = self._dockwidget.iface.mapCanvas().mapSettings().destinationCrs()
 
-            # IMPROVED v2.5.7: Use crs_utils for better CRS detection
+            # IMPROVED Use crs_utils for better CRS detection
             if CRS_UTILS_AVAILABLE:
                 is_geographic = is_geographic_crs(layer_crs)
             else:
@@ -1263,7 +1263,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # CRITICAL: For geographic coordinates, switch to a metric CRS for buffer calculations
             # This ensures accurate buffer distances in meters instead of imprecise degrees
             if is_geographic:
-                # IMPROVED v2.5.7: Use optimal metric CRS (UTM or Web Mercator)
+                # IMPROVED Use optimal metric CRS (UTM or Web Mercator)
                 if CRS_UTILS_AVAILABLE:
                     metric_crs_authid = get_optimal_metric_crs(
                         project=QgsProject.instance(),
@@ -1458,10 +1458,10 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 try:
                     recovered = dw.current_layer.getFeature(dw._last_single_selection_fid)
                     if recovered.isValid() and recovered.hasGeometry():
-                        logger.info(f"SINGLE_SELECTION: Recovered feature id={dw._last_single_selection_fid}")  # nosec B608
+                        logger.info(f"SINGLE_SELECTION: Recovered feature id={dw._last_single_selection_fid}")  # nosec B608 - false positive: logger statement, no SQL execution
                         input_feature = recovered
                 except Exception as e:
-                    logger.warning(f"SINGLE_SELECTION: Recovery from saved FID failed: {e}")  # nosec B608
+                    logger.warning(f"SINGLE_SELECTION: Recovery from saved FID failed: {e}")  # nosec B608 - false positive: logger statement, no SQL execution
 
             # Strategy 2: Try QGIS canvas selection ONLY if NOT in single_selection mode
             # FIX v8: In single_selection mode, the feature picker IS the source of truth
@@ -1471,7 +1471,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     input_feature = qgis_selected[0]
                     dw._last_single_selection_fid = input_feature.id()
                     dw._last_single_selection_layer_id = dw.current_layer.id()
-                    logger.info(f"SINGLE_SELECTION: Using QGIS selection feature id={input_feature.id()}")  # nosec B608
+                    logger.info(f"SINGLE_SELECTION: Using QGIS selection feature id={input_feature.id()}")  # nosec B608 - false positive: logger statement, no SQL execution
                 elif len(qgis_selected) > 1:
                     # Multiple selected - use multiple selection mode
                     features, expression = self.get_exploring_features(qgis_selected, True)
@@ -1482,23 +1482,23 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # FIX v8: If still no feature and in single_selection mode, return empty
             # This is intentional - user needs to select a feature in the picker
             if input_feature is None or not input_feature.isValid():
-                logger.debug(f"SINGLE_SELECTION: No feature available (single_mode={is_single_selection_mode})")  # nosec B608
+                logger.debug(f"SINGLE_SELECTION: No feature available (single_mode={is_single_selection_mode})")  # nosec B608 - false positive: logger statement, no SQL execution
                 return [], ''
 
-        # CRITICAL FIX v6: Always reload feature from layer to ensure geometry
+        # Always reload feature from layer to ensure geometry
         if input_feature and input_feature.isValid():
             try:
                 fid = input_feature.id()
                 reloaded = dw.current_layer.getFeature(fid)
                 if reloaded.isValid() and reloaded.hasGeometry():
-                    logger.info(f"SINGLE_SELECTION: Reloaded feature id={fid} with geometry")  # nosec B608
+                    logger.info(f"SINGLE_SELECTION: Reloaded feature id={fid} with geometry")  # nosec B608 - false positive: logger statement, no SQL execution
                     # Save FID for future recovery
                     dw._last_single_selection_fid = fid
                     dw._last_single_selection_layer_id = dw.current_layer.id()
                     return [reloaded], ""
                 else:
                     # FIX 2026-01-16: Feature has no geometry - construct ID-based expression directly
-                    logger.warning(f"SINGLE_SELECTION: Reloaded feature {fid} has no geometry - using ID expression")  # nosec B608
+                    logger.warning(f"SINGLE_SELECTION: Reloaded feature {fid} has no geometry - using ID expression")  # nosec B608 - false positive: logger statement, no SQL execution
                     dw._last_single_selection_fid = fid
                     dw._last_single_selection_layer_id = dw.current_layer.id()
 
@@ -1515,25 +1515,25 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                 expression = f'"{pk_name}" = \'{pk_value}\''
                             else:
                                 expression = f'"{pk_name}" = {pk_value}'
-                            logger.info(f"SINGLE_SELECTION: Using PK expression: {expression}")  # nosec B608
+                            logger.info(f"SINGLE_SELECTION: Using PK expression: {expression}")  # nosec B608 - false positive: logger statement, no SQL execution
                             return [reloaded], expression
                         except Exception as e:
                             logger.warning(f"Could not get PK value: {e}")
 
                     # Fallback to $id
                     expression = f'$id = {fid}'
-                    logger.info(f"SINGLE_SELECTION: Using $id fallback: {expression}")  # nosec B608
+                    logger.info(f"SINGLE_SELECTION: Using $id fallback: {expression}")  # nosec B608 - false positive: logger statement, no SQL execution
                     return [reloaded], expression
             except Exception as e:
-                logger.warning(f"SINGLE_SELECTION: Could not reload feature: {e}")  # nosec B608
+                logger.warning(f"SINGLE_SELECTION: Could not reload feature: {e}")  # nosec B608 - false positive: logger statement, no SQL execution
 
         # FIX 2026-01-15 v7: If we reach here, input_feature is invalid - return empty
         # This aligns with before_migration behavior that returned [], '' on invalid input
         if input_feature is None or not input_feature.isValid():
-            logger.warning("SINGLE_SELECTION: No valid feature available - returning empty")  # nosec B608
+            logger.warning("SINGLE_SELECTION: No valid feature available - returning empty")  # nosec B608 - false positive: logger statement, no SQL execution
             return [], ''
 
-        logger.info(f"SINGLE_SELECTION valid feature: id={input_feature.id() if input_feature else 'None'}")  # nosec B608
+        logger.info(f"SINGLE_SELECTION valid feature: id={input_feature.id() if input_feature else 'None'}")  # nosec B608 - false positive: logger statement, no SQL execution
         return self.get_exploring_features(input_feature, True)
 
     def _get_multiple_selection_features(self):
@@ -1548,7 +1548,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         widget = dw.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
         input_items = widget.checkedItems()
 
-        logger.debug(f"MULTIPLE_SELECTION: widget.checkedItems() = {len(input_items) if input_items else 0}")  # nosec B608
+        logger.debug(f"MULTIPLE_SELECTION: widget.checkedItems() = {len(input_items) if input_items else 0}")  # nosec B608 - false positive: logger statement, no SQL execution
 
         # Try recovery if no items
         if not input_items or len(input_items) == 0:
@@ -1557,16 +1557,16 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     and dw.current_layer.id() == getattr(dw, '_last_multiple_selection_layer_id', None)):
                 try:
                     input_items = [[str(fid), fid, None, None] for fid in dw._last_multiple_selection_fids]
-                    logger.info(f"MULTIPLE_SELECTION: Recovered {len(input_items)} items from saved FIDs")  # nosec B608
+                    logger.info(f"MULTIPLE_SELECTION: Recovered {len(input_items)} items from saved FIDs")  # nosec B608 - false positive: logger statement, no SQL execution
                 except Exception as e:
-                    logger.warning(f"MULTIPLE_SELECTION: Recovery failed: {e}")  # nosec B608
+                    logger.warning(f"MULTIPLE_SELECTION: Recovery failed: {e}")  # nosec B608 - false positive: logger statement, no SQL execution
                     input_items = []
 
         # Try QGIS canvas selection as fallback
         if not input_items or len(input_items) == 0:
             qgis_selected = dw.current_layer.selectedFeatures()
             if len(qgis_selected) > 0:
-                logger.info(f"MULTIPLE_SELECTION: Using {len(qgis_selected)} features from QGIS canvas")  # nosec B608
+                logger.info(f"MULTIPLE_SELECTION: Using {len(qgis_selected)} features from QGIS canvas")  # nosec B608 - false positive: logger statement, no SQL execution
                 features, expression = self.get_exploring_features(qgis_selected, True)
                 dw._last_multiple_selection_fids = [f.id() for f in qgis_selected]
                 dw._last_multiple_selection_layer_id = dw.current_layer.id()
@@ -1586,7 +1586,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             except (IndexError, TypeError):
                 pass
 
-        logger.debug(f"MULTIPLE_SELECTION: {len(input_items) if input_items else 0} checked items")  # nosec B608
+        logger.debug(f"MULTIPLE_SELECTION: {len(input_items) if input_items else 0} checked items")  # nosec B608 - false positive: logger statement, no SQL execution
         return self.get_exploring_features(input_items, True)
 
     def _get_custom_selection_features(self):
@@ -1595,7 +1595,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         from qgis.core import QgsExpression
 
         expression = dw.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"].expression()
-        logger.info(f"CUSTOM_SELECTION expression: '{expression}'")  # nosec B608
+        logger.info(f"CUSTOM_SELECTION expression: '{expression}'")  # nosec B608 - false positive: logger statement, no SQL execution
 
         if not expression or not expression.strip():
             logger.warning("CUSTOM_SELECTION: Empty expression!")
@@ -1604,7 +1604,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         # Validate expression
         qgs_expr = QgsExpression(expression)
         if qgs_expr.hasParserError():
-            logger.warning(f"CUSTOM_SELECTION: Expression parse error: {qgs_expr.parserErrorString()}")  # nosec B608
+            logger.warning(f"CUSTOM_SELECTION: Expression parse error: {qgs_expr.parserErrorString()}")  # nosec B608 - false positive: logger statement, no SQL execution
 
         # Save expression to layer_props
         if dw.current_layer.id() in dw.PROJECT_LAYERS:
@@ -1612,7 +1612,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
         # Process expression
         features, expression = dw.exploring_custom_selection()
-        logger.info(f"CUSTOM_SELECTION: {len(features)} features")  # nosec B608
+        logger.info(f"CUSTOM_SELECTION: {len(features)} features")  # nosec B608 - false positive: logger statement, no SQL execution
 
         return features, expression
 
@@ -1707,7 +1707,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                         features = [input]
                     return features, expression
 
-                # === CRITICAL FIX v4.1 (Jour 2): RELOAD FEATURE PROTECTION ===
+                # === RELOAD FEATURE PROTECTION ===
                 # BEFORE accessing input.attribute(), check if C++ object is still valid
                 # This prevents crashes when features are deleted between UI operations
                 try:
@@ -1761,7 +1761,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
                     # CRITICAL FIX: Field names must be quoted for QgsExpression to work
                     # This applies to ALL providers (PostgreSQL, OGR, Spatialite)
-                    # UUID FIX v4.0: Convert pk_value to string explicitly for non-numeric types
+                    # Convert pk_value to string explicitly for non-numeric types
                     # Note: filter_task.py handles qualified names for PostgreSQL subsetString separately
                     if pk_is_numeric is True:
                         expression = f'"{pk_name}" = {pk_value}'
@@ -2038,7 +2038,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 self._dockwidget._exploring_cache.invalidate(layer_id, self._dockwidget.current_exploring_groupbox)
                 logger.debug(f"exploring_features_changed: Invalidated cache for {layer_id[:8]}.../{self._dockwidget.current_exploring_groupbox}")
 
-            # v2.9.20: Save FID for single_selection mode to allow recovery after layer refresh
+            # Save FID for single_selection mode to allow recovery after layer refresh
             # This is critical because QgsFeaturePickerWidget can lose its selection after
             # layer operations (filter/unfilter), causing FALLBACK MODE to use all features
             if self._dockwidget.current_exploring_groupbox == "single_selection" and isinstance(input, QgsFeature):
@@ -2047,7 +2047,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                     self._dockwidget._last_single_selection_layer_id = self._dockwidget.current_layer.id()
                     logger.debug(f"exploring_features_changed: Saved single_selection FID={input.id()} for layer {self._dockwidget.current_layer.name()}")
 
-            # v2.9.29: Save FIDs for multiple_selection mode to allow recovery after layer refresh
+            # Save FIDs for multiple_selection mode to allow recovery after layer refresh
             # This is critical for multi-step additive filtering where the widget is refreshed
             # after the first filter, causing checked items to be lost.
             elif self._dockwidget.current_exploring_groupbox == "multiple_selection" and isinstance(input, list):
@@ -2069,7 +2069,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             except Exception as e:
                 logger.debug(f"Could not update buffer validation: {e}")
 
-            # v3.0.14: CRITICAL - Use centralized deletion check with full protection
+            # CRITICAL - Use centralized deletion check with full protection
             if self._dockwidget._is_layer_truly_deleted(self._dockwidget.current_layer):
                 logger.debug("exploring_features_changed: current_layer C++ object truly deleted")
                 self._dockwidget.current_layer = None
@@ -2592,7 +2592,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 best_field = get_best_display_field(layer)
                 logger.debug(f"Best field detected for layer '{layer.name()}': '{best_field}'")
 
-                # FIX v4.0 + v4.1 Simon 2026-01-16: Comboboxes CANNOT be empty - must ALWAYS have a value
+                # Comboboxes CANNOT be empty - must ALWAYS have a value
                 # Garantir qu'il y a toujours un champ par défaut, même si get_best_display_field retourne vide
                 if not best_field:
                     fields = layer.fields()
@@ -2658,7 +2658,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             multiple_expr = layer_props["exploring"]["multiple_selection_expression"]
             custom_expr = layer_props["exploring"]["custom_selection_expression"]
 
-            # FIX v4.1 Simon 2026-01-16: GARANTIR que les expressions ne sont JAMAIS vides
+            # GARANTIR que les expressions ne sont JAMAIS vides
             # Fallback absolu si une expression est vide (dernier rempart avant les widgets)
             if not single_expr:
                 fields = layer.fields()
@@ -2783,9 +2783,9 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # Field expression widgets
             # FIX 2026-01-15 + 2026-01-16: Use setField() for simple field names to properly select in combobox
             # Use setExpression() only for complex expressions. This fixes empty combobox issue.
-            # FIX v4.1 Simon: Never pass empty string to setField() - always use first field as fallback
+            # Never pass empty string to setField() - always use first field as fallback
             if "SINGLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
-                logger.info(f"Setting SINGLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{single_expr}'")  # nosec B608
+                logger.info(f"Setting SINGLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{single_expr}'")  # nosec B608 - false positive: logger statement, no SQL execution
                 widget = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]
                 widget.setLayer(layer)
                 # Use setField for simple field names, setExpression for complex expressions
@@ -2797,7 +2797,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.info(f"Widget expression after set: '{widget.expression()}'")
 
             if "MULTIPLE_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
-                logger.info(f"Setting MULTIPLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{multiple_expr}'")  # nosec B608
+                logger.info(f"Setting MULTIPLE_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{multiple_expr}'")  # nosec B608 - false positive: logger statement, no SQL execution
                 widget = self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"]
                 widget.setLayer(layer)
                 # Use setField for simple field names, setExpression for complex expressions
@@ -2809,7 +2809,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 logger.info(f"Widget expression after set: '{widget.expression()}'")
 
             if "CUSTOM_SELECTION_EXPRESSION" in self._dockwidget.widgets.get("EXPLORING", {}):
-                logger.info(f"Setting CUSTOM_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{custom_expr}'")  # nosec B608
+                logger.info(f"Setting CUSTOM_SELECTION_EXPRESSION widget: layer={layer.name()}, expression='{custom_expr}'")  # nosec B608 - false positive: logger statement, no SQL execution
                 widget = self._dockwidget.widgets["EXPLORING"]["CUSTOM_SELECTION_EXPRESSION"]["WIDGET"]
                 widget.setLayer(layer)
                 # Use setField for simple field names, setExpression for complex expressions
@@ -2960,7 +2960,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
             # FIX v4: Detect and CORRECT mismatch for is_selecting
             if selecting_button_checked != is_selecting:
-                logger.warning(f"  ⚠️ IS_SELECTING mismatch! Button={selecting_button_checked} PROJECT_LAYERS={is_selecting}")  # nosec B608
+                logger.warning(f"  ⚠️ IS_SELECTING mismatch! Button={selecting_button_checked} PROJECT_LAYERS={is_selecting}")  # nosec B608 - false positive: logger statement, no SQL execution
                 layer_id = self._dockwidget.current_layer.id()
                 if layer_id in self._dockwidget.PROJECT_LAYERS:
                     self._dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = selecting_button_checked

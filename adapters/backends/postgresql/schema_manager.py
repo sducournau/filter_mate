@@ -129,7 +129,7 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
                 except (psycopg2.Error if psycopg2 else Exception) as e:
                     logger.debug(f"Ignored in rollback after postgres auth schema failure: {e}")
 
-                # v2.8.8: Fallback to 'public' schema if temp schema cannot be created
+                # Fallback to 'public' schema if temp schema cannot be created
                 logger.warning(f"Cannot create schema '{schema_name}', falling back to 'public'. "
                                f"Errors: no auth: {e}, CURRENT_USER: {e2}, postgres: {e3}")
                 return 'public'

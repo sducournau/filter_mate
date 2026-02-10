@@ -18,6 +18,8 @@ Enums:
 - SpatialPredicate: Spatial filter predicates
 - FilterStatus: Filter operation status
 - GeometryType: Geometry types
+- SamplingMethod: Raster value sampling methods
+- ComparisonOperator: Numeric comparison operators for raster filtering
 """
 from .filter_expression import (  # noqa: F401
     FilterExpression,
@@ -35,12 +37,22 @@ from .layer_info import (  # noqa: F401
 from .optimization_config import (  # noqa: F401
     OptimizationConfig,
 )
+from .raster_filter_criteria import (  # noqa: F401
+    SamplingMethod,
+    ComparisonOperator,
+    RasterSamplingCriteria,
+    RasterSamplingResult,
+    SamplingStats,
+)
 
 __all__ = [
     # Value Objects
     'FilterExpression',
     'FilterResult',
     'OptimizationConfig',
+    'RasterSamplingCriteria',
+    'RasterSamplingResult',
+    'SamplingStats',
     # Entities
     'LayerInfo',
     # Enums
@@ -48,4 +60,6 @@ __all__ = [
     'SpatialPredicate',
     'FilterStatus',
     'GeometryType',
+    'SamplingMethod',
+    'ComparisonOperator',
 ]

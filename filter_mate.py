@@ -111,7 +111,7 @@ class FilterMate:
 
         # print "** INITIALIZING FilterMate"
 
-        # v4.4: Initialize QGIS factory BEFORE creating app (required by hexagonal architecture)
+        # Initialize QGIS factory BEFORE creating app (required by hexagonal architecture)
         # This must happen in __init__ so AppInitializer can use it
         logger.debug("FilterMate.__init__: Initializing QGIS factory")
         try:
@@ -224,7 +224,7 @@ class FilterMate:
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
         try:
-            # v4.4: QGIS factory already initialized in __init__ (required by AppInitializer)
+            # QGIS factory already initialized in __init__ (required by AppInitializer)
             # This section kept for backward compatibility verification only
             logger.debug("FilterMate.initGui: Verifying QGIS factory initialization")
             try:
@@ -433,7 +433,7 @@ class FilterMate:
                     msg = self.tr("Obsolete configuration reset. Default settings have been restored.")
                     msg_type = "warning"
                 elif any(w.startswith("config_updated:") for w in warnings):
-                    # v2.7.6: New settings sections were added
+                    # New settings sections were added
                     added_sections = []
                     for w in warnings:
                         if w.startswith("config_updated:"):
@@ -1111,7 +1111,7 @@ class FilterMate:
         except Exception as e:
             logger.debug(f"FilterMate: Error disconnecting readProject signal: {e}")
 
-        # PERFORMANCE v2.4.0: Clean up PostgreSQL connection pools
+        # PERFORMANCE Clean up PostgreSQL connection pools
         try:
             from .infrastructure.database.connection_pool import cleanup_pools
             cleanup_pools()

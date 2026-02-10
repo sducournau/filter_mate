@@ -62,7 +62,7 @@ class LayerValidator:
     - Handles PostgreSQL layers specially
     """
 
-    # FIX v4.0.4: Add static method for backwards compatibility
+    # Add static method for backwards compatibility
     # Some code may call LayerValidator.is_valid_layer() as a class method
     @staticmethod
     def is_valid_layer(layer) -> bool:

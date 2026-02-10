@@ -29,7 +29,7 @@ from typing import Dict, Optional
 logger = logging.getLogger('FilterMate.Backend.LegacyAdapter')
 
 
-# v4.1.0: Import GeometricFilterPort from new location
+# Import GeometricFilterPort from new location
 try:
     from ...core.ports.geometric_filter_port import GeometricFilterPort
     GEOMETRIC_FILTER_PORT_AVAILABLE = True
@@ -37,7 +37,7 @@ except ImportError:
     GEOMETRIC_FILTER_PORT_AVAILABLE = False
     GeometricFilterPort = None
 
-# v4.1.0: Define base class - prefer new port, fallback to minimal implementation
+# Define base class - prefer new port, fallback to minimal implementation
 if GEOMETRIC_FILTER_PORT_AVAILABLE and GeometricFilterPort is not None:
     GeometricFilterBackend = GeometricFilterPort
     LEGACY_BASE_AVAILABLE = True
@@ -95,7 +95,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         except (ImportError, AttributeError, RuntimeError) as e:
             logger.debug(f"{self.provider_type}: New backend unavailable: {e}")
 
-        # FIX v4.0.4 (2026-01-16): ALWAYS initialize legacy backend as fallback
+        # ALWAYS initialize legacy backend as fallback
         # The _build_expression_new() method delegates to legacy backend for SQL generation
         # so we need it available regardless of _use_new_backend flag
         try:
@@ -144,7 +144,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
                 buffer_expression, source_filter, use_centroids, **kwargs
             )
         elif self._legacy_backend:
-            # FIX v4.0.3 (2026-01-16): Pass ALL arguments as KEYWORD arguments
+            # Pass ALL arguments as KEYWORD arguments
             # to avoid positional mismatch between adapter and legacy backend signatures.
             # PostgreSQLGeometricFilter.build_expression() has source_wkt/source_srid/source_feature_count
             # BEFORE use_centroids, but this adapter had use_centroids in different position.
@@ -190,7 +190,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
         # ALWAYS use legacy backend for spatial filter expression building
         # The new FilterExpression domain model is not yet fully integrated
         if self._legacy_backend:
-            # FIX v4.0.4: Use keyword arguments to avoid positional conflicts
+            # Use keyword arguments to avoid positional conflicts
             return self._legacy_backend.build_expression(
                 layer_props=layer_props,
                 predicates=predicates,
@@ -245,7 +245,7 @@ class BaseLegacyAdapter(GeometricFilterBackend):
             elif old_subset:
                 final_expr = f"({old_subset}) AND ({expression})"
 
-            # v4.1.0: Use safe_set_subset_string from new location
+            # Use safe_set_subset_string from new location
             from ...infrastructure.database.sql_utils import safe_set_subset_string
             return safe_set_subset_string(layer, final_expr)
 
@@ -302,7 +302,7 @@ class LegacyPostgreSQLAdapter(BaseLegacyAdapter):
 
     def _should_use_new_backend(self) -> bool:
         """Use modern PostgreSQL backend v4.0 (hexagonal architecture)."""
-        return True  # v4.0: Modern backend with improved MV management
+        return True  # Modern backend with improved MV management
 
 
 class LegacySpatialiteAdapter(BaseLegacyAdapter):
@@ -356,7 +356,7 @@ class LegacyOGRAdapter(BaseLegacyAdapter):
 
     def _should_use_new_backend(self) -> bool:
         """Check feature flag for OGR backend."""
-        # v4.1.0: Use feature flag system for progressive migration
+        # Use feature flag system for progressive migration
         return is_new_backend_enabled('ogr')
 
 
@@ -384,7 +384,7 @@ class LegacyMemoryAdapter(BaseLegacyAdapter):
 
     def _should_use_new_backend(self) -> bool:
         """Check feature flag for Memory backend."""
-        # v4.1.0: Use feature flag system for progressive migration
+        # Use feature flag system for progressive migration
         return is_new_backend_enabled('memory')
 
 
@@ -419,12 +419,12 @@ def get_legacy_adapter(provider_type: str, task_params: Dict) -> GeometricFilter
 
 
 # Feature flag to enable new backends progressively
-# v4.1.0: Set to False by default, enable via set_new_backend_enabled() or config
+# Set to False by default, enable via set_new_backend_enabled() or config
 ENABLE_NEW_BACKENDS = {
     'postgresql': False,  # Keep legacy (MV support, well-tested)
     'spatialite': False,  # Keep legacy (multi-step optimizer)
-    'ogr': False,         # v4.1.0: First candidate for new backend testing
-    'memory': False,      # v4.1.0: Second candidate for new backend testing
+    'ogr': False,         # First candidate for new backend testing
+    'memory': False,      # Second candidate for new backend testing
 }
 
 

@@ -22,7 +22,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# Backend display configuration - v4.0: Softer "mousse" colors
+# Backend display configuration - Softer "mousse" colors
 BACKEND_CONFIG = {
     'postgresql': {
         'name': 'PostgreSQL',
@@ -262,7 +262,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
         self.setText("...")
         self.setToolTip("Click to reload layers")
 
-        # v4.0: Soft "mousse" style with rounded corners
+        # Soft "mousse" style with rounded corners
         style = """
             QLabel#label_backend_indicator {
                 color: white;
@@ -300,7 +300,7 @@ class BackendIndicatorWidget(QLabel if HAS_QGIS else object):
             "Click to change backend"
         )
 
-        # v4.0: Soft "mousse" style with smoother appearance
+        # Soft "mousse" style with smoother appearance
         style = """
             QLabel#label_backend_indicator {{
                 color: white;
@@ -423,7 +423,7 @@ def get_available_backends_for_layer(layer, postgresql_available: bool = False) 
     except (RuntimeError, AttributeError):
         return [('ogr', 'OGR', '📁')]
 
-    # PostgreSQL backend - FIX v4.1.4: ALWAYS available for postgres layers
+    # PostgreSQL backend - ALWAYS available for postgres layers
     if provider_type == 'postgres':
         available.append(('postgresql', 'PostgreSQL', '🐘'))
 

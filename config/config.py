@@ -162,7 +162,7 @@ def init_env_vars():
         with open(config_json_path) as f:
             CONFIG_DATA = json.load(f)
 
-        # v4.0.7: Validate configuration after loading
+        # Validate configuration after loading
         try:
             from .config_validator import validate_and_log
             validate_and_log(CONFIG_DATA, DIR_CONFIG)

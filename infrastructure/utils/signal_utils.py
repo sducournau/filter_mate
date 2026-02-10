@@ -93,7 +93,7 @@ def is_layer_in_project(layer: Any, project: Optional[Any] = None) -> bool:
         return False
 
     try:
-        # CRASH FIX (v2.3.14): Check if QGIS is alive before accessing project
+        # Check if QGIS is alive before accessing project
         if project is None:
             if not is_qgis_alive():
                 return False
@@ -202,7 +202,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
         True if the variable was set successfully
     """
     try:
-        # CRASH FIX (v2.3.14): Check if QGIS is alive BEFORE QgsProject.instance()
+        # Check if QGIS is alive BEFORE QgsProject.instance()
         # Windows access violations cannot be caught by try/except
         if not is_qgis_alive():
             logger.debug("QGIS is not alive, skipping safe_set_layer_variable")
@@ -215,7 +215,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
             logger.debug("No project available for safe_set_layer_variable")
             return False
 
-        # CRASH FIX (v2.3.13): Check if project itself is still valid
+        # Check if project itself is still valid
         if sip is not None:
             try:
                 if sip.isdeleted(project):
@@ -232,7 +232,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
             logger.debug(f"Layer {layer_id} not found in project")
             return False
 
-        # CRASH FIX (v2.3.13): Immediate sip deletion check FIRST
+        # Immediate sip deletion check FIRST
         # This must happen before ANY method call on the layer object
         if sip is not None:
             try:
@@ -244,7 +244,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
                 logger.debug(f"sip.isdeleted check failed for {layer_id}: {e}")
                 return False
 
-        # CRASH FIX (v2.3.13): Wrap isValid() call in its own try/except
+        # Wrap isValid() call in its own try/except
         # layer.isValid() can cause access violation if layer is partially deleted
         try:
             is_valid = layer.isValid()
@@ -256,7 +256,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
             logger.debug(f"Layer {layer_id} is invalid")
             return False
 
-        # CRASH FIX (v2.3.13): Final sip check immediately before C++ call
+        # Final sip check immediately before C++ call
         # Minimizes race condition window
         if sip is not None:
             try:
@@ -266,7 +266,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
             except (TypeError, AttributeError):
                 return False
 
-        # CRASH FIX (v2.4.7): Flush pending Qt events BEFORE the C++ call
+        # Flush pending Qt events BEFORE the C++ call
         # This allows any pending layer deletions to complete, reducing the race window.
         # Critical for Windows where access violations are fatal and cannot be caught.
         if IS_WINDOWS:
@@ -294,7 +294,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
                 logger.debug(f"Error during pre-operation event flush: {e}")
                 return False
 
-        # CRASH FIX (v2.4.8): Atomic-style final validation before C++ call
+        # Atomic-style final validation before C++ call
         # Re-fetch the layer immediately before the call to minimize race window
         # This is the absolute last defense before the C++ operation
         fresh_layer = project.mapLayer(layer_id)
@@ -321,7 +321,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
             logger.debug(f"Fresh layer {layer_id} validity check crashed")
             return False
 
-        # CRASH FIX (v2.4.9): Use direct setCustomProperty instead of
+        # Use direct setCustomProperty instead of
         # QgsExpressionContextUtils.setLayerVariable. This allows us to wrap the
         # actual C++ call in a try/except that can catch RuntimeError.
         # QgsExpressionContextUtils.setLayerVariable internally calls setCustomProperty
@@ -356,7 +356,7 @@ def safe_set_layer_variable(layer_id: str, variable_key: str, value: Any, projec
         logger.debug(f"RuntimeError in safe_set_layer_variable for {layer_id}: {e}")
         return False
     except (OSError, SystemError) as e:
-        # CRASH FIX (v2.3.13): These can occur on Windows when accessing deleted objects
+        # These can occur on Windows when accessing deleted objects
         logger.debug(f"System error in safe_set_layer_variable for {layer_id}: {e}")
         return False
     except Exception as e:

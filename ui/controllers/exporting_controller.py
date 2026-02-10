@@ -235,12 +235,12 @@ class ExportingController(BaseController):
             if not dockwidget:
                 return False
 
-            # Check preconditions - v4.0.5: Relaxed check since _on_project_layers_ready sets has_loaded_layers
+            # Check preconditions - Relaxed check since _on_project_layers_ready sets has_loaded_layers
             if not dockwidget.widgets_initialized:
                 logger.warning("populate_export_combobox: widgets not initialized")
                 return False
 
-            # v4.0.5: Check PROJECT_LAYERS instead of has_loaded_layers
+            # Check PROJECT_LAYERS instead of has_loaded_layers
             # The signal may fire before has_loaded_layers is set by filter_mate_app.py
             if not dockwidget.PROJECT_LAYERS:
                 logger.info("populate_export_combobox: PROJECT_LAYERS empty, deferring until projectLayersReady signal")

@@ -158,13 +158,13 @@ class ParallelFilterExecutor:
             logger.info(f"Only {layer_count} layer(s) - using sequential execution")
             return self._filter_sequential(layers, filter_func, progress_callback, cancel_check)
 
-        # CRITICAL THREAD SAFETY FIX (v2.3.9):
+        # Thread safety:
         # Check if ANY layer uses OGR provider - if so, MUST use sequential execution
         # OGR operations manipulate QGIS layer objects directly which is NOT thread-safe
         has_ogr_layers = False
         provider_types = set()
 
-        # CRITICAL SQLITE LOCKING FIX (v2.4.2):
+        # SQLite locking:
         # Track layers by their source database file. Layers sharing the same SQLite/GeoPackage
         # file MUST be filtered sequentially to prevent "unable to open database file" errors.
         # SQLite has single-writer limitation - parallel writes to same DB cause locking issues.
@@ -330,7 +330,7 @@ class ParallelFilterExecutor:
         Returns:
             FilterResult: Result of the operation
         """
-        # STABILITY FIX v2.3.9: Validate layer before any operations
+        # Validate layer before any operations
         # This prevents crashes when layer is deleted/invalidated during parallel execution
         try:
             if layer is None:
@@ -377,7 +377,7 @@ class ParallelFilterExecutor:
 
         start_time = time.time()
 
-        # FIX v3.0.8: Log each layer being filtered
+        # Log each layer being filtered
         logger.debug(f"🔄 _filter_single_layer: Filtering '{layer_name}' (provider={provider_type})")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(
@@ -389,7 +389,7 @@ class ParallelFilterExecutor:
             # Call the actual filter function
             success = filter_func(provider_type, layer, layer_props)
 
-            # FIX v3.0.8: Log result
+            # Log result
             logger.info(f"  → {layer_name}: filter_func returned {success}")
 
             # Get feature count after filtering
@@ -411,7 +411,7 @@ class ParallelFilterExecutor:
             )
 
         except Exception as e:
-            # FIX v3.0.8: Log exceptions
+            # Log exceptions
             logger.error(f"  → {layer_name}: Exception in filter_func: {e}")
             execution_time = (time.time() - start_time) * 1000
 
@@ -455,7 +455,7 @@ class ParallelFilterExecutor:
         results = []
         layer_count = len(layers)
 
-        # FIX v3.0.8: Log entry to sequential filter
+        # Log entry to sequential filter
         logger.info(f"🔄 _filter_sequential: Starting with {layer_count} layers")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(
@@ -463,12 +463,12 @@ class ParallelFilterExecutor:
             "FilterMate", Qgis.Info
         )
 
-        # FIX v3.0.8: Log layer names to be processed
+        # Log layer names to be processed
         layer_names = []
         for l, lp in layers:
             try:
                 layer_names.append(l.name() if hasattr(l, 'name') else 'unknown')
-            except Exception:  # FIX v3.0.20: Avoid bare except clause
+            except Exception:  # Avoid bare except clause
                 layer_names.append('invalid')
         logger.info(f"🔄 Layers to process: {layer_names}")
         QgsMessageLog.logMessage(
@@ -476,7 +476,7 @@ class ParallelFilterExecutor:
             "FilterMate", Qgis.Info
         )
 
-        # FIX v3.0.8: Check cancel_check status at start
+        # Check cancel_check status at start
         if cancel_check:
             initial_cancel_state = cancel_check()
             logger.info(f"🔄 cancel_check at start = {initial_cancel_state}")
@@ -487,7 +487,7 @@ class ParallelFilterExecutor:
                     "FilterMate", Qgis.Warning
                 )
 
-        # STABILITY FIX v2.4.2: Track SQLite database file paths for inter-layer delay
+        # Track SQLite database file paths for inter-layer delay
         # When multiple layers from the same SQLite database are processed sequentially,
         # add a delay between operations to allow SQLite locks to release.
         # This applies to: GeoPackage (.gpkg), Spatialite (.sqlite, .spatialite, .db)
@@ -501,13 +501,13 @@ class ParallelFilterExecutor:
                 db_layer_counts[db_path] = db_layer_counts.get(db_path, 0) + 1
 
         for i, (layer, layer_props) in enumerate(layers):
-            # v4.2.8: Check for cancellation at the start of each layer processing
+            # Check for cancellation at the start of each layer processing
             # This ensures quicker response to user cancellation requests
             if cancel_check and cancel_check():
                 logger.info(f"⚠️ Sequential filtering canceled before layer {i + 1}/{len(layers)}")
                 break
 
-            # FIX v3.0.9: DISABLED cancel_check during distant layer filtering
+            # DISABLED cancel_check during distant layer filtering
             # RATIONALE: Once distant layer filtering has started, we MUST complete all layers.
             # The cancel_check (which calls QgsTask.isCanceled()) can return True spuriously when:
             # 1. processing.run("native:selectbylocation") modifies layer selection state
@@ -531,7 +531,7 @@ class ParallelFilterExecutor:
             # Get current layer's database path
             current_db_path = self._get_layer_database_path(layer)
 
-            # STABILITY FIX v2.4.2: Add inter-layer delay for same SQLite database
+            # Add inter-layer delay for same SQLite database
             # Delay is adaptive based on number of layers sharing the database
             if current_db_path and current_db_path == last_db_path:
                 # Calculate adaptive delay: more layers = longer delay
@@ -556,7 +556,7 @@ class ParallelFilterExecutor:
                 layer_name = layer.name() if hasattr(layer, 'name') else str(layer)
                 progress_callback(i + 1, layer_count, layer_name)
 
-        # FIX v3.0.8: Log completion summary
+        # Log completion summary
         logger.info(f"✓ _filter_sequential completed: {len(results)}/{len(layers)} layers processed")
         from qgis.core import QgsMessageLog, Qgis
         QgsMessageLog.logMessage(

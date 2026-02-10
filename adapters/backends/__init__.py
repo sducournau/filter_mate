@@ -16,7 +16,7 @@ except ImportError:
     # Default to True (QGIS native PostgreSQL always available)
     POSTGRESQL_AVAILABLE = True
 
-# v4.1.0: Legacy adapters for progressive migration
+# Legacy adapters for progressive migration
 try:
     from .legacy_adapter import (  # noqa: F401
         get_legacy_adapter,
@@ -45,7 +45,7 @@ __all__ = [
     'BackendSelector',
     'create_backend_factory',
     'POSTGRESQL_AVAILABLE',
-    # v4.1.0: Legacy adapters
+    # Legacy adapters
     'get_legacy_adapter',
     'LegacyPostgreSQLAdapter',
     'LegacySpatialiteAdapter',

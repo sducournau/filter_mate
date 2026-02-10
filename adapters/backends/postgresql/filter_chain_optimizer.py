@@ -297,7 +297,7 @@ class FilterChainOptimizer:
         # Build source geometry reference (with buffer if needed)
         source_geom = f'__source."{context.source_geom_column}"'
 
-        # v4.3.5: Handle dynamic buffer expression
+        # Handle dynamic buffer expression
         if context.buffer_expression:
             # Convert buffer expression to use __source alias instead of table name
             # Example: "demand_points"."homecount" -> __source."homecount"
@@ -504,7 +504,7 @@ WITH DATA
                 src_geom = f"ST_Buffer({src_geom}, {filter_buffer}, 'quad_segs=5')"
 
             # Build EXISTS
-            exists_sql = '''EXISTS (SELECT 1 FROM "{filter_schema}"."{filter_table}" AS __source WHERE {predicate}("{distant_table}"."{distant_geom_column}", {src_geom})'''  # nosec B608
+            exists_sql = '''EXISTS (SELECT 1 FROM "{filter_schema}"."{filter_table}" AS __source WHERE {predicate}("{distant_table}"."{distant_geom_column}", {src_geom})'''  # nosec B608 - identifiers from QGIS layer metadata (schema/table from QgsDataSourceUri)
 
             if filter_condition:
                 exists_sql += f' AND ({filter_condition})'
@@ -523,7 +523,7 @@ WITH DATA
             chain_str += f"{f.get('predicate', '')}|{f.get('buffer', '')}|"
             chain_str += f"{f.get('condition', '')}|"
 
-        # v4.3.5: Include buffer_value OR buffer_expression in hash
+        # Include buffer_value OR buffer_expression in hash
         if context.buffer_expression:
             chain_str += f"buffer_expr={context.buffer_expression}"
         elif context.buffer_value:
@@ -587,7 +587,7 @@ def optimize_filter_chain(
     distant_schema: str,
     distant_geom_column: str = "geom",
     buffer_value: Optional[float] = None,
-    buffer_expression: Optional[str] = None,  # v4.3.5: Dynamic buffer support
+    buffer_expression: Optional[str] = None,  # Dynamic buffer support
     session_id: Optional[str] = None
 ) -> OptimizedChain:
     """
@@ -636,7 +636,7 @@ def optimize_filter_chain(
         source_geom_column=source_geom_column,
         spatial_filters=spatial_filters,
         buffer_value=buffer_value,
-        buffer_expression=buffer_expression,  # v4.3.5
+        buffer_expression=buffer_expression,
         session_id=session_id
     )
 

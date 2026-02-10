@@ -466,7 +466,7 @@ class TaskOrchestrator:
                     logger.info("v4.1: Filter executed via FilteringController")
                     return True
             elif task_name == 'unfilter':
-                # v4.0: Delegate to controller's execute_unfilter()
+                # Delegate to controller's execute_unfilter()
                 integration.sync_from_dockwidget()
                 success = integration.delegate_execute_unfilter()
                 if success:
@@ -474,7 +474,7 @@ class TaskOrchestrator:
                     return True
                 logger.debug("v4.0: Controller delegation for 'unfilter' returned False, using legacy")
             elif task_name == 'reset':
-                # v4.0: Delegate to controller's execute_reset_filters()
+                # Delegate to controller's execute_reset_filters()
                 integration.sync_from_dockwidget()
                 success = integration.delegate_execute_reset()
                 if success:

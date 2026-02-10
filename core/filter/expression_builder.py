@@ -139,7 +139,7 @@ class ExpressionBuilder:
             logger.info(f"   layer_props keys: {list(layer_props.keys())}")
             logger.info(f"   task_parameters['task'].get('features'): {len(self.task_parameters.get('task', {}).get('features', []))} features")
 
-            # v4.2.10: Check for filter chain MV optimization
+            # Check for filter chain MV optimization
             filter_chain_mv = self.task_parameters.get('_filter_chain_mv_name')
             if filter_chain_mv and backend_name == 'PostgreSQL':
                 logger.info(f"🚀 FILTER CHAIN MV OPTIMIZATION ACTIVE: {filter_chain_mv}")
@@ -178,13 +178,13 @@ class ExpressionBuilder:
             logger.info(f"   buffer_value: {self.buffer_value}")
             logger.info(f"   use_centroids_distant: {self.use_centroids_distant}")
 
-            # CRITICAL FIX 2026-01-16: Pass all required parameters to backend
+            # Pass all required parameters to backend
             # PostgreSQLGeometricFilter.build_expression() requires these for
             # generating proper EXISTS subqueries with ST_Intersects instead of
             # falling back to simple "id" IN (...) expressions
             #
-            # FIX v4.2.7: Pass source_table_name for proper aliasing of source_filter
-            # v4.2.10: Pass filter_chain_mv_name for MV optimization
+            # Pass source_table_name for proper aliasing of source_filter
+            # Pass filter_chain_mv_name for MV optimization
             source_table_name = self.task_parameters.get('param_source_table')
             expression = backend.build_expression(
                 layer_props=layer_props,
@@ -198,7 +198,7 @@ class ExpressionBuilder:
                 source_feature_count=self.source_feature_count,
                 use_centroids=self.use_centroids_distant,
                 source_table_name=source_table_name,
-                filter_chain_mv_name=filter_chain_mv  # v4.2.10
+                filter_chain_mv_name=filter_chain_mv
             )
 
             logger.info(f"✅ Backend returned expression: {expression[:200] if expression else 'None'}...")
@@ -318,16 +318,16 @@ class ExpressionBuilder:
         # HOTFIX 2026-01-17: Add fallback logic for thread-safe feature extraction
         task_features = self.task_parameters.get("task", {}).get("features", [])
 
-        # FIX v4.2.7: DIAGNOSTIC - Check if new code is loaded
+        # DIAGNOSTIC - Check if new code is loaded
         logger.info("=" * 80)
         logger.info("🔍 FIX v4.2.7: CUSTOM SELECTION FIELD SUPPORT ACTIVE")
         logger.info("=" * 80)
         logger.info("      📋 ATTEMPT 1: task_parameters['task']['features']")
         logger.info(f"         Count: {len(task_features)} items")
 
-        # CRITICAL FIX 2026-01-17: Check if task_features are QgsFeatures or just values (strings/ints)
+        # Check if task_features are QgsFeatures or just values (strings/ints)
         # If they are just values (e.g. ["1", "2"]), they are field values not QgsFeature objects
-        # FIX v4.2.7: When custom selection with simple field, use values to build filter
+        # When custom selection with simple field, use values to build filter
         are_qgs_features = False
         field_name_for_values = None
 
@@ -395,7 +395,7 @@ class ExpressionBuilder:
                 logger.info(f"         First feature ID: {task_features[0].id()}")
             logger.info(f"         ✅ User has {len(task_features)} QgsFeatures for source_filter")
         else:
-            # FIX v4.2.7: Distinguish between normal fallback scenarios and real errors
+            # Distinguish between normal fallback scenarios and real errors
             if source_subset and not skip_source_subset:
                 # NORMAL: Will use source_subset as filter
                 logger.debug("         ℹ️ No task_features - will use source_subset as fallback (NORMAL)")
@@ -410,12 +410,12 @@ class ExpressionBuilder:
 
         # ATTEMPT 4: Get features from filtered source layer (when source has a subset but can't use it directly)
         # This handles the case where source_subset contains EXISTS patterns
-        # REMOVED in v4.2.7: This caused performance issues by extracting all FIDs
+        # REMOVED in This caused performance issues by extracting all FIDs
         # when the source layer was already filtered. Instead, we now skip this
         # and let the source_subset be used directly in PATH 2 below.
         # The EXISTS patterns are already handled by skip_source_subset check.
 
-        # ATTEMPT 5 (FIX 2026-01-21): REMOVED in v4.2.7
+        # ATTEMPT 5: REMOVED
         # When buffer_expression is active with a pre-filtered layer, we should
         # NOT extract all features and generate "id IN (1,2,3,...)".
         # Instead, we use the existing source_subset filter directly (PATH 2).
@@ -426,7 +426,7 @@ class ExpressionBuilder:
 
         use_task_features = task_features and len(task_features) > 0
 
-        # FIX v4.2.9 (2026-01-21): Enhanced filter chaining for sequential spatial filtering.
+        # Enhanced filter chaining for sequential spatial filtering.
         #
         # Use case (user's request):
         #   Filter 1: zone_pop → intersects multiple selection on all distant layers
@@ -480,7 +480,7 @@ class ExpressionBuilder:
                     clause_sql = clause['sql']
                     logger.info(f"      #{i + 1}: table={clause.get('table', 'unknown')}")
 
-                    # FIX v4.3.1 (2026-01-22): DO NOT adapt EXISTS here!
+                    # DO NOT adapt EXISTS here!
                     # Problem: Adapting with new_alias='__source' replaces ALL table references,
                     # including the TARGET table reference (e.g., "demand_points"."geom")
                     # which should be replaced with the DISTANT table name (e.g., "sheaths"."geom")
@@ -544,7 +544,7 @@ class ExpressionBuilder:
             # Non-buffer scenario: Use task_features
             logger.debug(f"🎯 PostgreSQL EXISTS: Using {len(task_features)} task_features (selection priority)")
 
-            # FIX v4.2.7: If we have field values instead of QgsFeatures, build field-based filter
+            # If we have field values instead of QgsFeatures, build field-based filter
             if field_name_for_values:
                 source_filter = self._generate_field_value_filter(task_features, field_name_for_values, backend_name)
                 logger.info("✅ Generated source_filter from field values:")
@@ -563,7 +563,7 @@ class ExpressionBuilder:
             logger.debug("🎯 PostgreSQL EXISTS: PATH 2 - Using source layer subsetString as source_filter")
             source_filter = source_subset
         else:
-            # FIX v4.2.8: Handle EXISTS pattern in source_subset
+            # Handle EXISTS pattern in source_subset
             # When source layer is filtered with EXISTS but no task_features:
             # - Extract FIDs from currently filtered features
             # - Optimize if expression would be too long (> 10,000 chars or > 1,000 features)
@@ -589,11 +589,11 @@ class ExpressionBuilder:
                     # Strategy: Extract source_subset WHERE clause and use it directly
                     # This avoids extracting thousands of FIDs
                     #
-                    # FIX v4.2.8: Proper parenthesis handling for EXISTS patterns
+                    # Proper parenthesis handling for EXISTS patterns
                     # Pattern: EXISTS (SELECT ... WHERE <condition>)
                     # We need to extract <condition> without the final closing parenthesis
                     #
-                    # CRITICAL v4.2.8: Check for __source alias in WHERE clause
+                    # CRITICAL Check for __source alias in WHERE clause
                     # If WHERE clause contains __source, it's specific to a particular source table
                     # and CANNOT be reused in a different EXISTS context (different __source table)
                     # Example: WHERE ST_Intersects(..., __source.geom) with __source=zone_pop
@@ -608,7 +608,7 @@ class ExpressionBuilder:
                             logger.warning("   ⚠️ WHERE clause contains __source alias - attempting advanced parsing")
                             logger.info("   → Parsing complex WHERE to identify reusable components")
 
-                            # ADVANCED OPTIMIZATION v4.2.8: Parse and partially optimize
+                            # ADVANCED OPTIMIZATION Parse and partially optimize
                             parsed_where = self._parse_complex_where_clause(where_clause)
 
                             logger.info("   → Parsing results:")
@@ -788,8 +788,8 @@ class ExpressionBuilder:
 
         # Step 1: Extract all EXISTS subqueries
         # Pattern: EXISTS (SELECT ... FROM ... AS alias WHERE ...)
-        # FIXED v4.2.10: Also detect NOT EXISTS
-        # FIXED v4.2.11: Better debug logging and parenthesis handling
+        # FIXED Also detect NOT EXISTS
+        # FIXED Better debug logging and parenthesis handling
         exists_matches = []
 
         # Debug: Log input for troubleshooting
@@ -797,7 +797,7 @@ class ExpressionBuilder:
         logger.debug(f"   → WHERE preview: {where_clause[:200]}...")
 
         # Find all EXISTS with proper parenthesis matching
-        # FIXED v4.2.11: Improved pattern to catch EXISTS at any position
+        # FIXED Improved pattern to catch EXISTS at any position
         i = 0
         search_count = 0
         while i < len(where_clause):
@@ -903,7 +903,7 @@ class ExpressionBuilder:
         has_reusable = len(result['exists_subqueries']) > 0 or len(result['field_conditions']) > 0
         has_non_reusable = len(result['source_dependent']) > 0
 
-        # FIXED v4.2.10: Debug logging for troubleshooting
+        # FIXED Debug logging for troubleshooting
         logger.debug(f"   → Parse results: {len(result['exists_subqueries'])} EXISTS, "
                     f"{len(result['field_conditions'])} field, {len(result['source_dependent'])} source-dep")
         if result['source_dependent']:
@@ -917,7 +917,7 @@ class ExpressionBuilder:
             result['optimization_strategy'] = 'partial'
             result['can_optimize'] = True
         else:
-            # FIXED v4.2.10: If we only have source_dependent, the entire WHERE is about __source
+            # FIXED If we only have source_dependent, the entire WHERE is about __source
             # This is normal for spatial filters - the whole expression depends on __source geometry
             # In this case, FID extraction is the only option
             result['optimization_strategy'] = 'none'
@@ -1260,7 +1260,7 @@ class ExpressionBuilder:
         # Get geometry field name
         source_geom_field = self._get_source_geom_field()
 
-        # FIXED v4.2.10: Get connection from source layer FIRST, then pass to backend
+        # FIXED Get connection from source layer FIRST, then pass to backend
         connection = None
         if self.source_layer:
             try:
@@ -1282,7 +1282,7 @@ class ExpressionBuilder:
             return self._create_inline_fid_filter(fids, pk_field, source_table_name)
 
         try:
-            # FIXED v4.2.10: Pass connection in task_parameters for MV creation
+            # FIXED Pass connection in task_parameters for MV creation
             task_params_with_conn = dict(self.task_parameters) if self.task_parameters else {}
             task_params_with_conn['connection'] = connection
             pg_backend = PostgreSQLGeometricFilter(task_parameters=task_params_with_conn)
@@ -1310,9 +1310,9 @@ class ExpressionBuilder:
         if mv_ref:
             # Use MV reference in filter
             if source_table_name:
-                source_filter = f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608
+                source_filter = f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608 - source_table_name/pk_field from QGIS layer metadata, mv_ref from internal MV manager
             else:
-                source_filter = f'"{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608
+                source_filter = f'"{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608 - pk_field from QGIS layer metadata, mv_ref from internal MV manager
 
             # Store MV reference for cleanup
             self._source_selection_mvs.append(mv_ref)
@@ -1347,7 +1347,7 @@ class ExpressionBuilder:
         Returns:
             str: Inline FID filter SQL (possibly with OR for large selections)
         """
-        # FIXED v4.2.10: Size limit protection
+        # FIXED Size limit protection
         MAX_FIDS_PER_CLAUSE = 5000  # Limit to prevent huge expressions
         MAX_TOTAL_FIDS = 50000  # Absolute limit with warning
 
@@ -1466,7 +1466,7 @@ def build_feature_id_expression(
     if not features_ids:
         return ""
 
-    # CRITICAL FIX v2.8.10: Use unquoted 'fid' for OGR/GeoPackage compatibility
+    # Use unquoted 'fid' for OGR/GeoPackage compatibility
     # OGR driver does NOT support quoted "fid" in setSubsetString()
     if provider_type == 'ogr':
         pk_ref = 'fid' if primary_key_name == 'fid' else f'"{primary_key_name}"'

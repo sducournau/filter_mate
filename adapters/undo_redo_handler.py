@@ -202,7 +202,7 @@ class UndoRedoHandler:
         logger.info(f"  pending_entry.layer_count: {pending_entry.layer_count}")
         logger.info(f"  pending_entry.layer_ids: {pending_entry.layer_ids}")
 
-        # v4.1.6: Undo behavior based on checkbox state
+        # Undo behavior based on checkbox state
         if use_global and layers_to_filter:
             # Checkbox checked with layers selected: apply undo to those specific layers
             logger.info(f"v4.1.6: Checkbox checked with {len(layers_to_filter)} layers - using filtered undo")
@@ -261,7 +261,7 @@ class UndoRedoHandler:
             logger.warning(f"handle_redo: layer {source_layer.name()} not in PROJECT_LAYERS")
             return False
 
-        # v4.1.3: Peek at history entry to determine redo type
+        # Peek at history entry to determine redo type
         # The entry type (multi-layer vs single-layer) determines the redo behavior,
         # NOT the current state of the checkbox
         pending_entry = self._history_manager.peek_redo()
@@ -302,7 +302,7 @@ class UndoRedoHandler:
             logger.info("No global undo history available")
             return False
 
-        # v4.1.3: Debug logging
+        # Debug logging
         logger.info(f"Undo entry: {history_entry.entry_id}")
         logger.info(f"  - layer_ids: {history_entry.layer_ids}")
         logger.info(f"  - previous_filters count: {len(history_entry.previous_filters)}")
@@ -310,14 +310,14 @@ class UndoRedoHandler:
             preview = prev_filter[:40] if prev_filter else '(empty)'
             logger.info(f"  - {layer_id}: '{preview}'")
 
-        # v4.1.4: Get project instance once
+        # Get project instance once
         project = QgsProject.instance()
 
         # Restore previous filters for all affected layers
         restored_layers = []
         for layer_id, previous_filter in history_entry.previous_filters:
 
-            # v4.1.4: FIXED - Use QgsProject.mapLayer() to get the layer object
+            # FIXED - Use QgsProject.mapLayer() to get the layer object
             # project_layers does NOT contain a "layer" key, only "infos", "exploring", "filtering"
             layer = project.mapLayer(layer_id)
 
@@ -368,7 +368,7 @@ class UndoRedoHandler:
             logger.info("No filtered undo history available")
             return False
 
-        # v4.1.5: Debug logging
+        # Debug logging
         logger.info(f"Undo entry: {history_entry.entry_id}")
         logger.info(f"  - layer_ids: {history_entry.layer_ids}")
 
@@ -432,13 +432,13 @@ class UndoRedoHandler:
         # (the expression that was applied when this history entry was created)
         remote_layers_info = history_entry.get_metadata_value('remote_layers') or {}
 
-        # v4.1.4: Get project instance once
+        # Get project instance once
         project = QgsProject.instance()
 
         # Apply the filter expression to all affected layers
         restored_layers = []
         for layer_id in history_entry.layer_ids:
-            # v4.1.4: FIXED - Use QgsProject.mapLayer() to get the layer object
+            # FIXED - Use QgsProject.mapLayer() to get the layer object
             layer = project.mapLayer(layer_id)
 
             if layer:
@@ -827,7 +827,7 @@ class UndoRedoHandler:
         project = self._get_project()
         project_layers = self._get_project_layers()
 
-        # v4.1.3: Debug logging
+        # Debug logging
         task_layers = task_parameters.get("task", {}).get("layers", [])
         logger.info(f"_collect_remote_layers_history: Found {len(task_layers)} layers in task_parameters")
 

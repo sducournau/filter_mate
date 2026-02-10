@@ -435,7 +435,7 @@ class FavoritesMigrationService:
 
             # Delete orphan projects
             placeholders = ','.join('?' * len(orphan_ids))
-            cursor.execute(f"DELETE FROM fm_projects WHERE project_id IN ({placeholders})", orphan_ids)  # nosec B608
+            cursor.execute(f"DELETE FROM fm_projects WHERE project_id IN ({placeholders})", orphan_ids)  # nosec B608 - placeholders are ? parameters, orphan_ids passed as bound params (safe)
 
             conn.commit()
             conn.close()

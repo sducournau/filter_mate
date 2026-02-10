@@ -166,7 +166,7 @@ class BackendRegistry(BackendRegistryPort):
         # Store context for use by executors
         self._all_layers_postgresql = all_postgresql
 
-        # v4.1.1: Also update BackendFactory singleton if it exists
+        # Also update BackendFactory singleton if it exists
         # This ensures BackendFactory.get_backend() also respects the context
         try:
             from .backends.factory import BackendFactory

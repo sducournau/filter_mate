@@ -164,9 +164,9 @@ class QueryExpressionCache:
             buffer_value,
             source_geometry_hash,
             provider_type,
-            source_filter_hash,  # v2.5.19: Include source filter for cache invalidation on refilter
-            use_centroids,  # v2.5.14: Include centroid flag for cache invalidation (distant layers)
-            use_centroids_source  # v2.5.15: Include centroid flag for source layer
+            source_filter_hash,  # Include source filter for cache invalidation on refilter
+            use_centroids,  # Include centroid flag for cache invalidation (distant layers)
+            use_centroids_source  # Include centroid flag for source layer
         )
 
     def compute_source_hash(self, source_geometry: Any) -> str:

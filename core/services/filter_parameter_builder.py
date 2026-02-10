@@ -176,10 +176,10 @@ class FilterParameterBuilder:
                 infos["layer_provider_type"] = 'unknown'
 
         # Auto-fill layer_geometry_field
-        # FIX v4.0.7 (2026-01-16): Use QgsDataSourceUri directly (more reliable)
+        # Use QgsDataSourceUri directly (more reliable)
         # Also check for string "NULL" which may be stored from stale config
-        # FIX v4.2.15 (2026-01-22): Query geometry_columns for PostgreSQL when URI is empty
-        # FIX v4.4.2 (2026-01-25): ALWAYS detect geometry column for PostgreSQL
+        # Query geometry_columns for PostgreSQL when URI is empty
+        # ALWAYS detect geometry column for PostgreSQL
         # Don't trust stored values like 'geom' - they may be incorrect defaults
         stored_geom_field = infos.get("layer_geometry_field")
         needs_detection = (
@@ -195,7 +195,7 @@ class FilterParameterBuilder:
                     infos["layer_geometry_field"] = geom_col
                     logger.info(f"Detected geometry column from URI: '{geom_col}'")
                 else:
-                    # FIX v4.2.15: Query PostgreSQL geometry_columns catalog when URI is empty
+                    # Query PostgreSQL geometry_columns catalog when URI is empty
                     if infos.get("layer_provider_type") == PROVIDER_POSTGRES:
                         pg_geom_col = self._query_postgresql_geometry_column(
                             context.source_layer,
@@ -368,7 +368,7 @@ class FilterParameterBuilder:
             }
 
         # PRIORITY 2: PostgreSQL layers ALWAYS use PostgreSQL backend
-        # FIX v4.1.4 (2026-01-21): PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # PostgreSQL layers are ALWAYS filterable via QGIS native API
         # (setSubsetString works without psycopg2). NEVER fall back to OGR.
         # psycopg2 is only needed for advanced features (materialized views, connection pooling).
         if provider_type == PROVIDER_POSTGRES:

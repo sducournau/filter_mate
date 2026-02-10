@@ -29,7 +29,7 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 
-# v4.1.5: BackendType uses canonical ProviderType values plus AUTO
+# BackendType uses canonical ProviderType values plus AUTO
 class BackendType(Enum):
     """Available backend types (extends ProviderType with AUTO)."""
     POSTGRESQL = "postgresql"
@@ -543,7 +543,7 @@ class BackendService(QObject):
         provider_type = layer.providerType()
         source = layer.source().lower()
 
-        # PostgreSQL - FIX v4.1.4: ALWAYS available for postgres layers (QGIS native API)
+        # PostgreSQL - ALWAYS available for postgres layers (QGIS native API)
         if provider_type == 'postgres':
             available.append(BackendInfo(
                 type=BackendType.POSTGRESQL,
@@ -619,7 +619,7 @@ class BackendService(QObject):
         feature_count = layer.featureCount()
         available = self.get_available_backends_for_layer(layer)
 
-        # PostgreSQL is optimal for postgres layers - FIX v4.1.4: ALWAYS use PostgreSQL
+        # PostgreSQL is optimal for postgres layers - ALWAYS use PostgreSQL
         if provider_type == 'postgres':
             return BackendRecommendation(
                 recommended=BackendType.POSTGRESQL,

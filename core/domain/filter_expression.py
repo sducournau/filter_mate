@@ -250,7 +250,7 @@ class FilterExpression:
                 pred_name = value.lower().replace('st_', '')
                 predicate_names.append(pred_name)
 
-        # CRITICAL FIX v4.0.3 (2026-01-16): Don't create SPATIAL_FILTER placeholder!
+        # Don't create SPATIAL_FILTER placeholder!
         # This placeholder was being used as SQL directly, causing PostgreSQL syntax errors:
         # ERROR: syntax error at or near "WITH"
         # LINE 1: ...WHERE SPATIAL_FILTER(intersects, intersects) WITH GEOMETRY...

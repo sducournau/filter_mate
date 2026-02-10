@@ -26,8 +26,10 @@ from datetime import datetime
 
 try:
     import psycopg2
+    from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None
+    psycopg2_sql = None
 
 from ....core.domain.exceptions import PostgreSQLError
 
@@ -585,7 +587,10 @@ class PostgreSQLCleanupService:
                         else:
                             try:
                                 cursor.execute(
-                                    f'DROP TABLE IF EXISTS {full_name} CASCADE;'  # nosec B608
+                                    psycopg2_sql.SQL('DROP TABLE IF EXISTS {}.{} CASCADE').format(
+                                        psycopg2_sql.Identifier(schema),
+                                        psycopg2_sql.Identifier(table_name)
+                                    )
                                 )
                                 cleaned_objects.append(f"TABLE: {full_name}")
                                 logger.debug(f"Dropped TABLE: {full_name}")

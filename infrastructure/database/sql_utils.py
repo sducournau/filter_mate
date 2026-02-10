@@ -81,12 +81,12 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
 
     try:
         if hasattr(layer, 'setSubsetString'):
-            # FIX v4.2.13: Enhanced diagnostics for setSubsetString failures
+            # Enhanced diagnostics for setSubsetString failures
             logger.debug(f"[SQL] Applying subset to layer '{layer.name()}':")
             logger.debug(f"[SQL]   Provider: {layer.providerType()}")
             logger.debug(f"[SQL]   Expression length: {len(subset_expression) if subset_expression else 0} chars")
 
-            # FIX v4.8.2: Detect type mismatches BEFORE applying to PostgreSQL
+            # Detect type mismatches BEFORE applying to PostgreSQL
             # Prevents "operator does not exist: character varying < integer" errors
             if subset_expression and layer.providerType() == 'postgres':
                 try:
@@ -118,7 +118,7 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
                 except (TypeError, ValueError, ImportError) as type_check_err:
                     logger.debug(f"Type mismatch detection failed (non-critical): {type_check_err}")
 
-            # FIX v4.8.1: Apply PostgreSQL type casting for PostgreSQL layers
+            # Apply PostgreSQL type casting for PostgreSQL layers
             # This ensures numeric comparisons have ::numeric casting
             if subset_expression and layer.providerType() == 'postgres':
                 try:
@@ -229,10 +229,10 @@ def create_temp_spatialite_table(
         cursor = conn.cursor()
 
         # Drop existing table if exists
-        cursor.execute(f"DROP TABLE IF EXISTS {sanitize_sql_identifier(table_name)}")  # nosec B608
+        cursor.execute(f"DROP TABLE IF EXISTS {sanitize_sql_identifier(table_name)}")  # nosec B608 - identifier sanitized via sanitize_sql_identifier()
 
         # Create table from query
-        create_sql = f"CREATE TABLE {sanitize_sql_identifier(table_name)} AS {sql_query}"  # nosec B608
+        create_sql = f"CREATE TABLE {sanitize_sql_identifier(table_name)} AS {sql_query}"  # nosec B608 - identifier sanitized via sanitize_sql_identifier()
         cursor.execute(create_sql)
 
         # Create spatial index

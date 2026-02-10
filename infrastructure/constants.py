@@ -12,7 +12,7 @@ v4.0 Regression Fix: Restored missing constants from before_migration/modules/co
 # =============================================================================
 # Provider Types
 # =============================================================================
-PROVIDER_POSTGRES = 'postgresql'  # v4.0 Fix: Was 'postgres', must match QGIS internal mapping
+PROVIDER_POSTGRES = 'postgresql'  # Was 'postgres', must match QGIS internal mapping
 PROVIDER_SPATIALITE = 'spatialite'
 PROVIDER_OGR = 'ogr'
 PROVIDER_MEMORY = 'memory'

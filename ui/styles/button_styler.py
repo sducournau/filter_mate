@@ -261,7 +261,7 @@ class ButtonStyler(StylerBase):
             if button:
                 self._apply_action_button_style(button)
 
-        # v4.0.3: Skip inline stylesheet for checkable buttons
+        # Skip inline stylesheet for checkable buttons
         # Let default.qss handle widget_filtering_keys/widget_exporting_keys styles
         # This ensures harmonization between FILTERING and EXPORTING tabs
 

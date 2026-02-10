@@ -111,7 +111,7 @@ class ItemDelegate(QStyledItemDelegate):
         x, y, dx, dy = option.rect.x(), option.rect.y(), option.rect.width(), option.rect.height()
 
         # Decoration - Draw icon FIRST, positioned after checkbox
-        # v4.0.2: Simplified - icon is now properly stored via setData(icon, Qt.DecorationRole)
+        # Simplified - icon is now properly stored via setData(icon, Qt.DecorationRole)
         pic = index.data(Qt.DecorationRole)
 
         icon_drawn = False
@@ -607,7 +607,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
 
         # Dynamic sizing based on config matching before_migration/UIConfig compact profile
         # before_migration: combobox.height = 36px, list.min_height = 225px
-        # New v4.0: combobox.height = 26px (from QSS), list.min_height = 225px (ratio 1.5x)
+        # New combobox.height = 26px (from QSS), list.min_height = 225px (ratio 1.5x)
         try:
             from ...config.config import ENV_VARS
             # Try to get from config, fallback to hardcoded defaults
@@ -1070,7 +1070,7 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     # Simple field access
                     display_value = str(feature[expression]) if expression else str(fid)
 
-                # UUID FIX v4.0: Ensure fid is converted to string for UUID/text PKs
+                # Ensure fid is converted to string for UUID/text PKs
                 # This ensures proper handling when building SQL expressions later
                 fid_value = str(fid) if not isinstance(fid, (int, float)) else fid
                 features_data.append((display_value, fid_value))

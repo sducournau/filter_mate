@@ -484,11 +484,11 @@ def create_geos_safe_layer(
 
         safe_layer.commitChanges()
 
-        # FIX v2.9.44: CRITICAL - Add layer to project registry BEFORE returning
+        # CRITICAL - Add layer to project registry BEFORE returning
         # The layer can be garbage collected by Qt's C++ GC during the return from this function.
         # Adding it to the project registry (with addToLegend=False) creates a strong C++ reference
         # that survives the return. The caller is responsible for removing it when done.
-        # FIX v4.1.1: Register layer for cleanup after filtering completes
+        # Register layer for cleanup after filtering completes
         try:
             from qgis.core import QgsProject
             QgsProject.instance().addMapLayer(safe_layer, False)  # addToLegend=False

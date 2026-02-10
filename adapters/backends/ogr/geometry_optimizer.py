@@ -79,7 +79,7 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
             return source_layer
 
         # Create new memory layer with simplified geometries
-        # FIX v4.2.13: Detect actual geometry type from source layer
+        # Detect actual geometry type from source layer
         # to avoid "Cannot add Polygon to Point layer" errors
         crs_authid = source_layer.crs().authid()
 
@@ -118,7 +118,7 @@ def simplify_source_for_ogr_fallback(source_layer, logger=None):
 
         simplified_features = []
 
-        # FIX v4.2.13: For Point/Line sources, simplification is not applicable
+        # For Point/Line sources, simplification is not applicable
         # These geometry types should be buffered FIRST, then the buffer result
         # (which is a Polygon) can be simplified if needed
         if source_geom_type != QgsWkbTypes.PolygonGeometry:

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Backend display configuration - v4.0: Softer "mousse" colors
+# Backend display configuration - Softer "mousse" colors
 BACKEND_STYLES = {
     'postgresql': {
         'text': 'PostgreSQL',
@@ -410,7 +410,7 @@ class BackendController(BaseController):
         logger.debug(f"  PostgreSQL available: {POSTGRESQL_AVAILABLE}")
 
         # PostgreSQL layers - ALWAYS use PostgreSQL backend (v4.1.4)
-        # FIX v4.1.4: QGIS native API (setSubsetString) works without psycopg2
+        # QGIS native API (setSubsetString) works without psycopg2
         # Never fallback to OGR for PostgreSQL layers
         if provider_type == 'postgresql':
             if not POSTGRESQL_AVAILABLE:
@@ -547,7 +547,7 @@ class BackendController(BaseController):
             return self._forced_backends[layer.id()].lower()
 
         # Auto-detection
-        # FIX v4.1.4 (2026-01-21): PostgreSQL layers ALWAYS use PostgreSQL backend.
+        # PostgreSQL layers ALWAYS use PostgreSQL backend.
         # QGIS native API (setSubsetString) works without psycopg2.
         provider_type = layer.providerType()
 
@@ -601,7 +601,7 @@ class BackendController(BaseController):
 
         self._indicator_label.setText(text)
 
-        # Build stylesheet - v4.0: Soft "mousse" style with smoother appearance
+        # Build stylesheet - Soft "mousse" style with smoother appearance
         stylesheet = """
             QLabel#label_backend_indicator {{
                 color: {style['color']};
@@ -851,7 +851,7 @@ class BackendController(BaseController):
                 if connexion:
                     break
 
-        # 2. FIX v4.3.8: If no connection found, search ALL QGIS project layers
+        # 2. If no connection found, search ALL QGIS project layers
         # This handles cases where PostgreSQL layers exist but aren't in PROJECT_LAYERS
         if not connexion:
             from qgis.core import QgsProject
@@ -1248,7 +1248,7 @@ class BackendController(BaseController):
                     # Drop each table
                     for table_schema, table_name in all_tables:
                         try:
-                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')  # nosec B608
+                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')  # nosec B608 - table_schema/table_name from pg_tables/pg_matviews query (trusted source)
                             total_count += 1
                             logger.debug(f"Dropped TABLE: {table_schema}.{table_name}")
                         except Exception as e:
@@ -1367,9 +1367,9 @@ class BackendController(BaseController):
             count = 0
             for (table_name,) in tables:
                 try:
-                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')  # nosec B608
+                    cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')  # nosec B608 - table_name from sqlite_master query (trusted source)
                     # Also drop R-tree index if exists
-                    cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')  # nosec B608
+                    cur.execute(f'DROP TABLE IF EXISTS "idx_{table_name}_geometry";')  # nosec B608 - table_name from sqlite_master query (trusted source)
                     count += 1
                 except Exception as e:
                     logger.warning(f"Error dropping table {table_name}: {e}")

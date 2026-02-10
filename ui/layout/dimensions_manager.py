@@ -410,7 +410,7 @@ class DimensionsManager(LayoutManagerBase):
                         # Set consistent icon size
                         button.setIconSize(QSize(pushbutton_icon_size, pushbutton_icon_size))
 
-                        # v4.0 Migration Fix: Do NOT force setFlat(True) here
+                        # Do NOT force setFlat(True) here
                         # This breaks the visual feedback for checked state
                         # Let button_styler.py handle flat state based on isChecked()
                         # button.setFlat(True)  # REMOVED - causes regression

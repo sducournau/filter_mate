@@ -60,7 +60,7 @@ from ...infrastructure.logging import get_logger
 
 logger = get_logger(__name__)
 
-# v2.8.8: Use dedicated FilterMate temp schema for all MVs
+# Use dedicated FilterMate temp schema for all MVs
 # Constant defined locally after removal of modules.constants dependency
 DEFAULT_TEMP_SCHEMA = 'filtermate_temp'
 FILTERMATE_MV_SCHEMA = DEFAULT_TEMP_SCHEMA
@@ -158,7 +158,7 @@ class OptimizationResult:
     performance_hint: str = ""
     mv_info: Optional[MaterializedViewInfo] = None
     fid_info: Optional[FidListInfo] = None
-    source_mv_info: Optional[SourceMVInfo] = None  # v2.9.0: Source MV to create
+    source_mv_info: Optional[SourceMVInfo] = None  # Source MV to create
 
     # Statistics
     estimated_speedup: float = 1.0  # Multiplier (e.g., 10.0 = 10x faster)
@@ -220,7 +220,7 @@ class CombinedQueryOptimizer:
         re.IGNORECASE | re.DOTALL
     )
 
-    # v2.9.0: Enhanced pattern for EXISTS with large FID lists and ST_Buffer
+    # Enhanced pattern for EXISTS with large FID lists and ST_Buffer
     # Matches the full EXISTS clause including buffer parameters
     # Example: EXISTS (SELECT 1 FROM "public"."table" AS __source
     #          WHERE ST_Intersects("target"."geom", ST_Buffer(__source."geom", 50.0, 'quad_segs=5'))
@@ -355,7 +355,7 @@ class CombinedQueryOptimizer:
             target_table, target_schema, primary_key
         )
 
-        # 2. v2.9.0: Try MV + EXISTS with large FID list optimization
+        # 2. Try MV + EXISTS with large FID list optimization
         # This handles the case: (IN mv_step1) AND (EXISTS ... AND (fid IN (long list)))
         if not result.success:
             result = self._try_mv_exists_fid_optimization(
@@ -667,17 +667,17 @@ class CombinedQueryOptimizer:
         ', '.join(str(fid) for fid in fid_list)
         source_mv_info = None
 
-        # v2.8.8: Use FilterMate temp schema for all MVs instead of source schema
+        # Use FilterMate temp schema for all MVs instead of source schema
         mv_schema = FILTERMATE_MV_SCHEMA
 
-        # v2.9.0: If FID count exceeds threshold, create a source MV with pre-computed buffer
+        # If FID count exceeds threshold, create a source MV with pre-computed buffer
         if fid_count > self.SOURCE_FID_MV_THRESHOLD:
             # Generate unique source MV name (unified fm_temp_src_ prefix)
             fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in sorted(fid_list)).encode()).hexdigest()[:8]
             src_mv_name = f"fm_temp_src_{fid_hash}"
 
             # Build CREATE MATERIALIZED VIEW SQL for source selection
-            # v2.8.8: Use filtermate temp schema instead of source schema
+            # Use filtermate temp schema instead of source schema
             create_sql = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{mv_schema}"."{src_mv_name}" AS
     SELECT "{fid_column}",
            "{source_geom_col}" AS geom,
@@ -687,7 +687,7 @@ class CombinedQueryOptimizer:
     WITH DATA;'''
 
             source_mv_info = SourceMVInfo(
-                schema=mv_schema,  # v2.8.8: Use temp schema
+                schema=mv_schema,  # Use temp schema
                 view_name=src_mv_name,
                 source_table=source_table,
                 source_schema=source_schema,

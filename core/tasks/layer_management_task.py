@@ -192,7 +192,7 @@ class LayersManagementEngineTask(QgsTask):
         # This avoids opening/closing connections for each layer during init
         self._postgresql_connection_cache = {}
 
-        # THREAD SAFETY (v2.3.10): Queue for layer variable operations
+        # Queue for layer variable operations (thread safety)
         # QgsExpressionContextUtils calls must happen in main thread (finished() method)
         # This queue stores: (layer_id, variable_key, value) tuples for setLayerVariable
         # or (layer_id, None, None) for setLayerVariables({}) to clear all
@@ -368,7 +368,7 @@ class LayersManagementEngineTask(QgsTask):
                 )
                 existing_layer_variables[property[0]][property[1]] = value_typped
 
-                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                # Queue for main thread execution
                 variable_key = f"filterMate_{property[0]}_{property[1]}"
                 self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
 
@@ -426,7 +426,7 @@ class LayersManagementEngineTask(QgsTask):
             logger.info(f"Added missing 'current_exploring_groupbox' property for layer {layer.id()}")
 
         # Ensure all expression properties exist with primary key as default
-        # FIX v4.1 Simon 2026-01-16: Garantir un fallback robuste si primary_key est vide
+        # Garantir un fallback robuste si primary_key est vide
         expression_properties = [
             "single_selection_expression",
             "multiple_selection_expression",
@@ -513,7 +513,7 @@ class LayersManagementEngineTask(QgsTask):
             except Exception as e:
                 logger.warning(f"Could not add layer_provider_type to database: {e}")
 
-            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+            # Queue for main thread execution
             self._deferred_layer_variables.append((layer.id(), "filterMate_infos_layer_table_name", infos.get("layer_table_name", "")))
 
         # Add layer_geometry_type if missing
@@ -586,7 +586,7 @@ class LayersManagementEngineTask(QgsTask):
                     geometry_field = regexp_match_geom.group()
 
         elif layer_provider_type in [PROVIDER_SPATIALITE, PROVIDER_OGR]:
-            # FIX v2.4.13: Improved geometry column detection for GeoPackage/Spatialite
+            # Improved geometry column detection for GeoPackage/Spatialite
             # Try multiple methods in order of reliability
             detected_geom_field = None
 
@@ -645,7 +645,7 @@ class LayersManagementEngineTask(QgsTask):
                 geometry_field = 'geom' if layer_provider_type == PROVIDER_OGR else 'geometry'
                 logger.debug(f"Using default geometry field: '{geometry_field}'")
 
-        # FIX v4.0.8 (2026-01-16): FINAL FALLBACK - never return 'NULL' as geometry_field
+        # FINAL FALLBACK - never return 'NULL' as geometry_field
         # This ensures all layers have a valid geometry column from initialization
         # (avoids fallback detection during filtering task)
         if geometry_field == 'NULL' or not geometry_field:
@@ -688,7 +688,7 @@ class LayersManagementEngineTask(QgsTask):
         source_table_name = get_source_table_name(layer)
 
         # Check PostgreSQL connection availability for PostgreSQL layers
-        # CRITICAL FIX v2.5.19: PostgreSQL layers are ALWAYS available for basic filtering
+        # PostgreSQL layers are ALWAYS available for basic filtering
         # via QGIS native API (setSubsetString) - this works without psycopg2!
         # psycopg2 is only needed for ADVANCED features (materialized views, custom indexes)
         #
@@ -698,7 +698,7 @@ class LayersManagementEngineTask(QgsTask):
         postgresql_connection_available = False
         psycopg2_connection_available = False
 
-        # v3.0.5: CRITICAL FIX - PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # PostgreSQL layers are ALWAYS filterable via QGIS native API
         # psycopg2 is only needed for ADVANCED features (materialized views, indexes)
         # Basic filtering via setSubsetString() works without psycopg2
         if layer_provider_type == PROVIDER_POSTGRES:
@@ -773,7 +773,7 @@ class LayersManagementEngineTask(QgsTask):
         # Use descriptive text fields when available instead of just primary key
         best_display_field = get_best_display_field(layer)
 
-        # FIX v4.1 Simon 2026-01-16: GARANTIR que display_expression n'est JAMAIS vide
+        # GARANTIR que display_expression n'est JAMAIS vide
         # Les combobox field ne doivent JAMAIS être vides au chargement d'un layer
         if best_display_field:
             display_expression = best_display_field
@@ -800,7 +800,7 @@ class LayersManagementEngineTask(QgsTask):
         )
         new_layer_variables["filtering"] = json.loads(self.json_template_layer_filtering)
 
-        # VERIFICATION v2.9.32: Log default centroid checkbox values to confirm they are False
+        # VERIFICATION Log default centroid checkbox values to confirm they are False
         logger.debug(f"🔍 Default centroid values for new layer {layer.name()}: "
                     f"use_centroids_source_layer={new_layer_variables['filtering']['use_centroids_source_layer']}, "
                     f"use_centroids_distant_layers={new_layer_variables['filtering']['use_centroids_distant_layers']}")
@@ -1232,7 +1232,7 @@ class LayersManagementEngineTask(QgsTask):
         geometry_field = infos["layer_geometry_field"]
         primary_key_name = infos["primary_key_name"]
 
-        # PERFORMANCE v2.4.0: Use connection pooling if available
+        # PERFORMANCE Use connection pooling if available
         use_pooled = CONNECTION_POOL_AVAILABLE and pooled_connection_from_layer is not None
 
         if use_pooled:
@@ -1426,7 +1426,7 @@ class LayersManagementEngineTask(QgsTask):
                                 if type_returned in (list, dict):
                                     value_typped = json.dumps(value_typped)
                                 variable_key = f"filterMate_{key_group}_{key}"
-                                # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                # Queue for main thread execution
                                 self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
                                 self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                                 cur.execute(
@@ -1451,7 +1451,7 @@ class LayersManagementEngineTask(QgsTask):
                                     if type_returned in (list, dict):
                                         value_typped = json.dumps(value_typped)
                                     variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
-                                    # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                    # Queue for main thread execution
                                     self._deferred_layer_variables.append((layer.id(), variable_key, value_typped))
                                     self.savingLayerVariable.emit(layer, variable_key, value_typped, type_returned)
                                     cur.execute(
@@ -1498,7 +1498,7 @@ class LayersManagementEngineTask(QgsTask):
                             (str(self.project_uuid), layer.id())
                         )
                         conn.commit()
-                        # THREAD SAFETY (v2.3.10): Queue for main thread execution (clear all)
+                        # Queue for main thread execution (clear all)
                         self._deferred_layer_variables.append((layer.id(), None, None))
                     else:
                         for layer_property in layer_properties:
@@ -1511,7 +1511,7 @@ class LayersManagementEngineTask(QgsTask):
                                     )
                                     conn.commit()
                                     variable_key = f"filterMate_{layer_property[0]}_{layer_property[1]}"
-                                    # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                                    # Queue for main thread execution
                                     self._deferred_layer_variables.append((layer.id(), variable_key, ''))
                                     self.removingLayerVariable.emit(layer, variable_key)
                 finally:
@@ -1567,7 +1567,7 @@ class LayersManagementEngineTask(QgsTask):
                     result_layers = [result_layer for result_layer in self.PROJECT.mapLayersByName(layer.name())]
                     if len(result_layers) > 0:
                         for result_layer in result_layers:
-                            # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                            # Queue for main thread execution
                             self._deferred_layer_variables.append((result_layer.id(), None, None))
                             if self.isCanceled():
                                 return False
@@ -1585,7 +1585,7 @@ class LayersManagementEngineTask(QgsTask):
                 result_layers = [layer for layer in self.PROJECT.mapLayersByName(self.project_layers[layer_id]["infos"]["layer_name"]) if layer.id() == layer_id]
                 if len(result_layers) > 0:
                     result_layer = result_layers[0]
-                    # THREAD SAFETY (v2.3.10): Queue for main thread execution
+                    # Queue for main thread execution
                     self._deferred_layer_variables.append((result_layer.id(), None, None))
 
                 if self.isCanceled():
@@ -1713,7 +1713,7 @@ class LayersManagementEngineTask(QgsTask):
         Since cancel() is often called during shutdown, we now avoid QgsMessageLog
         entirely in this method to prevent the Windows fatal exception.
         """
-        # CRASH FIX (v2.8.7): Do NOT use QgsMessageLog in cancel() method.
+        # Do NOT use QgsMessageLog in cancel() method.
         # During QGIS shutdown, QgsTaskManager::cancelAll() is called, and
         # QgsMessageLog may already be destroyed even if QApplication exists.
         # Use Python logger only (file-based, safe during shutdown).
@@ -1747,14 +1747,14 @@ class LayersManagementEngineTask(QgsTask):
         from qgis.utils import iface
         logger.info(f"LayersManagementEngineTask.finished(): task_action={self.task_action}, result={result}, project_layers count={len(self.project_layers) if self.project_layers else 0}")
 
-        # THREAD SAFETY (v2.3.10): Apply deferred layer variable operations
+        # Apply deferred layer variable operations (thread safety)
         # These operations MUST happen in the main thread (finished() runs in main thread)
-        # CRASH FIX (v2.3.12): Use safe wrapper functions that re-fetch and validate
+        # Use safe wrapper functions that re-fetch and validate
         # the layer immediately before C++ operations to prevent access violations
-        # CRASH FIX (v2.4.7): Process events BEFORE applying layer variables to
+        # Process events BEFORE applying layer variables to
         # allow any pending layer deletions to complete, reducing race condition window
-        # CRASH FIX (v2.4.8): Check if QGIS is alive before any layer operations
-        # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer layer variable operations
+        # Check if QGIS is alive before any layer operations
+        # Use QTimer.singleShot(0) to defer layer variable operations
         # to the next event loop iteration. This ensures all pending layer deletions
         # are fully processed before we access the layers, preventing access violations.
         if self._deferred_layer_variables:
@@ -1770,7 +1770,7 @@ class LayersManagementEngineTask(QgsTask):
                 operations_to_apply = list(self._deferred_layer_variables)
                 self._deferred_layer_variables.clear()
 
-                # CRASH FIX (v2.4.9): Use QTimer.singleShot(0) to defer operations
+                # Use QTimer.singleShot(0) to defer operations
                 # to the next event loop cycle. This provides a complete "round-trip"
                 # through Qt's event loop, ensuring all pending layer deletions
                 # are fully processed before we touch any layers.

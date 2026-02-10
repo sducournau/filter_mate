@@ -24,8 +24,10 @@ from typing import Optional, List, Dict, Any, Tuple
 
 try:
     import psycopg2
+    from psycopg2 import sql as psycopg2_sql
 except ImportError:
     psycopg2 = None
+    psycopg2_sql = None
 
 from ....core.ports.backend_port import BackendPort, BackendInfo, BackendCapability
 from ....core.domain.filter_expression import FilterExpression, ProviderType
@@ -312,7 +314,7 @@ class PostgreSQLBackend(BackendPort):
             logger.warning("[PostgreSQL] create_source_selection_mv: No FIDs provided")
             return None
 
-        logger.info(f"[PostgreSQL] 🗄️ Creating source selection MV for {len(fids)} features")  # nosec B608
+        logger.info(f"[PostgreSQL] Creating source selection MV for {len(fids)} features")  # nosec B608 - false positive: logger statement, no SQL execution
 
         try:
             # Get connection - try multiple sources
@@ -365,7 +367,7 @@ class PostgreSQLBackend(BackendPort):
 
             # Build SELECT query for MV
             # Include pk and geometry for spatial indexing
-            # FIX v4.3.1 (2026-01-22): Ensure pk_field and geom_field are simple field names
+            # Ensure pk_field and geom_field are simple field names
             # Strip any table prefixes if present (should be just field names)
             clean_pk_field = pk_field.split('.')[-1].strip('"')
             clean_geom_field = geom_field.split('.')[-1].strip('"')
@@ -398,16 +400,19 @@ class PostgreSQLBackend(BackendPort):
                 if created_name and self._mv_manager.mv_exists(created_name, connection=conn):
                     # Get row count for logging
                     cursor = conn.cursor()
-                    cursor.execute(f'SELECT COUNT(*) FROM "filtermate_temp"."{created_name}"')  # nosec B608
+                    cursor.execute(psycopg2_sql.SQL('SELECT COUNT(*) FROM {}.{}').format(
+                        psycopg2_sql.Identifier('filtermate_temp'),
+                        psycopg2_sql.Identifier(created_name)
+                    ))
                     row_count = cursor.fetchone()[0]
 
                     logger.info(
-                        f"[PostgreSQL] ✅ Source selection MV created: {created_name} "  # nosec B608
+                        f"[PostgreSQL] Source selection MV created: {created_name} "  # nosec B608 - false positive: logger statement, no SQL execution
                         f"({row_count} rows, was {len(fids)} FIDs)"
                     )
 
                     # Return full reference for use in queries
-                    return f'"filtermate_temp"."{created_name}"'  # nosec B608
+                    return f'"filtermate_temp"."{created_name}"'  # nosec B608 - string return value, not executed as SQL; name from mv_manager
                 else:
                     logger.error("[PostgreSQL] MV creation reported success but MV not found")
                     return None
@@ -425,7 +430,7 @@ class PostgreSQLBackend(BackendPort):
                 )
 
         except Exception as e:  # catch-all safety net (multi-source connection + MV creation)
-            logger.error(f"[PostgreSQL] create_source_selection_mv failed: {e}")  # nosec B608
+            logger.error(f"[PostgreSQL] create_source_selection_mv failed: {e}")  # nosec B608 - false positive: logger statement, no SQL execution
             import traceback
             logger.debug(traceback.format_exc())
             return None
@@ -534,19 +539,24 @@ class PostgreSQLBackend(BackendPort):
             fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in fids[:10]).encode()).hexdigest()[:8]
             temp_name = f"fm_temp_src_sel_{fid_hash}"
 
-            # FIX v4.3.1 (2026-01-22): Clean field names (remove table prefixes if present)
+            # Clean field names (remove table prefixes if present)
             pk_field.split('.')[-1].strip('"')
             geom_field.split('.')[-1].strip('"')
 
             cursor = conn.cursor()
 
-            # FIX v4.3.2: Ensure filtermate_temp schema exists
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{DEFAULT_TEMP_SCHEMA}"')  # nosec B608
+            # Ensure filtermate_temp schema exists
+            cursor.execute(psycopg2_sql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(
+                psycopg2_sql.Identifier(DEFAULT_TEMP_SCHEMA)
+            ))
 
-            # FIX v4.3.2: Create persistent table in filtermate_temp schema
+            # Create persistent table in filtermate_temp schema
             # (NOT TEMPORARY - QGIS uses a different PostgreSQL session)
             # Drop existing table first to avoid conflicts
-            cursor.execute(f'DROP TABLE IF EXISTS "{DEFAULT_TEMP_SCHEMA}"."{temp_name}"')  # nosec B608
+            cursor.execute(psycopg2_sql.SQL('DROP TABLE IF EXISTS {}.{}').format(
+                psycopg2_sql.Identifier(DEFAULT_TEMP_SCHEMA),
+                psycopg2_sql.Identifier(temp_name)
+            ))
 
             create_sql = """
                 CREATE TABLE "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" AS
@@ -557,12 +567,16 @@ class PostgreSQLBackend(BackendPort):
             cursor.execute(create_sql)
 
             # Create index for fast lookups
-            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{temp_name}_pk ON "{DEFAULT_TEMP_SCHEMA}"."{temp_name}" (pk)')  # nosec B608
+            cursor.execute(psycopg2_sql.SQL('CREATE INDEX IF NOT EXISTS {} ON {}.{} (pk)').format(
+                psycopg2_sql.Identifier(f'idx_{temp_name}_pk'),
+                psycopg2_sql.Identifier(DEFAULT_TEMP_SCHEMA),
+                psycopg2_sql.Identifier(temp_name)
+            ))
 
             conn.commit()
 
             full_name = f'"{DEFAULT_TEMP_SCHEMA}"."{temp_name}"'
-            logger.info(f"[PostgreSQL] ✅ Fallback temp table created: {full_name}")  # nosec B608
+            logger.info(f"[PostgreSQL] Fallback temp table created: {full_name}")  # nosec B608 - false positive: logger statement, no SQL execution
             return full_name
 
         except (psycopg2.Error if psycopg2 else Exception) as e:
@@ -577,7 +591,7 @@ class PostgreSQLBackend(BackendPort):
             if conn:
                 mv_count = self._mv_manager.cleanup_session_mvs(connection=conn)
                 view_count, _ = self._cleanup_service.cleanup_session_views(conn)
-                logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")  # nosec B608
+                logger.info(f"[PostgreSQL] PostgreSQL cleanup: {mv_count + view_count} objects dropped")  # nosec B608 - false positive: logger statement, no SQL execution
         except Exception as e:  # catch-all safety net (cleanup must not raise)
             logger.error(f"[PostgreSQL] Cleanup failed: {e}")
 
@@ -740,7 +754,7 @@ class PostgreSQLBackend(BackendPort):
         """Execute filter using materialized view."""
         # Build query for MV
         table_name = self._get_table_name(layer_info)
-        query = f"SELECT * FROM {table_name} WHERE {expression.sql}"  # nosec B608
+        query = f"SELECT * FROM {table_name} WHERE {expression.sql}"  # nosec B608 - table_name from QGIS layer metadata, expression.sql from validated FilterExpression
 
         # Create MV
         mv_name = self._mv_manager.create_mv(

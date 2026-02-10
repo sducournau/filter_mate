@@ -41,10 +41,10 @@ from .filter_actions import (  # noqa: F401
     execute_unfilter_action_postgresql,
 )
 
-# v4.1.0: Expression Builder (migrated from before_migration)
+# Expression Builder (migrated from before_migration)
 from .expression_builder import PostgreSQLExpressionBuilder  # noqa: F401
 
-# v4.2.10: Filter Chain Optimizer (MV-based optimization)
+# Filter Chain Optimizer (MV-based optimization)
 from .filter_chain_optimizer import (  # noqa: F401
     FilterChainOptimizer,
     FilterChainContext,
@@ -54,7 +54,7 @@ from .filter_chain_optimizer import (  # noqa: F401
     optimize_filter_chain,
 )
 
-# v4.1.1: Backward compatibility alias (legacy name from modules/)
+# Backward compatibility alias (legacy name from modules/)
 # This alias allows code that imports PostgreSQLGeometricFilter to work
 # with the renamed PostgreSQLBackend class
 PostgreSQLGeometricFilter = PostgreSQLBackend
@@ -74,7 +74,7 @@ __all__ = [
     'QueryAnalysis',
     'OptimizationResult',
     'create_optimizer',
-    # v4.2.10: Filter Chain Optimizer
+    # Filter Chain Optimizer
     'FilterChainOptimizer',
     'FilterChainContext',
     'OptimizationStrategy',
@@ -104,6 +104,6 @@ __all__ = [
     # Reset and unfilter actions
     'execute_reset_action_postgresql',
     'execute_unfilter_action_postgresql',
-    # v4.1.0: Expression Builder
+    # Expression Builder
     'PostgreSQLExpressionBuilder',
 ]

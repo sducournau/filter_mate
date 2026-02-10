@@ -211,7 +211,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     launchingTask = pyqtSignal(str)
     currentLayerChanged = pyqtSignal()
     widgetsInitialized = pyqtSignal()
-    projectLayersReady = pyqtSignal()  # v4.0.4: Emitted after PROJECT_LAYERS populated
+    projectLayersReady = pyqtSignal()  # Emitted after PROJECT_LAYERS populated
 
     gettingProjectLayers = pyqtSignal()
 
@@ -296,6 +296,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _property_ctrl(self):
         """Sprint 18: Helper property for PropertyController access."""
         return self._controller_integration.property_controller if self._controller_integration and self._controller_integration.property_controller else None
+
+    @property
+    def _raster_exploring_ctrl(self):
+        """Phase 0: Helper property for RasterExploringController access."""
+        return self._controller_integration.raster_exploring_controller if self._controller_integration and self._controller_integration.raster_exploring_controller else None
 
     @property
     def signal_manager(self):
@@ -537,7 +542,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 continue
             state = self.changeSignalState(widget_path, signal_name, func, custom_action)
             self._signal_connection_states[state_key] = state
-            # v5.0: Sync cache with signal manager
+            # Sync cache with signal manager
             self._signal_manager._signal_connection_states[state_key] = state
             logger.debug(f"  -> Changed state to {state}")
         return True if state is None and widget_object["SIGNALS"] else state
@@ -674,6 +679,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_backend_indicator()
         self._setup_action_bar_layout()
         self._setup_exploring_tab_widgets()
+        self._setup_dual_mode_exploring()
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
@@ -874,7 +880,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.resize(pref_w, pref_h)
             logger.debug(f"Resized dockwidget to preferred size: {pref_w}x{pref_h}px")
 
-        # v4.0.2: Apply minimum width to groupboxes to prevent overlap when splitter is resized
+        # Apply minimum width to groupboxes to prevent overlap when splitter is resized
         self._apply_groupbox_minimum_widths()
 
     def _apply_widget_dimensions(self):
@@ -1171,14 +1177,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create header with indicators."""
         self.frame_header = QtWidgets.QFrame(self.dockWidgetContents)
         self.frame_header.setObjectName("frame_header"); self.frame_header.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.frame_header.setFixedHeight(13)  # v4.0: Compact layout, closer to frame_exploring
+        self.frame_header.setFixedHeight(13)  # Compact layout, closer to frame_exploring
         hl = QtWidgets.QHBoxLayout(self.frame_header)
-        hl.setContentsMargins(2, 0, 2, 0); hl.setSpacing(3)  # v4.0: Slight spacing increase for better visual
+        hl.setContentsMargins(2, 0, 2, 0); hl.setSpacing(3)  # Slight spacing increase for better visual
         hl.addSpacerItem(QtWidgets.QSpacerItem(40, 6, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
         self.plugin_title_label = None
-        # v4.0: Softer "mousse" style with rounded corners
+        # Softer "mousse" style with rounded corners
         bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
-        # v4.0: Softer colors with better hover transitions
+        # Softer colors with better hover transitions
         self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 32)
         hl.addWidget(self.favorites_indicator_label)
         self.backend_indicator_label = self._create_indicator_label("label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked, 38)
@@ -1190,7 +1196,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: Create indicator label with soft "mousse" style."""
         lbl = ClickableLabel(self.frame_header)
         lbl.setObjectName(name); lbl.setText(text); lbl.setStyleSheet(f"QLabel#{name}{{{style}}}QLabel#{name}:hover{{{hover_style}}}")
-        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # v4.0: Fixed height for proper text display with padding
+        lbl.setAlignment(Qt.AlignCenter); lbl.setMinimumWidth(min_width); lbl.setFixedHeight(18)  # Fixed height for proper text display with padding
         lbl.setCursor(Qt.PointingHandCursor); lbl.setToolTip(tooltip)
         # CRITICAL: Enable the widget to receive mouse events
         lbl.setEnabled(True)
@@ -1550,7 +1556,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S16: → ActionBarManager."""
         if self._action_bar_manager: self._action_bar_manager.set_position(position); self._action_bar_manager.apply_position()
 
-    # v5.0: ActionBar wrapper methods removed - use self._action_bar_manager directly
+    # ActionBar wrapper methods removed - use self._action_bar_manager directly
     # Removed: _adjust_header_for_side_position, _restore_header_from_wrapper, _clear_action_bar_layout,
     # _create_horizontal_action_layout, _create_vertical_action_layout, _apply_action_bar_size_constraints,
     # _reposition_action_bar_in_main_layout, _create_horizontal_wrapper_for_side_action_bar,
@@ -1560,6 +1566,107 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 16: Delegate to ConfigurationManager."""
         if self._configuration_manager:
             self._configuration_manager.setup_exploring_tab_widgets()
+
+    def _setup_dual_mode_exploring(self):
+        """Phase 0: Create QStackedWidget for Vector/Raster dual mode in Exploring panel.
+
+        Wraps existing vector groupboxes in page 0, creates raster placeholder in page 1.
+        Adds DualModeToggle to the top of frame_exploring (above scrollArea).
+        Wires auto-detection: selecting a raster layer in QGIS switches to raster mode.
+        """
+        try:
+            from .ui.widgets.dual_mode_toggle import DualModeToggle, DualMode
+
+            # -- 1. Create the stacked widget --
+            self._stacked_exploring = QtWidgets.QStackedWidget()
+            self._stacked_exploring.setObjectName("stacked_exploring")
+
+            # -- 2. Page 0: Vector (move existing groupboxes) --
+            page_vector = QtWidgets.QWidget()
+            page_vector.setObjectName("page_exploring_vector")
+            layout_vector = QtWidgets.QVBoxLayout(page_vector)
+            layout_vector.setContentsMargins(0, 0, 0, 0)
+            layout_vector.setSpacing(2)
+
+            # Collect all items from the existing verticalLayout_exploring_tabs_content
+            vector_widgets = []
+            while self.verticalLayout_exploring_tabs_content.count():
+                item = self.verticalLayout_exploring_tabs_content.takeAt(0)
+                if item.widget():
+                    vector_widgets.append(item.widget())
+                elif item.spacerItem():
+                    vector_widgets.append(item.spacerItem())
+
+            for w in vector_widgets:
+                if isinstance(w, QtWidgets.QWidget):
+                    layout_vector.addWidget(w)
+                else:
+                    # Spacer items
+                    layout_vector.addSpacerItem(w)
+
+            layout_vector.addStretch()
+            self._stacked_exploring.addWidget(page_vector)
+
+            # -- 3. Page 1: Raster (placeholder) --
+            page_raster = QtWidgets.QWidget()
+            page_raster.setObjectName("page_exploring_raster")
+            layout_raster = QtWidgets.QVBoxLayout(page_raster)
+            layout_raster.setContentsMargins(4, 4, 4, 4)
+            layout_raster.setSpacing(4)
+
+            lbl_placeholder = QtWidgets.QLabel(self.tr("Raster Exploring"))
+            lbl_placeholder.setAlignment(Qt.AlignCenter)
+            lbl_placeholder.setStyleSheet(
+                "color: palette(mid); font-style: italic; padding: 20px;"
+            )
+            layout_raster.addWidget(lbl_placeholder)
+            layout_raster.addStretch()
+            self._stacked_exploring.addWidget(page_raster)
+
+            # -- 4. Insert stacked widget into the existing layout --
+            self.verticalLayout_exploring_tabs_content.addWidget(self._stacked_exploring)
+
+            # -- 5. Create toggle and insert at top of frame_exploring --
+            self._dual_mode_toggle = DualModeToggle(self)
+            self.verticalLayout_main_content.insertWidget(0, self._dual_mode_toggle)
+
+            # -- 6. Wire toggle -> stacked widget --
+            self._dual_mode_toggle.modeChanged.connect(self._stacked_exploring.setCurrentIndex)
+
+            # -- 7. Wire QGIS layer tree auto-detection --
+            try:
+                from qgis.utils import iface as qgis_iface
+                if qgis_iface and hasattr(qgis_iface, 'layerTreeView'):
+                    tree_view = qgis_iface.layerTreeView()
+                    if tree_view:
+                        tree_view.currentLayerChanged.connect(self._on_dual_mode_layer_changed)
+                        logger.debug("DualMode: connected layerTreeView.currentLayerChanged")
+            except Exception as e:
+                logger.debug(f"DualMode: could not connect layerTreeView signal: {e}")
+
+            # Default to vector
+            self._stacked_exploring.setCurrentIndex(DualMode.VECTOR)
+            logger.info("DualMode: dual mode exploring setup complete (Phase 0)")
+
+        except Exception as e:
+            logger.error(f"_setup_dual_mode_exploring failed: {e}", exc_info=True)
+
+    def _on_dual_mode_layer_changed(self, layer):
+        """Auto-switch dual mode based on active layer type in QGIS layer tree."""
+        if layer is None:
+            return
+        try:
+            from qgis.core import QgsRasterLayer
+            from .ui.widgets.dual_mode_toggle import DualMode
+            if isinstance(layer, QgsRasterLayer):
+                self._dual_mode_toggle.setMode(DualMode.RASTER)
+                if self._raster_exploring_ctrl:
+                    self._raster_exploring_ctrl.set_raster_layer(layer)
+            elif isinstance(layer, QgsVectorLayer):
+                self._dual_mode_toggle.setMode(DualMode.VECTOR)
+            # Other layer types (mesh, point cloud): keep current mode
+        except Exception as e:
+            logger.debug(f"_on_dual_mode_layer_changed: {e}")
 
     def _schedule_expression_change(self, groupbox: str, expression: str):
         """v4.0 Sprint 16: Schedule debounced expression change."""
@@ -1928,7 +2035,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets = self._configuration_manager.configure_widgets(); self.widgets_initialized = True
         logger.info(f"✅ Widgets configured: FILTERING keys = {list(self.widgets.get('FILTERING', {}).keys())}")
 
-        # v4.0.7: FIX - Enable all filtering checkable buttons that were disabled in UI
+        # Enable all filtering checkable buttons that were disabled in UI
         # pushButton_checkable_filtering_buffer_value is disabled by default in .ui file
         self._enable_filtering_checkable_buttons()
 
@@ -2136,7 +2243,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget:
-                    logger.debug(f"  Updating SINGLE_SELECTION_FEATURES with layer {layer.name()}")  # nosec B608
+                    logger.debug(f"  Updating SINGLE_SELECTION_FEATURES with layer {layer.name()}")  # nosec B608 - false positive: logger statement, no SQL execution
                     widget.setLayer(None)  # Force refresh
                     widget.setLayer(layer)
                     # FIX 2026-01-19: Connect willBeDeleted to prevent crash on layer deletion
@@ -2151,7 +2258,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if "MULTIPLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget and hasattr(widget, 'setLayer'):
-                    logger.debug(f"  Updating MULTIPLE_SELECTION_FEATURES with layer {layer.name()}")  # nosec B608
+                    logger.debug(f"  Updating MULTIPLE_SELECTION_FEATURES with layer {layer.name()}")  # nosec B608 - false positive: logger statement, no SQL execution
                     # FIX 2026-01-18 v8: Use preserve_checked=True to not lose selected items during refresh
                     widget.setLayer(layer, layer_props, skip_task=True, preserve_checked=True)
                     # FIX 2026-01-18: Always call setDisplayExpression to populate the list
@@ -2318,7 +2425,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
 
-            # v4.0.7: Use SearchableJsonView with integrated search bar
+            # Use SearchableJsonView with integrated search bar
             try:
                 from ui.widgets.json_view import SearchableJsonView
                 self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir)
@@ -2440,7 +2547,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         icon_func = icon_map.get(geometry_type, QgsLayerItem.iconDefault)
         icon = icon_func()
 
-        # CRITICAL FIX 2026-01-15 (BUGFIX-COMBOBOX-ICONS): Cache AND return the icon!
+        # Cache AND return the icon!
         # Missing cache storage and return statement caused NULL icons in combobox
         self._icon_cache[geometry_type] = icon
 
@@ -2614,7 +2721,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         )
         logger.info(f"🔧 can_use_controllers={can_use_controllers}")
 
-        # FIX v4.0.7: Use controller delegation for FULL logic (handles PostgreSQL/remote layers)
+        # Use controller delegation for FULL logic (handles PostgreSQL/remote layers)
         if can_use_controllers:
             logger.info("✅ Using controller delegation (full logic)")
 
@@ -2877,7 +2984,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer_obj = project.mapLayer(layer_id)
                 if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
                     continue
-                # v4.2: Skip non-spatial tables (tables without geometry)
+                # Skip non-spatial tables (tables without geometry)
                 if not layer_obj.isSpatial():
                     continue
                 if not is_layer_source_available(layer_obj, require_psycopg2=False):
@@ -3015,7 +3122,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         skip_types = ("JsonTreeView", "LayerTreeView", "JsonModel", "ToolBox")
 
-        # v4.0.5: Widgets that should ALWAYS remain enabled
+        # Widgets that should ALWAYS remain enabled
         always_enabled_widgets = {
             'comboBox_filtering_current_layer',
             'checkBox_filtering_use_centroids_source_layer'
@@ -3039,7 +3146,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     if wt == "GroupBox":
                         w.setCollapsed(True)
 
-                # v4.0.5: Apply state or force enabled
+                # Apply state or force enabled
                 w.setEnabled(True if is_always_enabled else state)
                 w.blockSignals(False)
 
@@ -3322,7 +3429,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
                 # If mismatch detected, log warning and sync PROJECT_LAYERS to button state
                 if current_button_state != stored_state:
-                    logger.warning(f"IS_SELECTING state mismatch! Button={current_button_state}, Stored={stored_state}")  # nosec B608
+                    logger.warning(f"IS_SELECTING state mismatch! Button={current_button_state}, Stored={stored_state}")  # nosec B608 - false positive: logger statement, no SQL execution
                     self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = current_button_state
                     logger.info(f"  → Synced is_selecting to button state: {current_button_state}")
 
@@ -3333,7 +3440,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             layer_id = self.current_layer.id()
             if layer_id in self.PROJECT_LAYERS:
                 self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = checked
-                logger.info(f"IS_SELECTING state updated in PROJECT_LAYERS: {checked}")  # nosec B608
+                logger.info(f"IS_SELECTING state updated in PROJECT_LAYERS: {checked}")  # nosec B608 - false positive: logger statement, no SQL execution
             if checked:
                 logger.info("IS_SELECTING ON: Calling exploring_select_features()")
                 # FIX 2026-01-15 v9: Ensure selectionChanged stays connected for bidirectional sync
@@ -3473,7 +3580,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         if self.init_layer and isinstance(self.init_layer, QgsVectorLayer):
             self.manage_output_name()
-            # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
+            # Don't populate export combobox here - will be done via projectLayersReady signal
             # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
             # self.exporting_populate_combobox()
             # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
@@ -3580,10 +3687,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # (they are toggle-only functions: selecting, tracking, linking)
         # So we skip them
 
-        # v4.0.6: Setup buffer buttons dependency on geometric_predicates
+        # Setup buffer buttons dependency on geometric_predicates
         self._setup_buffer_buttons_dependency()
 
-        # v4.0.5: Ensure certain widgets are ALWAYS enabled
+        # Ensure certain widgets are ALWAYS enabled
         self._ensure_always_enabled_widgets()
 
         logger.info(f"_setup_conditional_widget_states: Configured {len(widget_mappings)} pushbutton→widget mappings")
@@ -4270,7 +4377,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # OPTIMIZATION (from before_migration): Try cached feature_ids first
             if hasattr(self, '_exploring_cache') and groupbox_type:
-                # FIX v2.3.9: For custom_selection, verify cached expression matches widget
+                # For custom_selection, verify cached expression matches widget
                 use_cached_ids = True
                 if groupbox_type == "custom_selection":
                     cached = self._exploring_cache.get(layer_id, groupbox_type)
@@ -4424,7 +4531,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         FIX 2026-01-16: Use _is_layer_valid() for safe layer checking.
         """
-        # CRITICAL FIX 2026-01-18: Check if features were restored from favorite
+        # Check if features were restored from favorite
         if hasattr(self, '_restored_task_features') and self._restored_task_features:
             features = self._restored_task_features
             logger.info(f"Using {len(features)} restored task_features from favorite")
@@ -4536,7 +4643,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 feature_ids_to_fetch = []
 
                 # DIAGNOSTIC 2026-01-28: Detailed multiple_selection debugging
-                logger.info("  🔍 MULTIPLE_SELECTION DEBUG:")  # nosec B608
+                logger.info("  🔍 MULTIPLE_SELECTION DEBUG:")  # nosec B608 - false positive: logger statement, no SQL execution
                 logger.info(f"     picker type: {type(picker).__name__}")
                 logger.info(f"     picker.layer: {picker.layer.name() if picker.layer else 'None'}")
                 if picker.layer:
@@ -4859,7 +4966,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             # Correct mismatch for is_selecting
             if selecting_button_checked != is_selecting:
-                logger.warning(f"Fallback: IS_SELECTING mismatch! Button={selecting_button_checked}, stored={is_selecting}")  # nosec B608
+                logger.warning(f"Fallback: IS_SELECTING mismatch! Button={selecting_button_checked}, stored={is_selecting}")  # nosec B608 - false positive: logger statement, no SQL execution
                 layer_id = self.current_layer.id()
                 if layer_id in self.PROJECT_LAYERS:
                     self.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = selecting_button_checked
@@ -5559,7 +5666,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if "SINGLE_SELECTION_FEATURES" in self.widgets.get("EXPLORING", {}):
                 widget = self.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                 if widget:
-                    logger.debug(f"Updating SINGLE_SELECTION_FEATURES: old_layer={widget.layer().name() if widget.layer() else 'None'} → new_layer={layer.name()}")  # nosec B608
+                    logger.debug(f"Updating SINGLE_SELECTION_FEATURES: old_layer={widget.layer().name() if widget.layer() else 'None'} → new_layer={layer.name()}")  # nosec B608 - false positive: logger statement, no SQL execution
                     widget.setLayer(None)  # Force refresh
                     widget.setLayer(layer)
                     widget.setDisplayExpression(single_expr)
@@ -5569,7 +5676,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     # FIX 2026-01-15: Force visual refresh to display features
                     widget.update()
                     widget.repaint()
-                    logger.info(f"✓ SINGLE_SELECTION_FEATURES updated: layer={widget.layer().name() if widget.layer() else 'None'}, expr={widget.displayExpression()}")  # nosec B608
+                    logger.info(f"✓ SINGLE_SELECTION_FEATURES updated: layer={widget.layer().name() if widget.layer() else 'None'}, expr={widget.displayExpression()}")  # nosec B608 - false positive: logger statement, no SQL execution
                 else:
                     logger.warning("SINGLE_SELECTION_FEATURES widget is None!")
 
@@ -5697,7 +5804,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if saved_groupbox:
                 self._restore_groupbox_ui_state(saved_groupbox)
 
-        # FIX v2.8.6: Initialize selection sync when is_selecting is enabled
+        # Initialize selection sync when is_selecting is enabled
         is_selecting = layer_props.get("exploring", {}).get("is_selecting", False) if layer_props else False
         if is_selecting:
             logger.debug("Fallback: is_selecting=True, initializing selection sync")
@@ -5725,7 +5832,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         btn_selecting = self.pushButton_checkable_exploring_selecting
         stored_is_selecting = exploring.get("is_selecting", False)
         if btn_selecting.isChecked() != stored_is_selecting:
-            logger.info(f"Force sync IS_SELECTING button: {btn_selecting.isChecked()} → {stored_is_selecting}")  # nosec B608
+            logger.info(f"Force sync IS_SELECTING button: {btn_selecting.isChecked()} → {stored_is_selecting}")  # nosec B608 - false positive: logger statement, no SQL execution
             btn_selecting.blockSignals(True)
             btn_selecting.setChecked(stored_is_selecting)
             btn_selecting.blockSignals(False)
@@ -6065,7 +6172,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         for t in tuple_group:
             if t[0].upper() not in self.widgets or t[1].upper() not in self.widgets[t[0].upper()]: continue
             we = self.widgets[t[0].upper()][t[1].upper()]
-            # v4.0.6: has_output_folder_to_export and has_zip_to_export pushbuttons are ALWAYS enabled
+            # Has_output_folder_to_export and has_zip_to_export pushbuttons are ALWAYS enabled
             # They can be checked/unchecked at any time regardless of layer selection
             we["WIDGET"].setEnabled(True)
             if we["TYPE"] == 'QgsFieldExpressionWidget' and self.current_layer: we["WIDGET"].setLayer(self.current_layer)
@@ -6116,7 +6223,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         prop = QgsProperty.fromExpression(buf_expr) if buf_expr and buf_expr.strip() else QgsProperty()
         self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].init(0, prop, prop_def, self.current_layer)
 
-        # v4.0.7: Use widget isChecked() as source of truth - the stored value may lag behind
+        # Use widget isChecked() as source of truth - the stored value may lag behind
         has_buf_widget = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
         has_buf_stored = lp["filtering"].get("has_buffer_value", False)
         # Use widget state if available, fallback to stored value
@@ -6165,7 +6272,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         w["BUFFER_VALUE"]["WIDGET"].setEnabled(has_buffer_checked and not (is_active and has_valid_expr))
         w["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(has_buffer_checked)
 
-        # v4.0.3: Do NOT call _set_layout_widgets_enabled here - it's controlled by HAS_BUFFER_VALUE pushbutton
+        # Do NOT call _set_layout_widgets_enabled here - it's controlled by HAS_BUFFER_VALUE pushbutton
 
         self.manageSignal(["FILTERING", "BUFFER_VALUE_PROPERTY"], 'connect')
 
@@ -6193,7 +6300,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         is_checked = self.widgets["FILTERING"]["HAS_LAYERS_TO_FILTER"]["WIDGET"].isChecked()
 
-        # v4.0.3: Disable entire row layout (includes all widgets in the row)
+        # Disable entire row layout (includes all widgets in the row)
         self._set_layout_widgets_enabled('horizontalLayout_filtering_distant_layers', is_checked)
 
         # Also set individual widgets that may not be in the layout
@@ -6221,7 +6328,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         is_checked = self.widgets["FILTERING"]["HAS_COMBINE_OPERATOR"]["WIDGET"].isChecked()
 
-        # v4.0.3: Disable entire row layout
+        # Disable entire row layout
         self._set_layout_widgets_enabled('horizontalLayout_filtering_values_search', is_checked)
 
         # Also set individual widgets
@@ -6276,7 +6383,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_VALUE"]["WIDGET"].isChecked()
 
-        # v4.0.7: Get property override state to determine spinbox enabled state
+        # Get property override state to determine spinbox enabled state
         is_property_active = False
         has_valid_expr = False
 
@@ -6286,7 +6393,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             buf_expr = lf.get("buffer_value_expression", "")
             has_valid_expr = bool(buf_expr and str(buf_expr).strip())
 
-        # v4.0.7: Spinbox logic - disabled when:
+        # Spinbox logic - disabled when:
         # 1. Buffer not checked (is_checked=False), OR
         # 2. Buffer checked BUT property override is active with valid expression
         spinbox_enabled = is_checked and not (is_property_active and has_valid_expr)
@@ -6294,10 +6401,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # Property button is simply enabled when buffer is checked
         property_button_enabled = is_checked
 
-        # v4.0.3: Set layout widgets - but we need to fine-tune individual widgets after
+        # Set layout widgets - but we need to fine-tune individual widgets after
         self._set_layout_widgets_enabled('horizontalLayout_filtering_values_buttons', is_checked)
 
-        # v4.0.7: Override with correct logic for spinbox (may need to be disabled even when is_checked=True)
+        # Override with correct logic for spinbox (may need to be disabled even when is_checked=True)
         self.widgets["FILTERING"]["BUFFER_VALUE"]["WIDGET"].setEnabled(spinbox_enabled)
         self.widgets["FILTERING"]["BUFFER_VALUE_PROPERTY"]["WIDGET"].setEnabled(property_button_enabled)
 
@@ -6322,7 +6429,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         is_checked = self.widgets["FILTERING"]["HAS_BUFFER_TYPE"]["WIDGET"].isChecked()
 
-        # v4.0.3: Disable entire row layout
+        # Disable entire row layout
         self._set_layout_widgets_enabled('horizontalLayout_filtering_buffer_type_segments', is_checked)
 
         # Also set individual widgets
@@ -6469,7 +6576,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.widgets["FILTERING"]["AUTO_CURRENT_LAYER"]["WIDGET"].setChecked(state)
         self.project_props["OPTIONS"]["LAYERS"]["LINK_LEGEND_LAYERS_AND_CURRENT_LAYER_FLAG"] = state
 
-        # v4.0.5: When enabling auto sync, immediately sync current layer with active layer
+        # When enabling auto sync, immediately sync current layer with active layer
         if state and hasattr(self, 'comboBox_filtering_current_layer'):
             active_layer = self.iface.activeLayer()
             if active_layer and isinstance(active_layer, QgsVectorLayer):
@@ -6518,7 +6625,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.has_loaded_layers = True
         self.set_widgets_enabled_state(True)
 
-        # v4.0.4: Don't populate export combobox here - will be done via projectLayersReady signal
+        # Don't populate export combobox here - will be done via projectLayersReady signal
         # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'disconnect')
         # self.exporting_populate_combobox()
         # self.manageSignal(["EXPORTING","LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
@@ -6588,7 +6695,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 layer = self._determine_active_layer()
                 self._activate_layer_ui()
                 if layer: self._refresh_layer_specific_widgets(layer)
-                # v4.0.4: Emit signal after PROJECT_LAYERS is fully populated
+                # Emit signal after PROJECT_LAYERS is fully populated
                 logger.info(f"Emitting projectLayersReady signal ({len(self.PROJECT_LAYERS)} layers)")
                 self.projectLayersReady.emit()
                 return
@@ -6604,7 +6711,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.set_widgets_enabled_state(False)
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
-                # v4.0: Soft "mousse" style for waiting state
+                # Soft "mousse" style for waiting state
                 self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
         finally:
             self._updating_layers, self._plugin_busy = False, False
@@ -6711,7 +6818,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if backend_type == 'postgres':
             backend_type = 'postgresql'
 
-        # Backend styling configuration - v4.0: Softer "mousse" colors (same as BackendController.BACKEND_STYLES)
+        # Backend styling configuration - Softer "mousse" colors (same as BackendController.BACKEND_STYLES)
         BACKEND_STYLES = {
             'postgresql': {'text': 'PostgreSQL', 'color': 'white', 'background': '#58d68d'},
             'spatialite': {'text': 'Spatialite', 'color': 'white', 'background': '#bb8fce'},
@@ -6723,7 +6830,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         style = BACKEND_STYLES.get(backend_type, BACKEND_STYLES['unknown'])
         self.backend_indicator_label.setText(style['text'])
 
-        # v4.0: Soft "mousse" style with smoother colors
+        # Soft "mousse" style with smoother colors
         base_style = """
             QLabel#label_backend_indicator {{
                 color: {style['color']};
@@ -6866,7 +6973,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if not self.widgets_initialized or not self.current_layer:
                 return
 
-            # FIX 2026-01-22 v4.3.7: Sync HAS_LAYERS_TO_EXPORT JUST-IN-TIME before export
+            # FIX 2026-01-22 Sync HAS_LAYERS_TO_EXPORT JUST-IN-TIME before export
             # Qt restores widget states without emitting signals - sync flag to match UI
             try:
                 layers_to_export = self.get_layers_to_export()
@@ -6883,7 +6990,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e:
                 logger.warning(f"Failed to sync HAS_LAYERS_TO_EXPORT: {e}")
 
-            # FIX 2026-01-22 v4.3.7: Sync ALL export flags JUST-IN-TIME
+            # FIX 2026-01-22 Sync ALL export flags JUST-IN-TIME
             # Qt restores widget states without emitting signals - sync all flags to match UI
             try:
                 exporting_props = self.project_props.get('EXPORTING', {})

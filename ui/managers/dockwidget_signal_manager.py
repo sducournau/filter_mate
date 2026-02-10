@@ -527,7 +527,7 @@ class DockwidgetSignalManager:
                 stored_state = project_layers[layer_id]["exploring"].get("is_selecting", False)
 
                 if current_button_state != stored_state:
-                    logger.warning(f"IS_SELECTING state mismatch! Button={current_button_state}, Stored={stored_state}")  # nosec B608
+                    logger.warning(f"IS_SELECTING state mismatch! Button={current_button_state}, Stored={stored_state}")  # nosec B608 - false positive: logger statement, no SQL execution
                     project_layers[layer_id]["exploring"]["is_selecting"] = current_button_state
 
         def _on_selecting_toggled(checked):
@@ -538,7 +538,7 @@ class DockwidgetSignalManager:
             layer_id = self.dockwidget.current_layer.id()
             if layer_id in self.dockwidget.PROJECT_LAYERS:
                 self.dockwidget.PROJECT_LAYERS[layer_id]["exploring"]["is_selecting"] = checked
-                logger.info(f"IS_SELECTING state updated: {checked}")  # nosec B608
+                logger.info(f"IS_SELECTING state updated: {checked}")  # nosec B608 - false positive: logger statement, no SQL execution
 
             if checked:
                 logger.info("IS_SELECTING ON: Calling exploring_select_features()")

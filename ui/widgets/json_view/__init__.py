@@ -14,7 +14,7 @@ Usage:
 # Local imports from migrated qt_json_view files
 from .model import JsonModel, JsonSortFilterProxyModel  # noqa: F401
 from .view import JsonView  # noqa: F401
-from .searchable_view import SearchableJsonView  # v4.0.7: New searchable view  # noqa: F401
+from .searchable_view import SearchableJsonView  # New searchable view  # noqa: F401
 from .datatypes import (  # noqa: F401
     DataType, NoneType, StrType, IntType, FloatType, BoolType,
     ListType, DictType, UrlType, FilepathType, RangeType, ChoicesType,

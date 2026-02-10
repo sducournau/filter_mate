@@ -86,8 +86,8 @@ class MVConfig:
 
     Note: Kept for backwards compatibility. New code should use ViewConfig.
     """
-    feature_threshold: int = 100000  # v4.2.12: Increased from 10k to 100k
-    complexity_threshold: int = 5     # v4.2.12: Increased from 3 to 5
+    feature_threshold: int = 100000  # Increased from 10k to 100k
+    complexity_threshold: int = 5     # Increased from 3 to 5
     auto_refresh: bool = True
     refresh_on_change: bool = True
     concurrent_refresh: bool = True
@@ -603,7 +603,7 @@ class MaterializedViewManager(MaterializedViewPort):
         try:
             cursor = conn.cursor()
 
-            query = f"SELECT {columns} FROM {full_name}"  # nosec B608
+            query = f"SELECT {columns} FROM {full_name}"  # nosec B608 - columns from caller API, full_name built from internal MV_SCHEMA constant + generated mv_name
             if where_clause:
                 query += f" WHERE {where_clause}"
 

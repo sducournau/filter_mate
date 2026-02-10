@@ -492,7 +492,7 @@ class HistoryService:
             logger.debug(f"Using provided previous_expressions for {len(previous_filters)} layers")
         else:
             # Fallback: Query history (less reliable due to timing issues)
-            # v4.1.3: Fixed to correctly extract per-layer expressions
+            # Fixed to correctly extract per-layer expressions
 
             for layer_id in all_layer_ids:
                 layer_entries = self.get_history_for_layer(layer_id)

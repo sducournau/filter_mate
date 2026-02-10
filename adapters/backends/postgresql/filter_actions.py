@@ -30,11 +30,11 @@ logger = logging.getLogger('FilterMate.Adapters.Backends.PostgreSQL.FilterAction
 # Constants
 # =============================================================================
 
-# v4.2.12: Increased threshold - MV only for very large datasets
+# Increased threshold - MV only for very large datasets
 # MV adds overhead, prefer direct setSubsetString for most cases
 MATERIALIZED_VIEW_THRESHOLD = 100000  # Features threshold for using materialized views
 
-# v4.2.12: Secondary threshold for complex chaining scenarios
+# Secondary threshold for complex chaining scenarios
 # When filter involves multiple spatial joins (chaining), use lower threshold
 CHAINED_FILTER_MV_THRESHOLD = 50000
 
@@ -334,7 +334,7 @@ def execute_filter_action_postgresql(
     # Get feature count to determine strategy
     feature_count = layer.featureCount()
 
-    # v4.2.12: More conservative MV usage - only for truly complex cases
+    # More conservative MV usage - only for truly complex cases
     # MV adds overhead (creation time, cleanup), prefer direct setSubsetString
 
     # Check complexity indicators
@@ -342,7 +342,7 @@ def execute_filter_action_postgresql(
     is_chained_filter = _is_chained_spatial_filter(sql_subset_string)
     is_very_complex = _is_very_complex_expression(sql_subset_string)
 
-    # v4.2.12: Decision matrix for MV usage
+    # Decision matrix for MV usage
     # MV only when: (1) very large dataset, (2) complex chaining, (3) very complex expression
     use_materialized_view = False
     mv_reason = ""
@@ -364,7 +364,7 @@ def execute_filter_action_postgresql(
         mv_reason = "very complex expression with spatial predicates"
 
     # Case 4: Custom buffer expression - evaluate based on complexity
-    # v4.2.12: Don't automatically use MV for custom, only if dataset large enough
+    # Don't automatically use MV for custom, only if dataset large enough
     elif custom and feature_count >= CHAINED_FILTER_MV_THRESHOLD:
         use_materialized_view = True
         mv_reason = f"custom buffer expression with {feature_count:,} features"
@@ -633,7 +633,7 @@ def execute_filter_action_postgresql_materialized(
     start_time = time.time()
 
     # Generate session-unique view name for multi-client isolation
-    # FIX v4.2.0: For custom buffer expressions, use source_table + '_buffer_expr' as base name
+    # For custom buffer expressions, use source_table + '_buffer_expr' as base name
     # This must match the name generated in filter_executor.prepare_postgresql_source_geom()
     if custom and param_buffer_expression:
         base_name = sanitize_sql_identifier(source_table + '_buffer_expr')
@@ -650,7 +650,7 @@ def execute_filter_action_postgresql_materialized(
     # Ensure source table has statistics for query optimization
     ensure_stats_fn(connexion, source_schema, source_table, geom_key_name)
 
-    # Build SQL commands using session-prefixed name (v4.4.4: fm_temp_mv_ prefix)
+    # Build SQL commands using session-prefixed name (fm_temp_mv_ prefix)
     sql_drop = (
         f'DROP INDEX IF EXISTS {schema}_{session_name}_cluster CASCADE; '
         f'DROP MATERIALIZED VIEW IF EXISTS \"{schema}\".\"fm_temp_mv_{session_name}\" CASCADE;'
@@ -705,7 +705,7 @@ def execute_filter_action_postgresql_materialized(
     if custom:
         sql_dump = (
             f'CREATE MATERIALIZED VIEW IF NOT EXISTS \"{schema}\".\"fm_temp_mv_{session_name}_dump\" '
-            f'as SELECT ST_Union(\"{geom_key_name}\") as {geom_key_name} '  # nosec B608
+            f'as SELECT ST_Union(\"{geom_key_name}\") as {geom_key_name} '  # nosec B608 - schema/session_name/geom_key_name from QGIS layer metadata and internal session ID
             f'from \"{schema}\".\"fm_temp_mv_{session_name}\";'
         )
         commands.append(sql_dump)
@@ -719,7 +719,7 @@ def execute_filter_action_postgresql_materialized(
     # THREAD SAFETY: Queue for application in finished()
     layer_subset_string = (
         f'"{primary_key_name}" IN '
-        f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'  # nosec B608
+        f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'  # nosec B608 - identifiers from QGIS layer metadata and internal session ID
     )
     logger.debug(f"[PostgreSQL] Layer subset string: {layer_subset_string}")
     queue_subset_fn(layer, layer_subset_string)
@@ -907,7 +907,7 @@ def execute_unfilter_action_postgresql(
 
         layer_subset_string = (
             f'"{primary_key_name}" IN '
-            f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'  # nosec B608
+            f'(SELECT "mv_{session_name}"."{primary_key_name}" FROM "{schema}"."mv_{session_name}")'  # nosec B608 - identifiers from QGIS layer metadata and internal session ID
         )
         queue_subset_fn(layer, layer_subset_string)
         logger.info(f"[PostgreSQL] Unfilter Complete - Layer: {layer.name()} - Previous state restored")

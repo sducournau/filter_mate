@@ -75,7 +75,7 @@ class ViewConfig:
 
     Unified config that works for both backends.
     """
-    # Thresholds - v4.2.12: Increased significantly
+    # Thresholds - Increased significantly
     feature_threshold: int = 100000   # Only use MV for very large datasets
     complexity_threshold: int = 5      # Only for very complex expressions
 

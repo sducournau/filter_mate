@@ -66,8 +66,8 @@ class FilterStrategy(Enum):
     TWO_PHASE = "two_phase"              # Bbox pre-filter + full predicate
     PROGRESSIVE = "progressive"          # Chunked streaming for very large results
     LAZY_CURSOR = "lazy_cursor"          # Server-side cursor streaming
-    ATTRIBUTE_FIRST = "attribute_first"  # v2.5.10: Attribute filter before geometry
-    MULTI_STEP = "multi_step"            # v2.5.10: Multi-step adaptive filtering
+    ATTRIBUTE_FIRST = "attribute_first"  # Attribute filter before geometry
+    MULTI_STEP = "multi_step"            # Multi-step adaptive filtering
 
 
 @dataclass
@@ -567,7 +567,7 @@ class TwoPhaseFilter:
             logger.debug(f"Could not parse bbox from WKT: {e}")
 
             # Fallback: use database to compute bbox
-            # FIX v3.0.20 (CRIT-002): Use parameterized query to prevent SQL injection
+            # Use parameterized query to prevent SQL injection
             try:
                 with self.connection.cursor() as cursor:
                     cursor.execute("SELECT ST_Extent(ST_GeomFromText(%s))", (wkt,))

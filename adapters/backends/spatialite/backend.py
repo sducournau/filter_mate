@@ -34,7 +34,7 @@ from .index_manager import RTreeIndexManager, create_index_manager
 
 logger = logging.getLogger('FilterMate.Backend.Spatialite')
 
-# v4.0.4: Import centralized spatialite_connect to eliminate duplication
+# Import centralized spatialite_connect to eliminate duplication
 try:
     from ....infrastructure.utils.task_utils import spatialite_connect
 except ImportError:
@@ -350,10 +350,10 @@ class SpatialiteBackend(BackendPort):
             cursor = self._conn.cursor()
 
             # Drop if exists
-            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608 - table_name from internal FilterMate generation (SpatiaLite: no sql.Identifier equivalent)
 
             # Create table from query
-            cursor.execute(f'CREATE TABLE "{table_name}" AS {query}')  # nosec B608
+            cursor.execute(f'CREATE TABLE "{table_name}" AS {query}')  # nosec B608 - table_name from internal FilterMate generation (SpatiaLite: no sql.Identifier equivalent)
 
             # Create spatial index if geometry column specified
             if geometry_column and self._index_manager:
@@ -382,7 +382,7 @@ class SpatialiteBackend(BackendPort):
 
         try:
             cursor = self._conn.cursor()
-            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608
+            cursor.execute(f'DROP TABLE IF EXISTS "{table_name}"')  # nosec B608 - table_name from internal FilterMate generation (SpatiaLite: no sql.Identifier equivalent)
             self._conn.commit()
             logger.debug(f"[Spatialite] Temp Table Dropped - Name: {table_name}")
             return True

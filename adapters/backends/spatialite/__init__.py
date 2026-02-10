@@ -43,7 +43,7 @@ from .filter_actions import (  # noqa: F401
     cleanup_spatialite_session_tables,
 )
 from .interruptible_query import (  # noqa: F401
-    # v4.1.0: Interruptible SQLite queries (migrated from before_migration)
+    # Interruptible SQLite queries (migrated from before_migration)
     InterruptibleSQLiteQuery,
     BatchedSQLiteQuery,
     create_interruptible_connection,
@@ -52,10 +52,10 @@ from .interruptible_query import (  # noqa: F401
     USE_OGR_FALLBACK,
 )
 
-# v4.1.0: Expression Builder (migrated from before_migration)
+# Expression Builder (migrated from before_migration)
 from .expression_builder import SpatialiteExpressionBuilder  # noqa: F401
 
-# v4.2: Temp Table Manager (Spatialite equivalent to PostgreSQL materialized views)
+# Temp Table Manager (Spatialite equivalent to PostgreSQL materialized views)
 from .temp_table_manager import (  # noqa: F401
     SpatialiteTempTableManager,
     create_temp_table_manager,
@@ -74,7 +74,7 @@ __all__ = [
     'RTreeIndexManager',
     'IndexInfo',
     'create_index_manager',
-    # v4.2: Temp Table Manager (MV equivalent)
+    # Temp Table Manager (MV equivalent)
     'SpatialiteTempTableManager',
     'create_temp_table_manager',
     # EPIC-1 Phase E4-S8: Source geometry preparation
@@ -99,13 +99,13 @@ __all__ = [
     'execute_reset_action_spatialite',
     'execute_unfilter_action_spatialite',
     'cleanup_spatialite_session_tables',
-    # v4.1.0: Interruptible SQLite queries
+    # Interruptible SQLite queries
     'InterruptibleSQLiteQuery',
     'BatchedSQLiteQuery',
     'create_interruptible_connection',
     'SPATIALITE_QUERY_TIMEOUT',
     'SPATIALITE_BATCH_SIZE',
     'USE_OGR_FALLBACK',
-    # v4.1.0: Expression Builder
+    # Expression Builder
     'SpatialiteExpressionBuilder',
 ]

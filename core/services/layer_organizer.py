@@ -205,12 +205,12 @@ class LayerOrganizer:
             result.not_found_layers.append(layer_name)
             return None
 
-        # FIX v4.0.3 (2026-01-16): Add layer instance to layer_props for auto-detection of geometry column
+        # Add layer instance to layer_props for auto-detection of geometry column
         # The backend needs access to the QgsVectorLayer to detect the actual geometry column name
         # when the stored value is invalid (e.g., "NULL")
         layer_props["layer"] = layer
 
-        # FIX v4.1.1 (2026-01-18): ALWAYS verify geometry column from layer URI
+        # ALWAYS verify geometry column from layer URI
         # Even if stored value is non-empty, it may be incorrect (e.g., "geom" when actual is "geometry")
         # This was causing PostgreSQL EXISTS filters to fail silently
         stored_geom_field = layer_props.get("layer_geometry_field")
@@ -270,7 +270,7 @@ class LayerOrganizer:
             return forced_backend
 
         # PRIORITY 2: PostgreSQL availability check
-        # FIX v4.1.3 (2026-01-18): PostgreSQL layers are ALWAYS filterable via QGIS native API
+        # PostgreSQL layers are ALWAYS filterable via QGIS native API
         # even without psycopg2. NEVER fall back to OGR for PostgreSQL layers - this breaks
         # spatial filtering because PostgreSQL geometry won't be prepared correctly.
         #

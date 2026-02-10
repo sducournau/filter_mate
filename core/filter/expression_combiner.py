@@ -673,7 +673,7 @@ def should_replace_old_subset(old_subset: str) -> tuple:
     old_subset.upper()
 
     # Pattern 1: __source alias - ONLY if OUTSIDE of EXISTS subqueries
-    # v4.2.9 FIX: __source INSIDE EXISTS is valid (self-contained alias scope)
+    # __source INSIDE EXISTS is valid (self-contained alias scope)
     # Only trigger replacement if __source appears OUTSIDE EXISTS context
     if '__source' in old_subset.lower():
         # Check if ALL occurrences of __source are inside EXISTS

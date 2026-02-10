@@ -26,7 +26,7 @@ try:
 except ImportError:
     _HAS_PROVIDER_UTILS = False
 
-# v4.0.10: Import centralized layer validation (eliminate duplication)
+# Import centralized layer validation (eliminate duplication)
 try:
     from ....infrastructure.utils import is_layer_valid as _is_layer_valid_util
     _HAS_VALIDATION_UTILS = True
@@ -97,7 +97,7 @@ class LayerSelectionMixin:
         Returns:
             True if layer is valid and usable, False otherwise
         """
-        # v4.0.10: Delegate to centralized validation (includes SIP check)
+        # Delegate to centralized validation (includes SIP check)
         if _HAS_VALIDATION_UTILS:
             return _is_layer_valid_util(layer)
 
@@ -136,7 +136,7 @@ class LayerSelectionMixin:
             Normalized provider type string ('postgresql', 'spatialite', 'ogr', etc.)
             Returns 'unknown' if provider not recognized
         """
-        # v4.0.4: Delegate to centralized provider detection
+        # Delegate to centralized provider detection
         if _HAS_PROVIDER_UTILS:
             provider_type = detect_provider_type(layer)
             return str(provider_type) if provider_type else 'unknown'

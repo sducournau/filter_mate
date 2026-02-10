@@ -59,7 +59,7 @@ class TaskRunContext:
     expression_builder: Optional[Any] = None
     filter_orchestrator: Optional[Any] = None
 
-    # v4.0.1 FIX: Configuration values extracted from task_parameters
+    # Configuration values extracted from task_parameters
     # These MUST be returned to FilterEngineTask for Spatialite/history operations
     db_file_path: Optional[str] = None
     project_uuid: Optional[str] = None
@@ -73,7 +73,7 @@ class TaskRunResult:
     elapsed_time: float
     warning_messages: list
     exception: Optional[Exception] = None
-    # v4.0.1 FIX: Include context to pass extracted configuration back to parent
+    # Include context to pass extracted configuration back to parent
     context: Optional['TaskRunContext'] = None
 
 
@@ -123,7 +123,7 @@ class TaskRunOrchestrator:
                     success=False,
                     elapsed_time=time.time() - run_start_time,
                     warning_messages=warning_messages,
-                    context=context  # v4.0.1 FIX: Pass context back
+                    context=context  # Pass context back
                 )
             logger.info("  ✓ Step 2 completed: Source layer initialized")
 
@@ -166,7 +166,7 @@ class TaskRunOrchestrator:
                     success=False,
                     elapsed_time=time.time() - run_start_time,
                     warning_messages=warning_messages,
-                    context=context  # v4.0.1 FIX: Pass context back
+                    context=context  # Pass context back
                 )
             if result is False:
                 elapsed = time.time() - run_start_time
@@ -177,7 +177,7 @@ class TaskRunOrchestrator:
                     success=False,
                     elapsed_time=elapsed,
                     warning_messages=warning_messages,
-                    context=context  # v4.0.1 FIX: Pass context back
+                    context=context  # Pass context back
                 )
             logger.info(f"  ✓ Step 9 completed: Action '{context.task_action}' succeeded")
 
@@ -194,7 +194,7 @@ class TaskRunOrchestrator:
                 success=True,
                 elapsed_time=run_elapsed,
                 warning_messages=warning_messages,
-                context=context  # v4.0.1 FIX: Pass context back with extracted config
+                context=context  # Pass context back with extracted config
             )
 
         except Exception as e:
@@ -204,7 +204,7 @@ class TaskRunOrchestrator:
                 elapsed_time=time.time() - run_start_time,
                 warning_messages=warning_messages,
                 exception=e,
-                context=context  # v4.0.1 FIX: Pass context back even on exception
+                context=context  # Pass context back even on exception
             )
 
     def _clear_spatialite_cache(self, context: TaskRunContext):

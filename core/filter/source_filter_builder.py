@@ -55,7 +55,7 @@ def should_skip_source_subset(source_subset: Optional[str]) -> bool:
         return True
 
     # Check for MV references (except source selection MVs which are allowed)
-    # v2.8.0: Use negative lookahead to exclude mv_src_sel_ (source selection MVs)
+    # Use negative lookahead to exclude mv_src_sel_ (source selection MVs)
     if re.search(
         r'IN\s*\(\s*SELECT.*FROM\s+["\']?filter_mate_temp["\']?\s*\.\s*["\']?.*mv_(?!.*src_sel_)',
         source_subset,
@@ -219,7 +219,7 @@ def build_source_filter_with_mv(
     Returns:
         str: SQL filter expression using MV reference
     """
-    return f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608
+    return f'"{source_table_name}"."{pk_field}" IN (SELECT pk FROM {mv_ref})'  # nosec B608 - source_table_name/pk_field from QGIS layer metadata, mv_ref from internal MV manager
 
 
 def get_visible_feature_ids(layer, pk_field: str) -> List[Any]:

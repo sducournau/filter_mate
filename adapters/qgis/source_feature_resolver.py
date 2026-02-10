@@ -374,7 +374,7 @@ class SourceFeatureResolver:
         result = FeatureResolutionResult()
         result.mode_used = FeatureSourceMode.SELECTION
 
-        logger.info(f"=== {prefix} (SELECTION MODE) ===")  # nosec B608
+        logger.info(f"=== {prefix} (SELECTION MODE) ===")  # nosec B608 - false positive: logger statement, no SQL execution
         logger.info(f"  Using {layer.selectedFeatureCount()} selected features")
 
         try:

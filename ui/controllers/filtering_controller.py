@@ -379,7 +379,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 logger.warning("populate_layers_checkable_combobox: widgets not initialized")
                 return False
 
-            # v4.0.5: Log diagnostic info
+            # Log diagnostic info
             logger.info(f"populate_layers_checkable_combobox: has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
 
             # Imports
@@ -403,7 +403,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
             layer_props = dockwidget.PROJECT_LAYERS[layer.id()]
             project = QgsProject.instance()
 
-            # DIAGNOSTIC v4.0.5: Log PROJECT_LAYERS state
+            # DIAGNOSTIC Log PROJECT_LAYERS state
             logger.info(f"🔍 DIAGNOSTIC: PROJECT_LAYERS has {len(dockwidget.PROJECT_LAYERS)} entries")
             logger.info(f"🔍 DIAGNOSTIC: PROJECT_LAYERS keys: {list(dockwidget.PROJECT_LAYERS.keys())}")
 
@@ -502,7 +502,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 if not isinstance(layer_obj, QgsVectorLayer):
                     skipped_reasons.append(f"{layer_name}: not QgsVectorLayer")
                     continue
-                # v4.2: Skip non-spatial tables (tables without geometry)
+                # Skip non-spatial tables (tables without geometry)
                 if not layer_obj.isSpatial():
                     skipped_reasons.append(f"{layer_name}: non-spatial table (no geometry)")
                     continue
@@ -522,18 +522,18 @@ class FilteringController(BaseController, LayerSelectionMixin):
                     item.setCheckState(Qt.Unchecked)
                 item_index += 1
 
-            # DIAGNOSTIC v4.0.5: Log skipped layers
+            # DIAGNOSTIC Log skipped layers
             if skipped_reasons:
                 logger.warning(f"🔍 DIAGNOSTIC: Skipped {len(skipped_reasons)} layers:")
                 for reason in skipped_reasons:
                     logger.warning(f"   - {reason}")
 
-            # FIX v4.1.3 (2026-01-18): Add missing layers directly to combobox (same as populate_export_combobox)
+            # Add missing layers directly to combobox (same as populate_export_combobox)
             # This ensures PostgreSQL and remote layers missing from PROJECT_LAYERS are still filterable
             from ...infrastructure.utils import geometry_type_to_string
 
             for missing_layer in missing:
-                # v4.2: Skip non-spatial tables (tables without geometry)
+                # Skip non-spatial tables (tables without geometry)
                 if missing_layer.isValid() and missing_layer.isSpatial() and is_layer_source_available(missing_layer, require_psycopg2=False):
                     display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
                     geom_type_str = geometry_type_to_string(missing_layer)
@@ -794,7 +794,7 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 else:
                     logger.debug("FilteringController: TaskParameters build returned None")
 
-            # v4.0 Note: FilterService integration requires additional work:
+            # FilterService integration requires additional work:
             # 1. FilterService.apply_filter() expects FilterRequest with domain objects
             # 2. The async task execution model (QgsTask) is currently in FilterEngineTask
             # 3. Full integration planned for v5.0 when FilterEngineTask is fully refactored

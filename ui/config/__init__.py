@@ -32,7 +32,7 @@ class UIConfig:
     """
 
     # Current active profile - Use Enum for proper comparisons
-    # v4.0.1 FIX #3: Restored COMPACT as default (NORMAL was causing -12% usable space on laptops)
+    # Restored COMPACT as default (NORMAL was causing -12% usable space on laptops)
     # AppInitializer._initialize_ui_profile() will upgrade to NORMAL for large screens (≥2560x1440)
     _active_profile: DisplayProfile = DisplayProfile.COMPACT
 

@@ -48,7 +48,7 @@ def is_pk_numeric(
         # Default to numeric for safety (most common case)
         return True
 
-    # FIX v4.0.9: VALUE-BASED detection first (most reliable for OGR layers)
+    # VALUE-BASED detection first (most reliable for OGR layers)
     if sample_values:
         try:
             # Check if all sample values are numeric types
@@ -124,10 +124,10 @@ def format_pk_values_for_sql(
     # Auto-detect if not specified
     if is_numeric is None:
         if layer and pk_field:
-            # FIX v4.0.9: Pass sample values for better detection
+            # Pass sample values for better detection
             is_numeric = is_pk_numeric(layer, pk_field, sample_values=values)
         else:
-            # FIX v4.0.9: Detect from values directly
+            # Detect from values directly
             try:
                 all_look_numeric = all(
                     isinstance(v, (int, float)) and not isinstance(v, bool) or

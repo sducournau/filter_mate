@@ -640,7 +640,7 @@ class SpatialiteQueryBuilder:
 
         where_clause = " AND ".join(where_clauses)
 
-        return f'SELECT rowid FROM "{table_name}" WHERE {where_clause}'  # nosec B608
+        return f'SELECT rowid FROM "{table_name}" WHERE {where_clause}'  # nosec B608 - table_name from QGIS layer metadata (SpatiaLite path)
 
     @staticmethod
     def get_sqlite_stats(db_path: str, table_name: str) -> Dict[str, Any]:
