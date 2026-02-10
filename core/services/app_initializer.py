@@ -266,8 +266,29 @@ class AppInitializer:
         if not dockwidget.isVisible():
             dockwidget.show()
         
+        # FIX 2026-02-10 BUG10: Re-setup ControllerIntegration after teardown.
+        # closeEvent() calls teardown() which disconnects projectLayersReady from
+        # _on_project_layers_ready and clears all controller references. Without
+        # re-setup, comboboxes are never populated on re-open because the signal
+        # handler is disconnected.
+        ci_was_torn_down = False
+        if hasattr(dockwidget, 'ensure_controller_integration_setup'):
+            ci = getattr(dockwidget, '_controller_integration', None)
+            ci_was_torn_down = ci and not getattr(ci, '_is_setup', True)
+            dockwidget.ensure_controller_integration_setup()
+        
         # Check for new layers
         self._refresh_layers_if_needed(project)
+        
+        # FIX 2026-02-10 BUG10: If CI was torn down and re-setup, force a UI refresh
+        # to re-populate comboboxes. _refresh_layers_if_needed may not trigger
+        # add_layers if all layers are already in PROJECT_LAYERS, so we need to
+        # explicitly call get_project_layers_from_app to emit projectLayersReady.
+        if ci_was_torn_down:
+            project_layers = self._get_project_layers() if self._get_project_layers else {}
+            if project_layers and dockwidget.widgets_initialized:
+                logger.info(f"BUG10 fix: Forcing UI refresh after CI re-setup ({len(project_layers)} layers)")
+                QTimer.singleShot(200, lambda: dockwidget.get_project_layers_from_app(project_layers, project))
         
         # Reconnect signals if needed
         self._connect_layer_store_signals()
@@ -488,6 +509,7 @@ class AppInitializer:
         Safety check to ensure UI is enabled after startup.
         
         This prevents UI from being left in disabled/grey state on startup.
+        FIX 2026-02-10: Added diagnostic logging for combobox/signal state.
         """
         dockwidget = self._get_dockwidget() if self._get_dockwidget else None
         project_layers = self._get_project_layers() if self._get_project_layers else {}
@@ -496,6 +518,40 @@ class AppInitializer:
         if not dockwidget:
             logger.warning("Safety timer: Dockwidget is None, cannot check UI state")
             return
+        
+        # FIX 2026-02-10: Diagnostic logging for debugging combobox/signal issues
+        logger.info("=" * 60)
+        logger.info("DIAGNOSTIC: Safety timer check (5s after init)")
+        logger.info(f"  widgets_initialized: {getattr(dockwidget, 'widgets_initialized', 'N/A')}")
+        logger.info(f"  _signals_connected: {getattr(dockwidget, '_signals_connected', 'N/A')}")
+        logger.info(f"  has_loaded_layers: {getattr(dockwidget, 'has_loaded_layers', 'N/A')}")
+        logger.info(f"  PROJECT_LAYERS count: {len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
+        logger.info(f"  App PROJECT_LAYERS count: {len(project_layers)}")
+        logger.info(f"  current_layer: {dockwidget.current_layer.name() if getattr(dockwidget, 'current_layer', None) else 'None'}")
+        logger.info(f"  _filtering_in_progress: {getattr(dockwidget, '_filtering_in_progress', 'N/A')}")
+        logger.info(f"  _updating_layers: {getattr(dockwidget, '_updating_layers', 'N/A')}")
+        logger.info(f"  _plugin_busy: {getattr(dockwidget, '_plugin_busy', 'N/A')}")
+        
+        # Check controller integration state
+        ci = getattr(dockwidget, '_controller_integration', None)
+        if ci:
+            logger.info(f"  ControllerIntegration._is_setup: {getattr(ci, '_is_setup', 'N/A')}")
+            logger.info(f"  ControllerIntegration._exporting_controller: {ci._exporting_controller is not None if hasattr(ci, '_exporting_controller') else 'N/A'}")
+            logger.info(f"  ControllerIntegration._filtering_controller: {ci._filtering_controller is not None if hasattr(ci, '_filtering_controller') else 'N/A'}")
+            logger.info(f"  ControllerIntegration connections: {len(getattr(ci, '_connections', []))}")
+        else:
+            logger.warning("  ControllerIntegration: None!")
+        
+        # Check combobox item counts
+        if hasattr(dockwidget, 'widgets') and dockwidget.widgets:
+            try:
+                export_widget = dockwidget.widgets.get("EXPORTING", {}).get("LAYERS_TO_EXPORT", {}).get("WIDGET")
+                filter_widget = dockwidget.widgets.get("FILTERING", {}).get("LAYERS_TO_FILTER", {}).get("WIDGET")
+                logger.info(f"  Export combobox items: {export_widget.count() if export_widget else 'N/A'}")
+                logger.info(f"  Filter combobox items: {filter_widget.count() if filter_widget else 'N/A'}")
+            except Exception as e:
+                logger.info(f"  Combobox check failed: {e}")
+        logger.info("=" * 60)
         
         # Check if layers were successfully loaded
         if len(project_layers) > 0:
