@@ -1033,7 +1033,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, name): getattr(self, name).setSpacing(button_spacing)
             # Apply content spacing
             for name in ['verticalLayout_filtering_values', 'verticalLayout_exporting_values']:
-                if hasattr(self, name): getattr(self, name).setSpacing(content_spacing)
+                if hasattr(self, name): getattr(self, name).setSpacing(button_spacing)
             logger.debug(f"Applied harmonized layout spacing: {layout_spacing}px, main margins: {main_margins}px")
         except Exception as e:
             logger.debug(f"Could not apply layout spacing: {e}")

@@ -477,13 +477,13 @@ class DimensionsManager(LayoutManagerBase):
             if hasattr(self.dockwidget, 'verticalLayout_filtering_keys'):
                 self.dockwidget.verticalLayout_filtering_keys.setSpacing(button_spacing)
             if hasattr(self.dockwidget, 'verticalLayout_filtering_values'):
-                self.dockwidget.verticalLayout_filtering_values.setSpacing(content_spacing)
+                self.dockwidget.verticalLayout_filtering_values.setSpacing(button_spacing)
 
             # Apply spacing to exporting layouts
             if hasattr(self.dockwidget, 'verticalLayout_exporting_keys'):
                 self.dockwidget.verticalLayout_exporting_keys.setSpacing(button_spacing)
             if hasattr(self.dockwidget, 'verticalLayout_exporting_values'):
-                self.dockwidget.verticalLayout_exporting_values.setSpacing(content_spacing)
+                self.dockwidget.verticalLayout_exporting_values.setSpacing(button_spacing)
 
             # Apply spacing to exploring key layout
             if hasattr(self.dockwidget, 'verticalLayout_exploring_content'):
