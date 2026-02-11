@@ -109,7 +109,7 @@ class Filter:
         """
         # Currently returns expression as-is.
         # Future: Dialect-specific SQL conversion (Phase 5.0)
-        # See: https://github.com/sducournau/filter_mate/issues for roadmap
+        # See: https://github.com/imagodata/filter_mate/issues for roadmap
         return self.expression
 
     def validate(self) -> Tuple[bool, Optional[str]]:

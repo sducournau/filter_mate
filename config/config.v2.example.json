@@ -116,8 +116,8 @@
       }
     },
     "paths": {
-      "github_page": "https://sducournau.github.io/filter_mate/",
-      "github_repo": "https://github.com/sducournau/filter_mate/",
+      "github_page": "https://imagodata.github.io/filter_mate/",
+      "github_repo": "https://github.com/imagodata/filter_mate/",
       "plugin_repo": "https://plugins.qgis.org/plugins/filter_mate/",
       "sqlite_storage": ""
     },

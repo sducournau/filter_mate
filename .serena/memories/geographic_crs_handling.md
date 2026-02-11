@@ -213,7 +213,7 @@ Result: Accurate 50m buffer in degrees
 ### User-Facing
 - README.md updated with v2.2.5 features
 - Changelog entry with detailed explanation
-- Website documentation (https://sducournau.github.io/filter_mate)
+- Website documentation (https://imagodata.github.io/filter_mate)
 
 ### Developer
 - Code comments in all modified functions

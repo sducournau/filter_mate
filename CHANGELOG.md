@@ -9161,10 +9161,10 @@ For users upgrading from v1.8:
 
 ## Links
 
-- **Repository**: https://github.com/sducournau/filter_mate
-- **Issues**: https://github.com/sducournau/filter_mate/issues
+- **Repository**: https://github.com/imagodata/filter_mate
+- **Issues**: https://github.com/imagodata/filter_mate/issues
 - **QGIS Plugin**: https://plugins.qgis.org/plugins/filter_mate
-- **Documentation**: https://sducournau.github.io/filter_mate
+- **Documentation**: https://imagodata.github.io/filter_mate
 
 ---
 

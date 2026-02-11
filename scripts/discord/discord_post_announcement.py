@@ -95,7 +95,7 @@ v6.0 (Q2-Q3 2026)
 
 - **Beta testers wanted!** — Head to `#beta-feedback` to sign up for early access
 - **Feature requests** — Tell us what raster workflows matter most to you in `#feature-requests`
-- **Developers** — Branch `refactor/quick-wins-2026-02-10` on [GitHub](https://github.com/sducournau/filter_mate). PRs welcome in `#pull-requests`
+- **Developers** — Branch `refactor/quick-wins-2026-02-10` on [GitHub](https://github.com/imagodata/filter_mate). PRs welcome in `#pull-requests`
 - **Deep dive** — Technical discussions in `#raster-panel`
 
 Stay tuned — this is just the beginning of FilterMate's raster journey! :rocket:

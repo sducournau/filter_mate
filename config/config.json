@@ -236,9 +236,9 @@
       }
     },
     "OPTIONS": {
-      "DISCORD_INVITE": "https://discord.gg/Z8hsCVndUd",
-      "GITHUB_PAGE": "https://sducournau.github.io/filter_mate/",
-      "GITHUB_REPOSITORY": "https://github.com/sducournau/filter_mate/",
+      "DISCORD_INVITE": "https://discord.gg/9DNbuVYQ",
+      "GITHUB_PAGE": "https://imagodata.github.io/filter_mate/",
+      "GITHUB_REPOSITORY": "https://github.com/imagodata/filter_mate/",
       "QGIS_PLUGIN_REPOSITORY": "https://plugins.qgis.org/plugins/filter_mate/",
       "APP_SQLITE_PATH": "",
       "FRESH_RELOAD_FLAG": false,

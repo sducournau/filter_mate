@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FilterMate — Spatial Filtering for QGIS</title>
+    <meta name="description" content="The ultimate spatial filtering plugin for QGIS. Explore, filter and export vector data with lightning-fast performance on any data source.">
+    <meta name="keywords" content="QGIS, plugin, spatial filter, GIS, PostGIS, GeoPackage, SpatiaLite, vector data">
+    <meta property="og:title" content="FilterMate — Spatial Filtering for QGIS">
+    <meta property="og:description" content="Simple. Fast. Universal. Stop writing SQL. Start filtering visually.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://imagodata.github.io/filter_mate/">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-dark: #0a0e1a;
+            --bg-mid: #111528;
+            --bg-light: #1a1f3a;
+            --accent-blue: #4fc3f7;
+            --accent-green: #589632;
+            --cta-start: #4fc3f7;
+            --cta-end: #00e676;
+            --text-primary: #f0f0f0;
+            --text-secondary: #a0a8c0;
+            --text-dim: #6b7394;
+            --card-bg: rgba(255, 255, 255, 0.04);
+            --card-border: rgba(79, 195, 247, 0.15);
+            --card-glow: rgba(79, 195, 247, 0.08);
+        }
+
+        html {
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+            overflow-y: scroll;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* ===== NAVBAR ===== */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 0.8rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(10, 14, 26, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(79, 195, 247, 0.08);
+            transition: background 0.3s;
+        }
+
+        .navbar-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 1.15rem;
+        }
+
+        .navbar-logo img {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            animation: logo-float 3s ease-in-out infinite;
+        }
+
+        @keyframes logo-float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-3px) rotate(3deg); }
+            50% { transform: translateY(0) rotate(0deg); }
+            75% { transform: translateY(-2px) rotate(-3deg); }
+        }
+
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 1.8rem;
+            list-style: none;
+        }
+
+        .navbar-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            letter-spacing: 0.01em;
+        }
+
+        .navbar-links a:hover,
+        .navbar-links a.active {
+            color: var(--accent-blue);
+        }
+
+        .btn-install {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1.2rem;
+            background: linear-gradient(135deg, var(--cta-start), var(--cta-end));
+            color: var(--bg-dark);
+            font-weight: 600;
+            font-size: 0.85rem;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-install:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(79, 195, 247, 0.3);
+        }
+
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 4px;
+        }
+
+        .hamburger span {
+            display: block;
+            width: 24px;
+            height: 2px;
+            background: var(--text-primary);
+            border-radius: 2px;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+
+        /* ===== SIDE DOTS ===== */
+        .side-dots {
+            position: fixed;
+            right: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 90;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .side-dots a {
+            display: block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1.5px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s;
+        }
+
+        .side-dots a.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 10px rgba(79, 195, 247, 0.5);
+            transform: scale(1.3);
+        }
+
+        .side-dots a:hover {
+            background: rgba(79, 195, 247, 0.5);
+            border-color: var(--accent-blue);
+        }
+
+        /* ===== SLIDE BASE ===== */
+        .slide {
+            min-height: 100vh;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 5rem 2rem 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide-content {
+            max-width: 1100px;
+            width: 100%;
+            z-index: 2;
+        }
+
+        /* Fade-in animation */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .fade-in-delay-1 { transition-delay: 0.15s; }
+        .fade-in-delay-2 { transition-delay: 0.3s; }
+        .fade-in-delay-3 { transition-delay: 0.45s; }
+        .fade-in-delay-4 { transition-delay: 0.6s; }
+
+        /* ===== SLIDE 1: HERO ===== */
+        #hero {
+            background: radial-gradient(ellipse at 50% 40%, rgba(79, 195, 247, 0.08) 0%, transparent 60%),
+                        linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-mid) 100%);
+            text-align: center;
+        }
+
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .hero-bg canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .hero-logo {
+            width: 140px;
+            height: 140px;
+            border-radius: 28px;
+            margin-bottom: 1.5rem;
+            filter: drop-shadow(0 0 40px rgba(79, 195, 247, 0.25));
+        }
+
+        .hero-title {
+            font-size: 4rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 0.6rem;
+            background: linear-gradient(135deg, var(--text-primary) 40%, var(--accent-blue) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.35rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero-tagline {
+            font-size: 1rem;
+            color: var(--text-dim);
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.85rem 2rem;
+            background: linear-gradient(135deg, var(--cta-start), var(--cta-end));
+            color: var(--bg-dark);
+            font-weight: 700;
+            font-size: 1rem;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(79, 195, 247, 0.35);
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.85rem 2rem;
+            background: transparent;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 1rem;
+            border: 1.5px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent-blue);
+            background: rgba(79, 195, 247, 0.06);
+        }
+
+        /* ===== SLIDE 2: SPEED ===== */
+        #speed {
+            background: linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-dark) 50%, var(--bg-mid) 100%);
+        }
+
+        .section-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent-blue);
+            margin-bottom: 0.8rem;
+        }
+
+        .section-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 2.5rem;
+            max-width: 600px;
+        }
+
+        .bench-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .bench-table th {
+            padding: 0.9rem 1.2rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .bench-table td {
+            padding: 1rem 1.2rem;
+            font-size: 0.95rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .bench-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .bench-table .backend-name {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .bench-table .badge {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .badge-pg { background: #4fc3f7; }
+        .badge-sl { background: #7c4dff; }
+        .badge-ogr { background: #ff9800; }
+
+        .bench-table .speed-val {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .fast { color: #00e676; }
+        .medium { color: #ffeb3b; }
+        .slow { color: #ff9800; }
+
+        .bench-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            overflow-x: auto;
+        }
+
+        .speed-highlight {
+            margin-top: 2rem;
+            padding: 1.2rem 1.5rem;
+            background: linear-gradient(135deg, rgba(79, 195, 247, 0.08), rgba(0, 230, 118, 0.06));
+            border: 1px solid rgba(79, 195, 247, 0.15);
+            border-radius: 12px;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .speed-highlight span {
+            background: linear-gradient(135deg, var(--cta-start), var(--cta-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ===== SLIDE 3: WORKFLOWS ===== */
+        #workflows {
+            background: radial-gradient(ellipse at 30% 60%, rgba(79, 195, 247, 0.04) 0%, transparent 50%),
+                        linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-dark) 100%);
+        }
+
+        .cards-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .workflow-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 2rem 1.5rem;
+            transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+        }
+
+        .workflow-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 40px var(--card-glow);
+            border-color: rgba(79, 195, 247, 0.3);
+        }
+
+        .card-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1.2rem;
+            background: linear-gradient(135deg, rgba(79, 195, 247, 0.12), rgba(79, 195, 247, 0.04));
+            border: 1px solid rgba(79, 195, 247, 0.15);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 0.6rem;
+        }
+
+        .card-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* ===== SLIDE 4: QUALITY ===== */
+        #quality {
+            background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-mid) 50%, var(--bg-dark) 100%);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1.2rem;
+            margin-top: 1rem;
+        }
+
+        .metric-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.8rem 1.2rem;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 30px var(--card-glow);
+        }
+
+        .metric-value {
+            font-size: 2.4rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cta-start), var(--cta-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.3rem;
+        }
+
+        .metric-label {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+        }
+
+        .metric-detail {
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        /* ===== SLIDE 5: GET STARTED ===== */
+        #start {
+            background: radial-gradient(ellipse at 50% 70%, rgba(79, 195, 247, 0.06) 0%, transparent 50%),
+                        linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-mid) 100%);
+            text-align: center;
+        }
+
+        .steps-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 2rem;
+            margin: 2rem 0 2.5rem;
+        }
+
+        .step {
+            flex: 1;
+            max-width: 260px;
+            text-align: center;
+        }
+
+        .step-number {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cta-start), var(--cta-end));
+            color: var(--bg-dark);
+            margin-bottom: 1rem;
+        }
+
+        .step-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+        }
+
+        .step-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .step-arrow {
+            color: var(--text-dim);
+            font-size: 1.5rem;
+            margin-top: 1rem;
+            flex-shrink: 0;
+        }
+
+        .final-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .footer-links a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-blue);
+        }
+
+        .footer-copy {
+            margin-top: 1.5rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 900px) {
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar-links {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                flex-direction: column;
+                background: rgba(10, 14, 26, 0.97);
+                backdrop-filter: blur(12px);
+                padding: 1rem 2rem;
+                gap: 0.8rem;
+                border-bottom: 1px solid rgba(79, 195, 247, 0.08);
+            }
+
+            .navbar-links.open {
+                display: flex;
+            }
+
+            .hamburger {
+                display: flex;
+            }
+
+            .hamburger.open span:nth-child(1) {
+                transform: rotate(45deg) translate(5px, 5px);
+            }
+            .hamburger.open span:nth-child(2) {
+                opacity: 0;
+            }
+            .hamburger.open span:nth-child(3) {
+                transform: rotate(-45deg) translate(5px, -5px);
+            }
+
+            .hero-title {
+                font-size: 2.6rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1.1rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .cards-row {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .steps-row {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .step-arrow {
+                transform: rotate(90deg);
+                margin: 0;
+            }
+
+            .side-dots {
+                right: 0.8rem;
+                gap: 10px;
+            }
+
+            .side-dots a {
+                width: 8px;
+                height: 8px;
+            }
+
+            .slide {
+                padding: 4.5rem 1.2rem 2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .metric-value {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+    <a href="#hero" class="navbar-logo">
+        <img src="logo.png" alt="FilterMate" width="32" height="32">
+        FilterMate
+    </a>
+    <ul class="navbar-links" id="navLinks">
+        <li><a href="#hero">Home</a></li>
+        <li><a href="#speed">Performance</a></li>
+        <li><a href="#workflows">Workflows</a></li>
+        <li><a href="#quality">Quality</a></li>
+        <li><a href="#start">Install</a></li>
+        <li><a href="roadmap.html" style="color:var(--accent-blue);">Roadmap</a></li>
+    </ul>
+    <a href="https://plugins.qgis.org/plugins/filter_mate/" class="btn-install" target="_blank" rel="noopener">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Install
+    </a>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+    </button>
+</nav>
+
+<!-- Side Dots -->
+<div class="side-dots" id="sideDots">
+    <a href="#hero" title="Home"></a>
+    <a href="#speed" title="Performance"></a>
+    <a href="#workflows" title="Workflows"></a>
+    <a href="#quality" title="Quality"></a>
+    <a href="#start" title="Install"></a>
+</div>
+
+<!-- ========== SLIDE 1: HERO ========== -->
+<section class="slide" id="hero">
+    <div class="hero-bg"><canvas id="heroCanvas"></canvas></div>
+    <div class="slide-content" style="display:flex;flex-direction:column;align-items:center;">
+        <img src="logo.png" alt="FilterMate Logo" class="hero-logo fade-in" width="140" height="140">
+        <h1 class="hero-title fade-in fade-in-delay-1">FilterMate</h1>
+        <p class="hero-subtitle fade-in fade-in-delay-2">Spatial filtering for QGIS. Simple. Fast. Universal.</p>
+        <p class="hero-tagline fade-in fade-in-delay-3">Stop writing SQL. Start filtering visually.</p>
+        <div class="hero-actions fade-in fade-in-delay-4">
+            <a href="https://plugins.qgis.org/plugins/filter_mate/" class="btn-primary" target="_blank" rel="noopener">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Install from QGIS
+            </a>
+            <a href="https://www.youtube.com/watch?v=oQq45xZkzDc" class="btn-secondary" target="_blank" rel="noopener">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Watch Demo
+            </a>
+            <a href="roadmap.html" class="btn-secondary" style="border-color:rgba(179,136,255,0.3);color:#b388ff;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b388ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Roadmap 5.0
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ========== SLIDE 2: SPEED ========== -->
+<section class="slide" id="speed">
+    <div class="slide-content">
+        <span class="section-label fade-in">Performance</span>
+        <h2 class="section-title fade-in fade-in-delay-1">Built for Speed</h2>
+        <p class="section-subtitle fade-in fade-in-delay-2">4 performance optimizers. Smart caching. Real benchmarks.</p>
+        <div class="bench-card fade-in fade-in-delay-3">
+            <table class="bench-table">
+                <thead>
+                    <tr>
+                        <th>Backend</th>
+                        <th>10k features</th>
+                        <th>100k features</th>
+                        <th>1M features</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="backend-name"><span class="badge badge-pg"></span>PostgreSQL</span></td>
+                        <td><span class="speed-val fast">&lt;1s</span></td>
+                        <td><span class="speed-val fast">&lt;2s</span></td>
+                        <td><span class="speed-val medium">~10s</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="backend-name"><span class="badge badge-sl"></span>SpatiaLite</span></td>
+                        <td><span class="speed-val fast">&lt;2s</span></td>
+                        <td><span class="speed-val medium">~10s</span></td>
+                        <td><span class="speed-val slow">~60s</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="backend-name"><span class="badge badge-ogr"></span>GeoPackage / OGR</span></td>
+                        <td><span class="speed-val medium">~5s</span></td>
+                        <td><span class="speed-val slow">~30s</span></td>
+                        <td><span class="speed-val slow">&gt;120s</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="speed-highlight fade-in fade-in-delay-4">
+            <span>2-8x faster</span> with smart caching and 4 built-in optimizers
+        </div>
+    </div>
+</section>
+
+<!-- ========== SLIDE 3: WORKFLOWS ========== -->
+<section class="slide" id="workflows">
+    <div class="slide-content">
+        <span class="section-label fade-in">Workflows</span>
+        <h2 class="section-title fade-in fade-in-delay-1">Click. Filter. Export.</h2>
+        <p class="section-subtitle fade-in fade-in-delay-2">No SQL required. Three ways to filter, one powerful result.</p>
+        <div class="cards-row">
+            <div class="workflow-card fade-in fade-in-delay-2">
+                <div class="card-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
+                </div>
+                <h3 class="card-title">Click &amp; Select</h3>
+                <p class="card-desc">Click a feature, filter all related layers instantly. Buffer, intersection, containment &mdash; built in.</p>
+            </div>
+            <div class="workflow-card fade-in fade-in-delay-3">
+                <div class="card-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <h3 class="card-title">Search &amp; Find</h3>
+                <p class="card-desc">Smart entity search across any layer. Type a name, get results across your entire project.</p>
+            </div>
+            <div class="workflow-card fade-in fade-in-delay-4">
+                <div class="card-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <h3 class="card-title">Save &amp; Share</h3>
+                <p class="card-desc">Favorite your filter configs. Export to GeoPackage with styles. Undo/Redo everything.</p>
+            </div>
+        </div>
+        <div style="text-align:center;margin-top:2rem;" class="fade-in fade-in-delay-4">
+            <a href="https://www.youtube.com/watch?v=oQq45xZkzDc" class="btn-secondary" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                See It in Action
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ========== SLIDE 4: QUALITY ========== -->
+<section class="slide" id="quality">
+    <div class="slide-content">
+        <span class="section-label fade-in">Reliability</span>
+        <h2 class="section-title fade-in fade-in-delay-1">Enterprise-Grade Quality</h2>
+        <p class="section-subtitle fade-in fade-in-delay-2">600 tests. 5 backends. 22 languages. Production-ready.</p>
+        <div class="metrics-grid fade-in fade-in-delay-3">
+            <div class="metric-card">
+                <div class="metric-value" data-count="600">0</div>
+                <div class="metric-label">Tests</div>
+                <div class="metric-detail">CI/CD with GitHub Actions. Every commit tested.</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" data-count="5">0</div>
+                <div class="metric-label">Backends</div>
+                <div class="metric-detail">PostgreSQL, SpatiaLite, GeoPackage, Shapefiles, WFS.</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" data-count="22">0</div>
+                <div class="metric-label">Languages</div>
+                <div class="metric-detail">Full i18n. Your QGIS, your language.</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="font-size:1.6rem;-webkit-text-fill-color:unset;background:none;color:var(--accent-blue);">Undo / Redo</div>
+                <div class="metric-label">History</div>
+                <div class="metric-detail">Full filter history. Never lose your work.</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" style="font-size:1.6rem;-webkit-text-fill-color:unset;background:none;color:var(--accent-blue);">Auto</div>
+                <div class="metric-label">Dark Mode</div>
+                <div class="metric-detail">Adapts to your QGIS theme automatically.</div>
+            </div>
+        </div>
+        <div style="text-align:center;margin-top:2rem;" class="fade-in fade-in-delay-4">
+            <a href="https://github.com/imagodata/filter_mate" class="btn-secondary" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- ========== SLIDE 5: GET STARTED ========== -->
+<section class="slide" id="start">
+    <div class="slide-content" style="display:flex;flex-direction:column;align-items:center;">
+        <span class="section-label fade-in">Get Started</span>
+        <h2 class="section-title fade-in fade-in-delay-1" style="text-align:center;">Get Started in 30 Seconds</h2>
+        <p class="section-subtitle fade-in fade-in-delay-2" style="text-align:center;">Free. Open-source. Ready for your next project.</p>
+
+        <div class="steps-row fade-in fade-in-delay-3">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-title">Open QGIS</div>
+                <div class="step-desc">Plugins &rarr; Manage and Install Plugins</div>
+            </div>
+            <div class="step-arrow">&rarr;</div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-title">Search "FilterMate"</div>
+                <div class="step-desc">Find it in the official QGIS plugin repository</div>
+            </div>
+            <div class="step-arrow">&rarr;</div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-title">Click Install</div>
+                <div class="step-desc">That's it. Start filtering.</div>
+            </div>
+        </div>
+
+        <div class="final-cta fade-in fade-in-delay-3">
+            <a href="https://plugins.qgis.org/plugins/filter_mate/" class="btn-primary" target="_blank" rel="noopener">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Install FilterMate
+            </a>
+            <a href="https://github.com/imagodata/filter_mate" class="btn-secondary" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                Star on GitHub
+            </a>
+        </div>
+
+        <div class="footer-links fade-in fade-in-delay-4">
+            <a href="roadmap.html" style="color:#b388ff;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b388ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Roadmap 5.0
+            </a>
+            <a href="https://www.youtube.com/watch?v=oQq45xZkzDc" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/><polygon fill="#0a0e1a" points="9.545 15.568 15.818 12 9.545 8.432"/></svg>
+                Video Tutorials
+            </a>
+            <a href="https://github.com/imagodata/filter_mate/issues" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Report Issues
+            </a>
+            <a href="https://discord.gg/9DNbuVYQ" target="_blank" rel="noopener">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z"/></svg>
+                Discord
+            </a>
+        </div>
+        <p class="footer-copy fade-in fade-in-delay-4">FilterMate v4.5.0 &mdash; Made with care by imagodata &mdash; Open Source (GPL-3.0)</p>
+    </div>
+</section>
+
+<script>
+// ===== Hamburger Menu =====
+const hamburger = document.getElementById('hamburger');
+const navLinks = document.getElementById('navLinks');
+hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('open');
+    navLinks.classList.toggle('open');
+});
+navLinks.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+        hamburger.classList.remove('open');
+        navLinks.classList.remove('open');
+    });
+});
+
+// ===== IntersectionObserver: Fade-in =====
+const fadeEls = document.querySelectorAll('.fade-in');
+const fadeObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            e.target.classList.add('visible');
+        }
+    });
+}, { threshold: 0.15 });
+fadeEls.forEach(el => fadeObs.observe(el));
+
+// ===== Active slide tracking (dots + nav) =====
+const slides = document.querySelectorAll('.slide');
+const dots = document.querySelectorAll('.side-dots a');
+const navAs = document.querySelectorAll('.navbar-links a');
+
+const slideObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            const id = e.target.id;
+            dots.forEach(d => d.classList.toggle('active', d.getAttribute('href') === '#' + id));
+            navAs.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+        }
+    });
+}, { threshold: 0.5 });
+slides.forEach(s => slideObs.observe(s));
+
+// ===== Counter animation =====
+const counters = document.querySelectorAll('[data-count]');
+const counterObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            const target = parseInt(e.target.dataset.count);
+            let current = 0;
+            const step = Math.ceil(target / 40);
+            const timer = setInterval(() => {
+                current += step;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(timer);
+                }
+                e.target.textContent = current;
+            }, 25);
+            counterObs.unobserve(e.target);
+        }
+    });
+}, { threshold: 0.5 });
+counters.forEach(c => counterObs.observe(c));
+
+// ===== Hero canvas: animated geometric network =====
+(function() {
+    const canvas = document.getElementById('heroCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let w, h, points = [];
+    const POINT_COUNT = 60;
+    const MAX_DIST = 160;
+
+    function resize() {
+        w = canvas.width = canvas.offsetWidth;
+        h = canvas.height = canvas.offsetHeight;
+    }
+
+    function init() {
+        resize();
+        points = [];
+        for (let i = 0; i < POINT_COUNT; i++) {
+            points.push({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.4
+            });
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, w, h);
+        // Lines
+        for (let i = 0; i < points.length; i++) {
+            for (let j = i + 1; j < points.length; j++) {
+                const dx = points[i].x - points[j].x;
+                const dy = points[i].y - points[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < MAX_DIST) {
+                    ctx.beginPath();
+                    ctx.moveTo(points[i].x, points[i].y);
+                    ctx.lineTo(points[j].x, points[j].y);
+                    ctx.strokeStyle = 'rgba(79, 195, 247, ' + (0.12 * (1 - dist / MAX_DIST)) + ')';
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+            }
+        }
+        // Points
+        points.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(79, 195, 247, 0.25)';
+            ctx.fill();
+        });
+        // Move
+        points.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.x < 0 || p.x > w) p.vx *= -1;
+            if (p.y < 0 || p.y > h) p.vy *= -1;
+        });
+        requestAnimationFrame(draw);
+    }
+
+    init();
+    window.addEventListener('resize', () => { resize(); });
+    draw();
+})();
+</script>
+
+</body>
+</html>

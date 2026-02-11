@@ -1,14 +1,14 @@
-# ![FilterMate](https://github.com/sducournau/filter_mate/blob/main/icon.png?raw=true) FilterMate
+# ![FilterMate](https://github.com/imagodata/filter_mate/blob/main/icon.png?raw=true) FilterMate
 
 **Version 4.5.1** | QGIS Plugin | **Production-Ready** 🎉
 
 > 🚀 Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
 [![Tests](https://github.com/imagodata/filter_mate/actions/workflows/test.yml/badge.svg)](https://github.com/imagodata/filter_mate/actions/workflows/test.yml)
-[![Documentation](https://img.shields.io/badge/docs-website-blue)](https://sducournau.github.io/filter_mate)
+[![Documentation](https://img.shields.io/badge/docs-website-blue)](https://imagodata.github.io/filter_mate)
 [![QGIS Plugin](https://img.shields.io/badge/QGIS-Plugin-green)](https://plugins.qgis.org/plugins/filter_mate)
-[![GitHub](https://img.shields.io/badge/GitHub-repo-black)](https://github.com/sducournau/filter_mate)
-[![Issues](https://img.shields.io/badge/issues-report-red)](https://github.com/sducournau/filter_mate/issues)
+[![GitHub](https://img.shields.io/badge/GitHub-repo-black)](https://github.com/imagodata/filter_mate)
+[![Issues](https://img.shields.io/badge/issues-report-red)](https://github.com/imagodata/filter_mate/issues)
 
 ---
 
@@ -35,7 +35,7 @@
 
 ### Manual Installation
 
-Download from [GitHub Releases](https://github.com/sducournau/filter_mate/releases) and extract to:
+Download from [GitHub Releases](https://github.com/imagodata/filter_mate/releases) and extract to:
 
 | OS | Path |
 |---|---|
@@ -85,7 +85,7 @@ pip install psycopg2-binary
 
 ## 📚 Documentation
 
-- **Users**: [Documentation Website](https://sducournau.github.io/filter_mate)
+- **Users**: [Documentation Website](https://imagodata.github.io/filter_mate)
 - **Developers**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 

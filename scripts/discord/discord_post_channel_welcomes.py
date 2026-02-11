@@ -76,7 +76,7 @@ Each entry covers:
 - Breaking changes (if any)
 - Minimum QGIS version requirements
 
-Looking for the latest release? Check [GitHub Releases](https://github.com/sducournau/filter_mate/releases).
+Looking for the latest release? Check [GitHub Releases](https://github.com/imagodata/filter_mate/releases).
 """.strip(),
 
     "roadmap": """
@@ -99,7 +99,7 @@ Want to influence the roadmap? Share your ideas in `#feature-requests`!
 Need help with FilterMate? You're in the right place.
 
 **Before posting, please check:**
-- The [documentation](https://sducournau.github.io/filter_mate/)
+- The [documentation](https://imagodata.github.io/filter_mate/)
 - Existing messages in this channel — your question may already be answered
 
 **When asking a question, include:**
@@ -124,7 +124,7 @@ Found something broken? Report it here so we can fix it.
 5. **Actual behavior** — what happened instead?
 6. **Error log** (if available): `View > Panels > Log Messages` in QGIS
 
-For confirmed bugs, we may ask you to open a [GitHub Issue](https://github.com/sducournau/filter_mate/issues).
+For confirmed bugs, we may ask you to open a [GitHub Issue](https://github.com/imagodata/filter_mate/issues).
 """.strip(),
 
     "feature-requests": """
@@ -168,7 +168,7 @@ The main channel for FilterMate development discussions.
 - Debugging sessions
 - Release planning and coordination
 
-**Repo**: <https://github.com/sducournau/filter_mate>
+**Repo**: <https://github.com/imagodata/filter_mate>
 **Stack**: Python, PyQt5, QGIS API, hexagonal architecture
 """.strip(),
 
@@ -193,7 +193,7 @@ This is where we discuss the *why* behind the code, not just the *how*.
 Coordination channel for code reviews and PR discussions.
 
 **Workflow:**
-1. Open a PR on [GitHub](https://github.com/sducournau/filter_mate/pulls)
+1. Open a PR on [GitHub](https://github.com/imagodata/filter_mate/pulls)
 2. Post a summary here for visibility
 3. Discuss approach, request reviews
 4. Merge once approved

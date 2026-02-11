@@ -129,8 +129,8 @@ WELCOME_MESSAGE = """
 **FilterMate** is a powerful QGIS plugin for **advanced spatial filtering** — vector, raster, PostGIS and more.
 
 ## Quick Links
-- **GitHub**: <https://github.com/sducournau/filter_mate>
-- **Documentation**: <https://sducournau.github.io/filter_mate/>
+- **GitHub**: <https://github.com/imagodata/filter_mate>
+- **Documentation**: <https://imagodata.github.io/filter_mate/>
 - **YouTube**: <https://www.youtube.com/@imagodata>
 - **Invite a friend**: <https://discord.gg/Z8hsCVndUd>
 - **Bug Reports**: Use `#bug-reports` with your QGIS version, OS, and reproduction steps
