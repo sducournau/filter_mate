@@ -22,6 +22,8 @@ Created: February 2026
 import logging
 from typing import TYPE_CHECKING
 
+from ...infrastructure.signal_utils import SignalBlocker
+
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
 
@@ -322,52 +324,53 @@ class ComboboxPopulationManager:
 
             project = QgsProject.instance()
 
-            # Clear and populate layers widget
+            # Clear and populate layers widget (block signals to prevent cascades)
             layers_widget = dw.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
-            layers_widget.clear()
-            item_index = 0
+            with SignalBlocker(layers_widget):
+                layers_widget.clear()
+                item_index = 0
 
-            for key in list(dw.PROJECT_LAYERS.keys()):
-                if key not in dw.PROJECT_LAYERS or "infos" not in dw.PROJECT_LAYERS[key]:
-                    continue
+                for key in list(dw.PROJECT_LAYERS.keys()):
+                    if key not in dw.PROJECT_LAYERS or "infos" not in dw.PROJECT_LAYERS[key]:
+                        continue
 
-                layer_info = dw.PROJECT_LAYERS[key]["infos"]
-                required_keys = [
-                    "layer_id", "layer_name",
-                    "layer_crs_authid", "layer_geometry_type",
-                ]
-                if any(
-                    k not in layer_info or layer_info[k] is None
-                    for k in required_keys
-                ):
-                    continue
+                    layer_info = dw.PROJECT_LAYERS[key]["infos"]
+                    required_keys = [
+                        "layer_id", "layer_name",
+                        "layer_crs_authid", "layer_geometry_type",
+                    ]
+                    if any(
+                        k not in layer_info or layer_info[k] is None
+                        for k in required_keys
+                    ):
+                        continue
 
-                layer_id = layer_info["layer_id"]
-                layer_name = layer_info["layer_name"]
-                layer_crs_authid = layer_info["layer_crs_authid"]
-                geom_type = layer_info["layer_geometry_type"]
-                layer_icon = dw.icon_per_geometry_type(geom_type)
+                    layer_id = layer_info["layer_id"]
+                    layer_name = layer_info["layer_name"]
+                    layer_crs_authid = layer_info["layer_crs_authid"]
+                    geom_type = layer_info["layer_geometry_type"]
+                    layer_icon = dw.icon_per_geometry_type(geom_type)
 
-                # Validate layer
-                layer_obj = project.mapLayer(layer_id)
-                if (
-                    layer_obj
-                    and isinstance(layer_obj, QgsVectorLayer)
-                    and is_layer_source_available(
-                        layer_obj, require_psycopg2=False
-                    )
-                ):
-                    display_name = f"{layer_name} [{layer_crs_authid}]"
-                    item_data = {
-                        "layer_id": key,
-                        "layer_geometry_type": geom_type,
-                    }
-                    layers_widget.addItem(layer_icon, display_name, item_data)
-                    item = layers_widget.model().item(item_index)
-                    item.setCheckState(
-                        Qt.Checked if key in layers_to_export else Qt.Unchecked
-                    )
-                    item_index += 1
+                    # Validate layer
+                    layer_obj = project.mapLayer(layer_id)
+                    if (
+                        layer_obj
+                        and isinstance(layer_obj, QgsVectorLayer)
+                        and is_layer_source_available(
+                            layer_obj, require_psycopg2=False
+                        )
+                    ):
+                        display_name = f"{layer_name} [{layer_crs_authid}]"
+                        item_data = {
+                            "layer_id": key,
+                            "layer_geometry_type": geom_type,
+                        }
+                        layers_widget.addItem(layer_icon, display_name, item_data)
+                        item = layers_widget.model().item(item_index)
+                        item.setCheckState(
+                            Qt.Checked if key in layers_to_export else Qt.Unchecked
+                        )
+                        item_index += 1
 
             logger.info(
                 f"populate_export_direct: Added {item_index} layers to combobox"
@@ -377,12 +380,13 @@ class ComboboxPopulationManager:
             try:
                 from osgeo import ogr
                 datatype_widget = dw.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                datatype_widget.clear()
-                ogr_driver_list = sorted([
-                    ogr.GetDriver(i).GetDescription()
-                    for i in range(ogr.GetDriverCount())
-                ])
-                datatype_widget.addItems(ogr_driver_list)
+                with SignalBlocker(datatype_widget):
+                    datatype_widget.clear()
+                    ogr_driver_list = sorted([
+                        ogr.GetDriver(i).GetDescription()
+                        for i in range(ogr.GetDriverCount())
+                    ])
+                    datatype_widget.addItems(ogr_driver_list)
                 logger.info(
                     f"populate_export_direct: Added {len(ogr_driver_list)} "
                     f"export formats"
@@ -476,65 +480,66 @@ class ComboboxPopulationManager:
                     lid for lid in layers_to_filter if lid != source_layer_id
                 ]
 
-            # Clear and populate widget
+            # Clear and populate widget (block signals to prevent cascades)
             layers_widget = dw.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-            layers_widget.clear()
-            item_index = 0
+            with SignalBlocker(layers_widget):
+                layers_widget.clear()
+                item_index = 0
 
-            for key in list(dw.PROJECT_LAYERS.keys()):
-                # Skip source layer
-                if key == layer.id():
-                    continue
+                for key in list(dw.PROJECT_LAYERS.keys()):
+                    # Skip source layer
+                    if key == layer.id():
+                        continue
 
-                if (
-                    key not in dw.PROJECT_LAYERS
-                    or "infos" not in dw.PROJECT_LAYERS[key]
-                ):
-                    continue
+                    if (
+                        key not in dw.PROJECT_LAYERS
+                        or "infos" not in dw.PROJECT_LAYERS[key]
+                    ):
+                        continue
 
-                layer_info = dw.PROJECT_LAYERS[key]["infos"]
-                required_keys = [
-                    "layer_id", "layer_name",
-                    "layer_crs_authid", "layer_geometry_type",
-                ]
-                if any(
-                    k not in layer_info or layer_info[k] is None
-                    for k in required_keys
-                ):
-                    continue
+                    layer_info = dw.PROJECT_LAYERS[key]["infos"]
+                    required_keys = [
+                        "layer_id", "layer_name",
+                        "layer_crs_authid", "layer_geometry_type",
+                    ]
+                    if any(
+                        k not in layer_info or layer_info[k] is None
+                        for k in required_keys
+                    ):
+                        continue
 
-                layer_id = layer_info["layer_id"]
-                layer_name = layer_info["layer_name"]
-                layer_crs = layer_info["layer_crs_authid"]
-                geom_type = layer_info["layer_geometry_type"]
-                layer_icon = dw.icon_per_geometry_type(geom_type)
+                    layer_id = layer_info["layer_id"]
+                    layer_name = layer_info["layer_name"]
+                    layer_crs = layer_info["layer_crs_authid"]
+                    geom_type = layer_info["layer_geometry_type"]
+                    layer_icon = dw.icon_per_geometry_type(geom_type)
 
-                # Validate layer
-                layer_obj = project.mapLayer(layer_id)
-                if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
-                    continue
-                # Skip non-spatial tables
-                if not layer_obj.isSpatial():
-                    continue
-                if not is_layer_source_available(
-                    layer_obj, require_psycopg2=False
-                ):
-                    continue
+                    # Validate layer
+                    layer_obj = project.mapLayer(layer_id)
+                    if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
+                        continue
+                    # Skip non-spatial tables
+                    if not layer_obj.isSpatial():
+                        continue
+                    if not is_layer_source_available(
+                        layer_obj, require_psycopg2=False
+                    ):
+                        continue
 
-                # Add to combobox
-                display_name = f"{layer_name} [{layer_crs}]"
-                item_data = {
-                    "layer_id": key,
-                    "layer_geometry_type": geom_type,
-                }
-                layers_widget.addItem(layer_icon, display_name, item_data)
+                    # Add to combobox
+                    display_name = f"{layer_name} [{layer_crs}]"
+                    item_data = {
+                        "layer_id": key,
+                        "layer_geometry_type": geom_type,
+                    }
+                    layers_widget.addItem(layer_icon, display_name, item_data)
 
-                item = layers_widget.model().item(item_index)
-                if has_layers and layer_id in layers_to_filter:
-                    item.setCheckState(Qt.Checked)
-                else:
-                    item.setCheckState(Qt.Unchecked)
-                item_index += 1
+                    item = layers_widget.model().item(item_index)
+                    if has_layers and layer_id in layers_to_filter:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
+                    item_index += 1
 
             logger.info(
                 f"populate_filtering_direct: Added {item_index} layers "

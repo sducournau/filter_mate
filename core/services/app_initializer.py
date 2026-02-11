@@ -159,6 +159,21 @@ class AppInitializer:
         else:
             return self._reinitialize_existing()
 
+    def _deferred_cleanup_corrupted_filters(self):
+        """Cleanup corrupted layer filters in a deferred manner (non-blocking)."""
+        try:
+            from ...infrastructure.field_utils import cleanup_corrupted_layer_filters
+            cleared_layers = cleanup_corrupted_layer_filters()
+            if cleared_layers:
+                show_warning(
+                    QCoreApplication.translate(
+                        "AppInitializer",
+                        "Cleared corrupted filters from {0} layer(s). Please re-apply your filters."
+                    ).format(len(cleared_layers))
+                )
+        except Exception as e:
+            logger.warning(f"Deferred filter cleanup failed: {e}")
+
     def _initialize_first_run(self) -> bool:
         """
         First-time initialization: create dockwidget and set up everything.
@@ -170,17 +185,9 @@ class AppInitializer:
         factory = get_qgis_factory()
         project = self._get_project() if self._get_project else factory.get_project()
 
-        # Cleanup corrupted filters
+        # Defer corrupted filter cleanup to next event loop iteration (non-blocking)
         if self._cleanup_corrupted_layer_filters:
-            from ...infrastructure.field_utils import cleanup_corrupted_layer_filters
-            cleared_layers = cleanup_corrupted_layer_filters()  # Pass None to use all project layers
-            if cleared_layers:
-                show_warning(
-                    QCoreApplication.translate(
-                        "AppInitializer",
-                        "Cleared corrupted filters from {0} layer(s). Please re-apply your filters."
-                    ).format(len(cleared_layers))
-                )
+            QTimer.singleShot(0, self._deferred_cleanup_corrupted_filters)
 
         # Get initial layers
         init_layers = None

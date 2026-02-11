@@ -18,6 +18,7 @@ Dependencies:
 
 from qgis.core import (
     Qgis,
+    QgsFeatureRequest,
     QgsFeatureSource,
     QgsField,
     QgsTask,
@@ -311,7 +312,10 @@ class LayersManagementEngineTask(QgsTask):
             if self.isCanceled() or result is False:
                 return False
 
-        for layer in self.layers:
+        total = len(self.layers)
+        for i, layer in enumerate(self.layers):
+            if total > 0:
+                self.setProgress((i / total) * 100)
             if self.task_action == 'add_layers':
                 if isinstance(layer, QgsVectorLayer):
                     if layer.id() not in self.project_layers.keys():
@@ -960,8 +964,9 @@ class LayersManagementEngineTask(QgsTask):
         # Save to database
         self.insert_properties_to_spatialite(layer.id(), layer_props)
 
-        # Create spatial index
-        self._create_spatial_index(layer, layer_props)
+        # Mark spatial index as pending — will be created on-demand during filtering
+        # (GeoPackage layers often already have rtree; processing.run is very slow on large layers)
+        layer_props["infos"]["spatial_index_pending"] = True
 
         # Add to project layers dictionary
         self.project_layers[layer.id()] = layer_props
@@ -1091,8 +1096,14 @@ class LayersManagementEngineTask(QgsTask):
         Returns:
             tuple: (field_name, field_index, field_type, is_numeric) or False if canceled
         """
-        feature_count = layer.featureCount()
         layer_provider = layer.providerType()
+
+        # Skip expensive featureCount() for non-PostgreSQL providers
+        # (GeoPackage iterates all features internally — very slow on 100k+ rows)
+        if layer_provider == 'postgres':
+            feature_count = layer.featureCount()
+        else:
+            feature_count = -1  # Unknown — will trust PK attributes
 
         # CRITICAL FIX: For PostgreSQL layers, ALWAYS trust declared primary key
         # without checking uniqueness to avoid freeze on large tables.
@@ -1382,9 +1393,10 @@ class LayersManagementEngineTask(QgsTask):
             if layer.featureCount() == 0:
                 return True
 
-            # Check for at least one valid geometry
+            # Check for at least one valid geometry (sample first 10 features max)
             has_valid_geom = False
-            for feature in layer.getFeatures():
+            request = QgsFeatureRequest().setLimit(10)
+            for feature in layer.getFeatures(request):
                 if feature.hasGeometry() and not feature.geometry().isNull():
                     has_valid_geom = True
                     break

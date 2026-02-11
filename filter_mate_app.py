@@ -233,18 +233,36 @@ class FilterMateApp:
         return [l for l in layers if isinstance(l, QgsVectorLayer) and l.isValid() and is_layer_source_available(l)]
 
     def _on_layers_added(self, layers):
-        """Signal handler for layersAdded: ignore broken/invalid layers."""
-        import time
+        """Signal handler for layersAdded: accumulate layers and process as single batch."""
+        # Accumulate layers during startup burst
+        if not hasattr(self, '_pending_added_layers'):
+            self._pending_added_layers = []
 
-        # Debounce rapid layer additions
-        current_time = time.time() * 1000
-        if current_time - self._last_layer_change_timestamp < STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS']:
-            logger.debug("Debouncing layersAdded signal")
-            weak_self = weakref.ref(self)
-            QTimer.singleShot(STABILITY_CONSTANTS['SIGNAL_DEBOUNCE_MS'],
-                            lambda: (s := weak_self()) and s._on_layers_added(layers))
+        self._pending_added_layers.extend(layers)
+
+        # Cancel existing timer if running
+        if hasattr(self, '_layers_added_timer') and self._layers_added_timer.isActive():
+            self._layers_added_timer.stop()
+
+        # Start/restart accumulation timer (500ms to batch all layersAdded signals)
+        self._layers_added_timer = QTimer()
+        self._layers_added_timer.setSingleShot(True)
+        weak_self = weakref.ref(self)
+        self._layers_added_timer.timeout.connect(
+            lambda: (s := weak_self()) and s._process_pending_added_layers()
+        )
+        self._layers_added_timer.start(500)
+
+    def _process_pending_added_layers(self):
+        """Process all accumulated layers as a single batch."""
+        if not hasattr(self, '_pending_added_layers') or not self._pending_added_layers:
             return
-        self._last_layer_change_timestamp = current_time
+
+        layers = self._pending_added_layers
+        self._pending_added_layers = []
+
+        import time
+        self._last_layer_change_timestamp = time.time() * 1000
         self._check_and_reset_stale_flags()
 
         # Identify PostgreSQL layers
