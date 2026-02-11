@@ -237,10 +237,10 @@ class FilterChainOptimizer:
             cursor.execute(create_sql)
 
             # Create spatial index
-            f"idx_{mv_name}_geom"
-            cursor.execute('''
+            index_name = f"idx_{safe_mv}_geom"
+            cursor.execute(f'''
                 CREATE INDEX IF NOT EXISTS "{index_name}"
-                ON "{self.MV_SCHEMA}"."{mv_name}"
+                ON "{safe_schema}"."{safe_mv}"
                 USING GIST ("{context.source_geom_column}")
             ''')
 

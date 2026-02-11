@@ -955,7 +955,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # FIX v4.3.1 (2026-01-22): Remove table prefix from fields in CREATE TABLE AS SELECT
         # In single-table SELECT, field references should be unqualified (implicit scope)
         # buffer_expr_sql already contains unqualified field names (e.g., "homecount", not "table"."homecount")
-        sql_create = """
+        sql_create = f"""
             CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
             SELECT
                 {pk_select}
