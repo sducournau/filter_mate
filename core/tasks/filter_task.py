@@ -133,6 +133,7 @@ from .subset_management_handler import SubsetManagementHandler
 from .filtering_orchestrator import FilteringOrchestrator
 from .finished_handler import FinishedHandler
 from .materialized_view_handler import MaterializedViewHandler
+from .expression_facade_handler import ExpressionFacadeHandler
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -437,6 +438,9 @@ class FilterEngineTask(QgsTask):
 
         # Pass 3: Materialized view handler
         self._mv_handler = MaterializedViewHandler(self)
+
+        # Pass 3: Expression facade handler
+        self._expr_facade = ExpressionFacadeHandler(self)
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
@@ -1456,174 +1460,44 @@ class FilterEngineTask(QgsTask):
         self.task_parameters['param_source_schema'] = result['schema']
 
     def _sanitize_subset_string(self, subset_string):
-        """
-        Remove non-boolean display expressions and fix type casting issues in subset string.
-
-        v4.7 E6-S2: Pure delegation to core.services.expression_service.sanitize_subset_string
-
-        Args:
-            subset_string (str): The original subset string
-
-        Returns:
-            str: Sanitized subset string with non-boolean expressions removed
-        """
-        from ..services.expression_service import sanitize_subset_string
-        return sanitize_subset_string(subset_string, logger=logger)
+        """Sanitize subset string. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.sanitize_subset_string(subset_string)
 
     def _extract_spatial_clauses_for_exists(self, filter_expr, source_table=None):
-        """Delegates to core.filter.expression_sanitizer.extract_spatial_clauses_for_exists()."""
-        from ..filter.expression_sanitizer import extract_spatial_clauses_for_exists
-
-        return extract_spatial_clauses_for_exists(filter_expr, source_table)
+        """Extract spatial clauses. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.extract_spatial_clauses_for_exists(filter_expr, source_table)
 
     def _apply_postgresql_type_casting(self, expression, layer=None):
-        """Delegates to pg_executor.apply_postgresql_type_casting()."""
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.apply_postgresql_type_casting(expression, layer)
-        # If pg_executor unavailable, return expression unchanged
-        return expression
+        """Apply PostgreSQL type casting. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.apply_postgresql_type_casting(expression, layer)
 
     def _process_qgis_expression(self, expression):
-        """
-        Process and validate a QGIS expression, converting it to appropriate SQL.
-
-        Phase E13: Delegates to AttributeFilterExecutor.
-
-        Returns:
-            tuple: (processed_expression, is_field_expression) or (None, None) if invalid
-        """
-        executor = self._get_attribute_executor()
-
-        # FIX 2026-01-18: AttributeFilterExecutor.process_qgis_expression only accepts expression
-        # Other context is already available in the executor instance
-        result = executor.process_qgis_expression(expression=expression)
-
-        # Update task state if field expression detected
-        if result[1] and isinstance(result[1], tuple) and result[1][0]:
-            self.is_field_expression = result[1]
-        elif result[1]:
-            self.is_field_expression = result[1]
-
-        return result
+        """Process QGIS expression. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.process_qgis_expression(expression)
 
     def _combine_with_old_subset(self, expression):
-        """
-        Combine new expression with old subset.
-
-        Phase E13: Delegates to AttributeFilterExecutor.
-        The executor already has old_subset, combine_operator, and provider_type
-        set during initialization, so we only pass the expression.
-        """
-        executor = self._get_attribute_executor()
-
-        # FIX 2026-01-18: AttributeFilterExecutor.combine_with_old_subset() only takes
-        # the expression parameter - other values are stored in the executor instance
-        return executor.combine_with_old_subset(expression)
+        """Combine with old subset. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.combine_with_old_subset(expression)
 
     def _build_feature_id_expression(self, features_list):
-        """
-        Build expression from feature IDs.
-
-        Phase E13: Delegates to AttributeFilterExecutor.
-
-        FIX 2026-01-15: AttributeFilterExecutor.build_feature_id_expression()
-        only accepts features_list and is_numeric. Other parameters come from
-        the executor's constructor (stored in self).
-        """
-        executor = self._get_attribute_executor()
-
-        result = executor.build_feature_id_expression(
-            features_list=features_list,
-            is_numeric=self.task_parameters["infos"]["primary_key_is_numeric"]
-        )
-
-        # FIX 2026-01-16: Log expression to diagnose WHERE prefix
-        logger.info(f"🔍 _build_feature_id_expression result: '{result[:100] if result else None}...'")
-        if result and result.strip().startswith('WHERE'):
-            logger.error("❌ BUG: Expression starts with WHERE! Should NOT have WHERE prefix for setSubsetString")
-
-        return result
+        """Build feature ID expression. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.build_feature_id_expression(features_list)
 
     def _is_pk_numeric(self, layer=None, pk_field=None):
-        """Check if the primary key field is numeric. Delegated to pg_executor."""
-        check_layer = layer or self.source_layer
-        check_pk = pk_field or getattr(self, 'primary_key_name', None)
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor._is_pk_numeric(check_layer, check_pk)
-        return True  # Default assumption
+        """Check if PK is numeric. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.is_pk_numeric(layer, pk_field)
 
     def _format_pk_values_for_sql(self, values, is_numeric=None, layer=None, pk_field=None):
-        """Format primary key values for SQL IN clause. Delegated to pg_executor."""
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.format_pk_values_for_sql(values, is_numeric, layer, pk_field)
-        # Minimal fallback for non-PostgreSQL
-        if not values:
-            return ''
-        return ', '.join(str(v) for v in values)
+        """Format PK values for SQL. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.format_pk_values_for_sql(values, is_numeric, layer, pk_field)
 
     def _optimize_duplicate_in_clauses(self, expression):
-        """Delegates to core.filter.expression_sanitizer.optimize_duplicate_in_clauses()."""
-        from ..filter.expression_sanitizer import optimize_duplicate_in_clauses
-
-        return optimize_duplicate_in_clauses(expression)
+        """Optimize duplicate IN clauses. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.optimize_duplicate_in_clauses(expression)
 
     def _apply_filter_and_update_subset(self, expression):
-        """
-        Queue filter expression for application on main thread.
-
-        CRITICAL: setSubsetString must be called from main thread to avoid
-        access violation crashes. This method now only queues the expression
-        for application in finished() which runs on the main thread.
-
-        Returns:
-            bool: True if expression was queued successfully
-        """
-        # Apply type casting for PostgreSQL to fix varchar/numeric comparison issues
-        # Use param_source_provider_type instead of providerType()
-        # providerType() returns 'postgres' even when using OGR fallback (psycopg2 unavailable)
-        # param_source_provider_type correctly accounts for OGR fallback
-        if self.param_source_provider_type == PROVIDER_POSTGRES:
-            expression = self._apply_postgresql_type_casting(expression, self.source_layer)
-
-        # Do NOT call setSubsetString from worker thread!
-        # This causes "access violation" crashes on Windows because QGIS layer
-        # operations are not thread-safe.
-        # Instead, queue the expression for application in finished() which
-        # runs on the main Qt thread.
-
-        # Queue source layer for filter application in finished()
-        if hasattr(self, '_pending_subset_requests'):
-            self._pending_subset_requests.append((self.source_layer, expression))
-            logger.info(f"Queued source layer {self.source_layer.name()} for filter application in finished()")
-
-        # Only build PostgreSQL SELECT for PostgreSQL providers
-        # OGR and Spatialite use subset strings directly
-        # Use param_source_provider_type instead of providerType()
-        # providerType() returns 'postgres' even when using OGR fallback
-        if self.param_source_provider_type == PROVIDER_POSTGRES:
-            # FIX 2026-01-16: Strip leading "WHERE " from expression to prevent "WHERE WHERE" syntax error
-            clean_expression = expression.lstrip()
-            if clean_expression.upper().startswith('WHERE '):
-                clean_expression = clean_expression[6:].lstrip()
-                logger.debug("Stripped WHERE prefix from expression in _apply_filter_and_update_subset")
-
-            # Build full SELECT expression for subset management (PostgreSQL only)
-            full_expression = (
-                f'SELECT "{self.param_source_table}"."{self.primary_key_name}", '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
-                f'"{self.param_source_table}"."{self.param_source_geom}" '
-                f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
-                f'WHERE {clean_expression}'
-            )
-            self.manage_layer_subset_strings(
-                self.source_layer,
-                full_expression,
-                self.primary_key_name,
-                self.param_source_geom,
-                False
-            )
-
-        # Return True to indicate expression was queued successfully
-        return True
+        """Queue filter expression for main thread. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.apply_filter_and_update_subset(expression)
 
     def execute_source_layer_filtering(self) -> bool:
         """
@@ -2121,91 +1995,20 @@ class FilterEngineTask(QgsTask):
         )
 
     def _normalize_column_names_for_postgresql(self, expression, field_names):
-        """
-        Normalize column names in expression to match actual PostgreSQL column names.
-
-        v4.7 E6-S1: Pure delegation to pg_executor.normalize_column_names_for_postgresql (legacy fallback removed).
-        """
-        if not PG_EXECUTOR_AVAILABLE:
-            raise ImportError("pg_executor module not available - cannot normalize column names for PostgreSQL")
-
-        return pg_executor.normalize_column_names_for_postgresql(expression, field_names)
+        """Normalize column names for PostgreSQL. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.normalize_column_names_for_postgresql(expression, field_names)
 
     def _qualify_field_names_in_expression(self, expression, field_names, primary_key_name, table_name, is_postgresql):
-        """
-        Qualify field names with table prefix for PostgreSQL/Spatialite expressions.
-
-        EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.filter.expression_builder.
-
-        Args:
-            expression: Raw QGIS expression string
-            field_names: List of field names to qualify
-            primary_key_name: Primary key field name
-            table_name: Source table name
-            is_postgresql: Whether target is PostgreSQL (True) or other provider (False)
-
-        Returns:
-            str: Expression with qualified field names
-        """
-        from ..filter.expression_builder import qualify_field_names_in_expression
-
-        return qualify_field_names_in_expression(
-            expression=expression,
-            field_names=field_names,
-            primary_key_name=primary_key_name,
-            table_name=table_name,
-            is_postgresql=is_postgresql,
-            provider_type=self.param_source_provider_type,
-            normalize_columns_fn=self._normalize_column_names_for_postgresql if is_postgresql else None
+        """Qualify field names in expression. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.qualify_field_names_in_expression(
+            expression, field_names, primary_key_name, table_name, is_postgresql
         )
 
     def _build_combined_filter_expression(self, new_expression, old_subset, combine_operator, layer_props=None):
-        """
-        Combine new filter expression with existing subset using specified operator.
-
-        Phase E13 Step 4: Delegates to SubsetStringBuilder.combine_expressions().
-
-        OPTIMIZATION v2.8.0: Uses CombinedQueryOptimizer to detect and reuse
-        materialized views from previous filter operations, providing 10-50x
-        speedup for successive filters on large datasets.
-
-        v2.9.0: Creates source MV with pre-computed buffer when FID count exceeds
-        SOURCE_FID_MV_THRESHOLD (50), providing up to 20x additional speedup.
-
-        Args:
-            new_expression: New filter expression to apply
-            old_subset: Existing subset string from layer
-            combine_operator: SQL operator ('AND', 'OR', 'NOT')
-            layer_props: Optional layer properties for optimization context
-
-        Returns:
-            str: Combined filter expression (optimized when possible)
-        """
-        builder = self._get_subset_builder()
-        result = builder.combine_expressions(
-            new_expression=new_expression,
-            old_subset=old_subset,
-            combine_operator=combine_operator,
-            layer_props=layer_props
+        """Build combined filter expression. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.build_combined_filter_expression(
+            new_expression, old_subset, combine_operator, layer_props
         )
-
-        # Handle source MV creation (kept here as it's task-specific)
-        # The builder returns optimization info but doesn't create MVs
-        if result.optimization_applied:
-            try:
-                optimizer = get_combined_query_optimizer()
-                opt_result = optimizer.optimize_combined_expression(
-                    old_subset=self._sanitize_subset_string(old_subset) if old_subset else "",
-                    new_expression=new_expression,
-                    combine_operator=combine_operator,
-                    layer_props=layer_props
-                )
-                if opt_result.success and hasattr(opt_result, 'source_mv_info') and opt_result.source_mv_info is not None:
-                    self._create_source_mv_if_needed(opt_result.source_mv_info)
-            except (AttributeError, ValueError, RuntimeError) as e:
-                logger.debug(f"MV creation skipped: {e}")
-
-        return result.expression
 
     def _create_source_mv_if_needed(self, source_mv_info):
         """Create source materialized view with pre-computed buffer. Delegates to MaterializedViewHandler."""
