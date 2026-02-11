@@ -653,10 +653,41 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e: logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
 
     def _fix_toolbox_icons(self):
-        """v4.0 S18: Fix toolBox_tabTools icons with absolute paths."""
-        for idx, icon_file in {0: "filter_multi.png", 1: "save.png", 2: "parameters.png"}.items():
+        """Fix icons for both QToolBox widgets with absolute paths.
+
+        _toolBox_exploring (created later in _setup_exploring_as_toolbox_pages):
+        0: EXPLORING VECTOR  -> identify.png
+        1: EXPLORING RASTER  -> layer.png
+
+        toolBox_tabTools (original, unchanged):
+        0: FILTERING         -> filter_multi.png
+        1: EXPORTING         -> save.png
+        2: CONFIGURATION     -> parameters.png
+        """
+        # toolBox_tabTools icons (always present at this point)
+        toolset_icon_map = {
+            0: "filter_multi.png",
+            1: "save.png",
+            2: "parameters.png",
+        }
+        for idx, icon_file in toolset_icon_map.items():
             p = os.path.join(self.plugin_dir, "icons", icon_file)
-            if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p))
+            if os.path.exists(p):
+                icon = get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p)
+                self.toolBox_tabTools.setItemIcon(idx, icon)
+
+        # _toolBox_exploring icons (may not exist yet at first call)
+        exploring_tb = getattr(self, '_toolBox_exploring', None)
+        if exploring_tb is not None:
+            exploring_icon_map = {
+                0: "identify.png",
+                1: "layer.png",
+            }
+            for idx, icon_file in exploring_icon_map.items():
+                p = os.path.join(self.plugin_dir, "icons", icon_file)
+                if os.path.exists(p):
+                    icon = get_themed_icon(p) if ICON_THEME_AVAILABLE else QtGui.QIcon(p)
+                    exploring_tb.setItemIcon(idx, icon)
 
     def setupUiCustom(self) -> None:
         """Initialize custom UI components and configuration.
@@ -712,7 +743,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._setup_backend_indicator()
         self._setup_action_bar_layout()
         self._setup_exploring_tab_widgets()
-        self._setup_dual_mode_exploring()
+        self._setup_exploring_as_toolbox_pages()
+        self._fix_toolbox_icons()  # Re-apply: now _toolBox_exploring exists
         self._setup_filtering_tab_widgets()
         self._setup_exporting_tab_widgets()
         if 'CURRENT_PROJECT' in self.CONFIG_DATA:
@@ -1600,63 +1632,272 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if self._configuration_manager:
             self._configuration_manager.setup_exploring_tab_widgets()
 
-    def _setup_dual_mode_exploring(self):
-        """Phase 0: Create QStackedWidget for Vector/Raster dual mode in Exploring panel.
+    def _setup_exploring_as_toolbox_pages(self):
+        """Phase A: Create EXPLORING VECTOR and EXPLORING RASTER in a dedicated QToolBox.
 
-        Wraps existing vector groupboxes in page 0, creates raster placeholder in page 1.
-        Adds DualModeToggle to the top of frame_exploring (above scrollArea).
-        Wires auto-detection: selecting a raster layer in QGIS switches to raster mode.
+        Creates a NEW QToolBox (_toolBox_exploring) inside frame_exploring:
+        - Page 0: EXPLORING VECTOR (reparented widget_exploring_keys + vector GroupBoxes)
+        - Page 1: EXPLORING RASTER (new raster keys + raster GroupBoxes)
+        toolBox_tabTools remains unchanged (FILTERING=0, EXPORTING=1, CONFIGURATION=2).
+        The QSplitter keeps 2 visible children: frame_exploring and frame_toolset.
         """
         try:
-            from .ui.widgets.dual_mode_toggle import DualModeToggle, DualMode
+            from qgis.gui import QgsCollapsibleGroupBox
+        except ImportError:
+            QgsCollapsibleGroupBox = None
 
-            # -- 1. Create the stacked widget --
-            self._stacked_exploring = QtWidgets.QStackedWidget()
-            self._stacked_exploring.setObjectName("stacked_exploring")
-
-            # -- 2. Page 0: Vector (move existing groupboxes) --
+        try:
+            # ================================================================
+            # PAGE 0: EXPLORING VECTOR
+            # ================================================================
             page_vector = QtWidgets.QWidget()
             page_vector.setObjectName("page_exploring_vector")
-            layout_vector = QtWidgets.QVBoxLayout(page_vector)
-            layout_vector.setContentsMargins(0, 0, 0, 0)
-            layout_vector.setSpacing(2)
+            page_vector_layout = QtWidgets.QHBoxLayout(page_vector)
+            page_vector_layout.setContentsMargins(2, 2, 2, 2)
+            page_vector_layout.setSpacing(4)
 
-            # Collect all items from the existing verticalLayout_exploring_tabs_content
-            vector_widgets = []
-            while self.verticalLayout_exploring_tabs_content.count():
-                item = self.verticalLayout_exploring_tabs_content.takeAt(0)
-                if item.widget():
-                    vector_widgets.append(item.widget())
-                elif item.spacerItem():
-                    vector_widgets.append(item.spacerItem())
+            # -- Left column: reparent widget_exploring_keys --
+            if hasattr(self, 'widget_exploring_keys') and self.widget_exploring_keys:
+                self.widget_exploring_keys.setParent(page_vector)
+                page_vector_layout.addWidget(self.widget_exploring_keys)
 
-            for w in vector_widgets:
-                if isinstance(w, QtWidgets.QWidget):
-                    layout_vector.addWidget(w)
-                else:
-                    # Spacer items
-                    layout_vector.addSpacerItem(w)
+                # Reparent auto_current_layer button to vector keys (last position)
+                if hasattr(self, 'pushButton_checkable_filtering_auto_current_layer'):
+                    auto_btn = self.pushButton_checkable_filtering_auto_current_layer
+                    auto_btn.setParent(self.widget_exploring_keys)
+                    if hasattr(self, 'verticalLayout_exploring_content'):
+                        self.verticalLayout_exploring_content.addWidget(
+                            auto_btn, 0, QtCore.Qt.AlignHCenter
+                        )
 
-            layout_vector.addStretch()
-            self._stacked_exploring.addWidget(page_vector)
+            # -- Right column: header combo + scroll area with GroupBoxes --
+            right_vector = QtWidgets.QWidget()
+            right_vector_layout = QtWidgets.QVBoxLayout(right_vector)
+            right_vector_layout.setContentsMargins(0, 0, 0, 0)
+            right_vector_layout.setSpacing(4)
 
-            # -- 3. Page 1: Raster (Phase 1 - Layer Info + Value Sampling) --
+            # Header: QgsMapLayerComboBox filtered to VectorLayer
+            try:
+                from qgis.gui import QgsMapLayerComboBox
+                self._combo_exploring_vector_layer = QgsMapLayerComboBox()
+                self._combo_exploring_vector_layer.setObjectName(
+                    "combo_exploring_vector_layer"
+                )
+                try:
+                    from qgis.gui import QgsMapLayerProxyModel as GuiProxy
+                    self._combo_exploring_vector_layer.setFilters(
+                        GuiProxy.VectorLayer
+                    )
+                except ImportError:
+                    self._combo_exploring_vector_layer.setFilters(
+                        QgsMapLayerProxyModel.VectorLayer
+                    )
+            except ImportError:
+                self._combo_exploring_vector_layer = QtWidgets.QComboBox()
+                self._combo_exploring_vector_layer.setObjectName(
+                    "combo_exploring_vector_layer"
+                )
+            right_vector_layout.addWidget(self._combo_exploring_vector_layer)
+
+            # Scroll area for vector GroupBoxes
+            scroll_vector = QtWidgets.QScrollArea()
+            scroll_vector.setObjectName("scrollArea_exploring_vector")
+            scroll_vector.setWidgetResizable(True)
+            scroll_vector.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarAlwaysOff
+            )
+
+            scroll_vector_content = QtWidgets.QWidget()
+            scroll_vector_content.setObjectName(
+                "scrollAreaWidgetContents_exploring_vector"
+            )
+            scroll_vector_content_layout = QtWidgets.QVBoxLayout(
+                scroll_vector_content
+            )
+            scroll_vector_content_layout.setContentsMargins(0, 0, 0, 0)
+            scroll_vector_content_layout.setSpacing(2)
+
+            # Reparent the 3 existing vector GroupBoxes
+            for gb_name in [
+                'mGroupBox_exploring_single_selection',
+                'mGroupBox_exploring_multiple_selection',
+                'mGroupBox_exploring_custom_selection',
+            ]:
+                gb = getattr(self, gb_name, None)
+                if gb is not None:
+                    gb.setParent(scroll_vector_content)
+                    scroll_vector_content_layout.addWidget(gb)
+
+            scroll_vector_content_layout.addStretch()
+            scroll_vector.setWidget(scroll_vector_content)
+            right_vector_layout.addWidget(scroll_vector)
+
+            page_vector_layout.addWidget(right_vector, 1)
+
+            # Store page_vector for later addition to _toolBox_exploring
+            self._page_exploring_vector = page_vector
+
+            # ================================================================
+            # PAGE 1: EXPLORING RASTER
+            # ================================================================
             page_raster = QtWidgets.QWidget()
             page_raster.setObjectName("page_exploring_raster")
-            layout_raster = QtWidgets.QVBoxLayout(page_raster)
-            layout_raster.setContentsMargins(4, 4, 4, 4)
-            layout_raster.setSpacing(4)
+            page_raster_layout = QtWidgets.QHBoxLayout(page_raster)
+            page_raster_layout.setContentsMargins(2, 2, 2, 2)
+            page_raster_layout.setSpacing(4)
 
-            # --- GroupBox 1: LAYER INFO (always expanded) ---
-            self.mGroupBox_raster_layer_info = QtWidgets.QGroupBox(
-                self.tr("Layer Info")
+            # -- Left column: raster keys buttons --
+            raster_keys = QtWidgets.QWidget()
+            raster_keys.setObjectName("widget_exploring_raster_keys")
+            raster_keys.setSizePolicy(
+                QtWidgets.QSizePolicy.Fixed,
+                QtWidgets.QSizePolicy.Preferred
             )
-            self.mGroupBox_raster_layer_info.setObjectName("mGroupBox_raster_layer_info")
-            info_layout = QtWidgets.QFormLayout(self.mGroupBox_raster_layer_info)
-            info_layout.setContentsMargins(6, 6, 6, 6)
+            raster_keys.setMinimumSize(38, 60)
+            raster_keys.setMaximumWidth(48)
+            raster_keys_layout = QtWidgets.QVBoxLayout(raster_keys)
+            raster_keys_layout.setContentsMargins(1, 1, 1, 2)
+            raster_keys_layout.setSpacing(1)
+
+            # Raster key buttons: INFO, SMPL, HIST, BAND, AUTO
+            raster_key_defs = [
+                ("btn_raster_key_info", "INFO", self.tr("Layer Info")),
+                ("btn_raster_key_sampling", "SMPL", self.tr("Value Sampling")),
+                ("btn_raster_key_histogram", "HIST", self.tr("Histogram")),
+                ("btn_raster_key_band", "BAND", self.tr("Band Viewer")),
+                ("btn_raster_key_auto", "AUTO", self.tr("Auto current layer")),
+            ]
+            self._raster_key_buttons = {}
+            for obj_name, label, tooltip in raster_key_defs:
+                btn = QtWidgets.QPushButton(label)
+                btn.setObjectName(obj_name)
+                btn.setToolTip(tooltip)
+                # AUTO button is checkable, others are not
+                btn.setCheckable(obj_name == "btn_raster_key_auto")
+                btn.setFlat(True)
+                btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+                btn.setSizePolicy(
+                    QtWidgets.QSizePolicy.Fixed,
+                    QtWidgets.QSizePolicy.Preferred
+                )
+                font = QtGui.QFont("Segoe UI", 10, QtGui.QFont.Bold)
+                btn.setFont(font)
+                btn.setIconSize(QtCore.QSize(16, 16))
+                raster_keys_layout.addWidget(
+                    btn, 0, QtCore.Qt.AlignHCenter
+                )
+                self._raster_key_buttons[obj_name] = btn
+
+            raster_keys_layout.addStretch()
+            page_raster_layout.addWidget(raster_keys)
+
+            # -- Sync raster AUTO button with original auto_current_layer --
+            raster_auto_btn = self._raster_key_buttons.get(
+                "btn_raster_key_auto"
+            )
+            original_auto_btn = getattr(
+                self,
+                'pushButton_checkable_filtering_auto_current_layer',
+                None
+            )
+            if raster_auto_btn and original_auto_btn:
+                # Initialize raster AUTO to match original state
+                raster_auto_btn.blockSignals(True)
+                raster_auto_btn.setChecked(original_auto_btn.isChecked())
+                raster_auto_btn.blockSignals(False)
+
+                # Bi-directional sync: raster AUTO -> original
+                raster_auto_btn.toggled.connect(
+                    self._on_raster_auto_current_layer_toggled
+                )
+                # Bi-directional sync: original -> raster AUTO
+                original_auto_btn.toggled.connect(
+                    self._on_vector_auto_current_layer_toggled
+                )
+
+            # -- Right column: header combo + scroll area with raster GroupBoxes --
+            right_raster = QtWidgets.QWidget()
+            right_raster_layout = QtWidgets.QVBoxLayout(right_raster)
+            right_raster_layout.setContentsMargins(0, 0, 0, 0)
+            right_raster_layout.setSpacing(4)
+
+            # Header: QgsMapLayerComboBox filtered to RasterLayer
+            try:
+                from qgis.gui import QgsMapLayerComboBox
+                self._combo_exploring_raster_layer = QgsMapLayerComboBox()
+                self._combo_exploring_raster_layer.setObjectName(
+                    "combo_exploring_raster_layer"
+                )
+                try:
+                    from qgis.gui import QgsMapLayerProxyModel as GuiProxy
+                    self._combo_exploring_raster_layer.setFilters(
+                        GuiProxy.RasterLayer
+                    )
+                except ImportError:
+                    self._combo_exploring_raster_layer.setFilters(
+                        QgsMapLayerProxyModel.RasterLayer
+                    )
+            except ImportError:
+                self._combo_exploring_raster_layer = QtWidgets.QComboBox()
+                self._combo_exploring_raster_layer.setObjectName(
+                    "combo_exploring_raster_layer"
+                )
+            right_raster_layout.addWidget(self._combo_exploring_raster_layer)
+
+            # Scroll area for raster GroupBoxes
+            self._scroll_area_raster = QtWidgets.QScrollArea()
+            self._scroll_area_raster.setObjectName("scrollArea_exploring_raster")
+            self._scroll_area_raster.setWidgetResizable(True)
+            self._scroll_area_raster.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarAlwaysOff
+            )
+
+            scroll_raster_content = QtWidgets.QWidget()
+            scroll_raster_content.setObjectName(
+                "scrollAreaWidgetContents_exploring_raster"
+            )
+            scroll_raster_content_layout = QtWidgets.QVBoxLayout(
+                scroll_raster_content
+            )
+            scroll_raster_content_layout.setContentsMargins(0, 0, 0, 0)
+            scroll_raster_content_layout.setSpacing(2)
+
+            # Helper to create QgsCollapsibleGroupBox with standard properties
+            def _make_raster_groupbox(title, object_name):
+                """Create a QgsCollapsibleGroupBox matching the vector GroupBox style."""
+                if QgsCollapsibleGroupBox is not None:
+                    gb = QgsCollapsibleGroupBox(title)
+                    gb.setProperty("saveCollapsedState", True)
+                    gb.setProperty("saveCheckedState", True)
+                else:
+                    gb = QtWidgets.QGroupBox(title)
+                gb.setObjectName(object_name)
+                font = QtGui.QFont("Segoe UI Semibold", 10)
+                font.setBold(True)
+                gb.setFont(font)
+                gb.setCursor(
+                    QtGui.QCursor(QtCore.Qt.PointingHandCursor)
+                )
+                gb.setAlignment(
+                    QtCore.Qt.AlignRight
+                    | QtCore.Qt.AlignTrailing
+                    | QtCore.Qt.AlignVCenter
+                )
+                gb.setFlat(True)
+                gb.setCheckable(True)
+                gb.setChecked(True)
+                return gb
+
+            # --- GroupBox 1: LAYER INFO ---
+            self.mGroupBox_raster_layer_info = _make_raster_groupbox(
+                self.tr("LAYER INFO"), "mGroupBox_raster_layer_info"
+            )
+            info_layout = QtWidgets.QFormLayout(
+                self.mGroupBox_raster_layer_info
+            )
+            info_layout.setContentsMargins(8, 8, 8, 8)
             info_layout.setSpacing(4)
 
-            # Layer info labels
             self._lbl_raster_name = QtWidgets.QLabel("-")
             self._lbl_raster_name.setWordWrap(True)
             info_layout.addRow(self.tr("Name:"), self._lbl_raster_name)
@@ -1678,21 +1919,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._lbl_raster_extent.setWordWrap(True)
             info_layout.addRow(self.tr("Extent:"), self._lbl_raster_extent)
 
-            layout_raster.addWidget(self.mGroupBox_raster_layer_info)
+            scroll_raster_content_layout.addWidget(
+                self.mGroupBox_raster_layer_info
+            )
 
-            # --- GroupBox 2: VALUE SAMPLING (collapsible) ---
-            self.mGroupBox_raster_value_sampling = QtWidgets.QGroupBox(
-                self.tr("Value Sampling")
+            # --- GroupBox 2: VALUE SAMPLING ---
+            self.mGroupBox_raster_value_sampling = _make_raster_groupbox(
+                self.tr("VALUE SAMPLING"), "mGroupBox_raster_value_sampling"
             )
-            self.mGroupBox_raster_value_sampling.setObjectName(
-                "mGroupBox_raster_value_sampling"
-            )
-            self.mGroupBox_raster_value_sampling.setCheckable(True)
-            self.mGroupBox_raster_value_sampling.setChecked(True)
             sampling_layout = QtWidgets.QFormLayout(
                 self.mGroupBox_raster_value_sampling
             )
-            sampling_layout.setContentsMargins(6, 6, 6, 6)
+            sampling_layout.setContentsMargins(8, 8, 8, 8)
             sampling_layout.setSpacing(4)
 
             # Raster layer combo (raster only)
@@ -1700,7 +1938,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 from qgis.gui import QgsMapLayerComboBox
                 self._combo_raster_layer = QgsMapLayerComboBox()
                 self._combo_raster_layer.setObjectName("combo_raster_layer")
-                # Filter to show only raster layers
                 try:
                     from qgis.gui import QgsMapLayerProxyModel as GuiProxy
                     self._combo_raster_layer.setFilters(GuiProxy.RasterLayer)
@@ -1724,7 +1961,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             try:
                 from qgis.gui import QgsMapLayerComboBox
                 self._combo_sampling_vector = QgsMapLayerComboBox()
-                self._combo_sampling_vector.setObjectName("combo_sampling_vector")
+                self._combo_sampling_vector.setObjectName(
+                    "combo_sampling_vector"
+                )
                 try:
                     from qgis.gui import QgsMapLayerProxyModel as GuiProxy
                     self._combo_sampling_vector.setFilters(
@@ -1740,7 +1979,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                     )
             except ImportError:
                 self._combo_sampling_vector = QtWidgets.QComboBox()
-                self._combo_sampling_vector.setObjectName("combo_sampling_vector")
+                self._combo_sampling_vector.setObjectName(
+                    "combo_sampling_vector"
+                )
             sampling_layout.addRow(
                 self.tr("Vector layer:"), self._combo_sampling_vector
             )
@@ -1775,7 +2016,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._combo_raster_operator.addItem("<", "<")
             self._combo_raster_operator.addItem("<=", "<=")
             self._combo_raster_operator.addItem("BETWEEN", "BETWEEN")
-            # Default to >=
             self._combo_raster_operator.setCurrentIndex(3)
             operator_threshold_layout.addWidget(self._combo_raster_operator)
 
@@ -1798,7 +2038,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._spin_raster_threshold_max.setRange(-1e12, 1e12)
             self._spin_raster_threshold_max.setValue(0.0)
             self._spin_raster_threshold_max.setVisible(False)
-            operator_threshold_layout.addWidget(self._spin_raster_threshold_max)
+            operator_threshold_layout.addWidget(
+                self._spin_raster_threshold_max
+            )
 
             sampling_layout.addRow(
                 self.tr("Filter:"), operator_threshold_widget
@@ -1820,7 +2062,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             )
             self._btn_raster_sample.setObjectName("btn_raster_sample")
             self._btn_raster_sample.setToolTip(
-                self.tr("Sample raster values at vector feature locations")
+                self.tr(
+                    "Sample raster values at vector feature locations"
+                )
             )
             buttons_layout.addWidget(self._btn_raster_sample)
 
@@ -1831,7 +2075,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 "btn_raster_apply_filter"
             )
             self._btn_raster_apply_filter.setToolTip(
-                self.tr("Select features matching the raster value criteria")
+                self.tr(
+                    "Select features matching the raster value criteria"
+                )
             )
             self._btn_raster_apply_filter.setEnabled(False)
             buttons_layout.addWidget(self._btn_raster_apply_filter)
@@ -1856,21 +2102,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._progress_raster_sampling.setTextVisible(True)
             sampling_layout.addRow(self._progress_raster_sampling)
 
-            layout_raster.addWidget(self.mGroupBox_raster_value_sampling)
+            scroll_raster_content_layout.addWidget(
+                self.mGroupBox_raster_value_sampling
+            )
 
-            # --- GroupBox 3: HISTOGRAM (collapsible, Phase 2) ---
-            self.mGroupBox_raster_histogram = QtWidgets.QGroupBox(
-                self.tr("Histogram")
+            # --- GroupBox 3: HISTOGRAM ---
+            self.mGroupBox_raster_histogram = _make_raster_groupbox(
+                self.tr("HISTOGRAM"), "mGroupBox_raster_histogram"
             )
-            self.mGroupBox_raster_histogram.setObjectName(
-                "mGroupBox_raster_histogram"
-            )
-            self.mGroupBox_raster_histogram.setCheckable(True)
-            self.mGroupBox_raster_histogram.setChecked(True)
             histogram_layout = QtWidgets.QVBoxLayout(
                 self.mGroupBox_raster_histogram
             )
-            histogram_layout.setContentsMargins(6, 6, 6, 6)
+            histogram_layout.setContentsMargins(8, 8, 8, 8)
             histogram_layout.setSpacing(4)
 
             # Row: Band + Bins combos
@@ -1893,7 +2136,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._combo_histogram_bins.setObjectName("combo_histogram_bins")
             for n_bins in (64, 128, 256, 512):
                 self._combo_histogram_bins.addItem(str(n_bins), n_bins)
-            # Default to 256
             self._combo_histogram_bins.setCurrentIndex(2)
             hist_params_layout.addWidget(self._combo_histogram_bins)
 
@@ -1974,21 +2216,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._btn_histogram_apply_filter.setEnabled(False)
             histogram_layout.addWidget(self._btn_histogram_apply_filter)
 
-            layout_raster.addWidget(self.mGroupBox_raster_histogram)
+            scroll_raster_content_layout.addWidget(
+                self.mGroupBox_raster_histogram
+            )
 
-            # --- GroupBox 6: BAND VIEWER (collapsible, Phase 2) ---
-            self.mGroupBox_raster_band_viewer = QtWidgets.QGroupBox(
-                self.tr("Band Viewer")
+            # --- GroupBox 4: BAND VIEWER ---
+            self.mGroupBox_raster_band_viewer = _make_raster_groupbox(
+                self.tr("BAND VIEWER"), "mGroupBox_raster_band_viewer"
             )
-            self.mGroupBox_raster_band_viewer.setObjectName(
-                "mGroupBox_raster_band_viewer"
-            )
-            self.mGroupBox_raster_band_viewer.setCheckable(True)
-            self.mGroupBox_raster_band_viewer.setChecked(True)
             band_viewer_layout = QtWidgets.QVBoxLayout(
                 self.mGroupBox_raster_band_viewer
             )
-            band_viewer_layout.setContentsMargins(6, 6, 6, 6)
+            band_viewer_layout.setContentsMargins(8, 8, 8, 8)
             band_viewer_layout.setSpacing(4)
 
             # Band table (readonly)
@@ -1996,8 +2235,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._table_band_info.setObjectName("table_band_info")
             self._table_band_info.setColumnCount(5)
             self._table_band_info.setHorizontalHeaderLabels(
-                ["#", self.tr("Name"), self.tr("Type"),
-                 self.tr("Min"), self.tr("Max")]
+                [
+                    "#",
+                    self.tr("Name"),
+                    self.tr("Type"),
+                    self.tr("Min"),
+                    self.tr("Max"),
+                ]
             )
             self._table_band_info.setEditTriggers(
                 QtWidgets.QAbstractItemView.NoEditTriggers
@@ -2008,7 +2252,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._table_band_info.setSelectionMode(
                 QtWidgets.QAbstractItemView.SingleSelection
             )
-            self._table_band_info.horizontalHeader().setStretchLastSection(True)
+            self._table_band_info.horizontalHeader().setStretchLastSection(
+                True
+            )
             self._table_band_info.verticalHeader().setVisible(False)
             self._table_band_info.setMaximumHeight(150)
             band_viewer_layout.addWidget(self._table_band_info)
@@ -2030,17 +2276,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._btn_preset_natural.setToolTip(
                 self.tr("Natural Color (Red-Green-Blue)")
             )
-            self._btn_preset_natural.setProperty("preset_name", "natural_color")
+            self._btn_preset_natural.setProperty(
+                "preset_name", "natural_color"
+            )
             preset_btn_layout.addWidget(self._btn_preset_natural)
 
-            self._btn_preset_irc = QtWidgets.QPushButton(
-                self.tr("IRC")
-            )
+            self._btn_preset_irc = QtWidgets.QPushButton(self.tr("IRC"))
             self._btn_preset_irc.setObjectName("btn_preset_irc")
             self._btn_preset_irc.setToolTip(
                 self.tr("False Color Infrared (NIR-Red-Green)")
             )
-            self._btn_preset_irc.setProperty("preset_name", "false_color_irc")
+            self._btn_preset_irc.setProperty(
+                "preset_name", "false_color_irc"
+            )
             preset_btn_layout.addWidget(self._btn_preset_irc)
 
             self._btn_preset_ndvi = QtWidgets.QPushButton(
@@ -2058,7 +2306,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             band_viewer_layout.addWidget(preset_btn_widget)
 
             # Custom R/G/B band assignment
-            rgb_label = QtWidgets.QLabel(self.tr("Custom composition:"))
+            rgb_label = QtWidgets.QLabel(
+                self.tr("Custom composition:")
+            )
             rgb_label.setStyleSheet("font-weight: bold;")
             band_viewer_layout.addWidget(rgb_label)
 
@@ -2092,59 +2342,275 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 "btn_apply_band_composition"
             )
             self._btn_apply_band_composition.setToolTip(
-                self.tr("Apply custom R/G/B band composition to the raster")
+                self.tr(
+                    "Apply custom R/G/B band composition to the raster"
+                )
             )
             band_viewer_layout.addWidget(self._btn_apply_band_composition)
 
-            layout_raster.addWidget(self.mGroupBox_raster_band_viewer)
+            scroll_raster_content_layout.addWidget(
+                self.mGroupBox_raster_band_viewer
+            )
 
-            layout_raster.addStretch()
-            self._stacked_exploring.addWidget(page_raster)
+            scroll_raster_content_layout.addStretch()
+            self._scroll_area_raster.setWidget(scroll_raster_content)
+            right_raster_layout.addWidget(self._scroll_area_raster)
 
-            # -- 4. Insert stacked widget into the existing layout --
-            self.verticalLayout_exploring_tabs_content.addWidget(self._stacked_exploring)
+            page_raster_layout.addWidget(right_raster, 1)
 
-            # -- 5. Create toggle and insert at top of frame_exploring --
-            self._dual_mode_toggle = DualModeToggle(self)
-            self.verticalLayout_main_content.insertWidget(0, self._dual_mode_toggle)
+            # -- Connect raster key buttons to scroll to GroupBoxes --
+            _raster_scroll_map = {
+                "btn_raster_key_info": self.mGroupBox_raster_layer_info,
+                "btn_raster_key_sampling": self.mGroupBox_raster_value_sampling,
+                "btn_raster_key_histogram": self.mGroupBox_raster_histogram,
+                "btn_raster_key_band": self.mGroupBox_raster_band_viewer,
+            }
+            for btn_name, groupbox in _raster_scroll_map.items():
+                btn = self._raster_key_buttons.get(btn_name)
+                if btn:
+                    # Use default argument to capture groupbox in closure
+                    btn.clicked.connect(
+                        lambda checked, gb=groupbox:
+                            self._scroll_to_raster_groupbox(gb)
+                    )
 
-            # -- 6. Wire toggle -> stacked widget --
-            self._dual_mode_toggle.modeChanged.connect(self._stacked_exploring.setCurrentIndex)
+            # ================================================================
+            # Create dedicated QToolBox for exploring pages
+            # ================================================================
+            self._toolBox_exploring = QtWidgets.QToolBox()
+            self._toolBox_exploring.setObjectName("toolBox_exploring")
+            self._toolBox_exploring.addItem(
+                self._page_exploring_vector, self.tr("EXPLORING VECTOR")
+            )
+            self._toolBox_exploring.addItem(
+                page_raster, self.tr("EXPLORING RASTER")
+            )
 
-            # -- 7. Wire QGIS layer tree auto-detection --
+            # ================================================================
+            # Insert _toolBox_exploring into frame_exploring
+            # ================================================================
+            # frame_exploring is a QSplitter child — reuse it as container
+            existing_layout = self.frame_exploring.layout()
+            if existing_layout is not None:
+                # Clear existing layout contents (old exploring widgets)
+                while existing_layout.count():
+                    item = existing_layout.takeAt(0)
+                    widget = item.widget()
+                    if widget is not None:
+                        widget.hide()
+                existing_layout.addWidget(self._toolBox_exploring)
+            else:
+                layout = QtWidgets.QVBoxLayout(self.frame_exploring)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(0)
+                layout.addWidget(self._toolBox_exploring)
+
+            # Ensure frame_exploring is visible (it IS the splitter's first child)
+            self.frame_exploring.show()
+
+            # ================================================================
+            # Phase C: Connect exploring header combos for sync
+            # ================================================================
+            # Vector header combo -> filtering combo sync
+            if hasattr(self._combo_exploring_vector_layer, 'layerChanged'):
+                self._combo_exploring_vector_layer.layerChanged.connect(
+                    self._on_exploring_vector_combo_changed
+                )
+                logger.debug(
+                    "ExploringPages: connected "
+                    "_combo_exploring_vector_layer.layerChanged"
+                )
+
+            # Wire QGIS layer tree auto-detection
             try:
                 from qgis.utils import iface as qgis_iface
                 if qgis_iface and hasattr(qgis_iface, 'layerTreeView'):
                     tree_view = qgis_iface.layerTreeView()
                     if tree_view:
-                        tree_view.currentLayerChanged.connect(self._on_dual_mode_layer_changed)
-                        logger.debug("DualMode: connected layerTreeView.currentLayerChanged")
+                        tree_view.currentLayerChanged.connect(
+                            self._on_dual_mode_layer_changed
+                        )
+                        logger.debug(
+                            "ExploringPages: connected "
+                            "layerTreeView.currentLayerChanged"
+                        )
             except Exception as e:
-                logger.debug(f"DualMode: could not connect layerTreeView signal: {e}")
+                logger.debug(
+                    f"ExploringPages: could not connect "
+                    f"layerTreeView signal: {e}"
+                )
 
-            # Default to vector
-            self._stacked_exploring.setCurrentIndex(DualMode.VECTOR)
-            logger.info("DualMode: dual mode exploring setup complete (Phase 2 - Histogram + Band Viewer)")
+            # Default to EXPLORING VECTOR page
+            self._toolBox_exploring.setCurrentIndex(0)
+            logger.info(
+                "ExploringPages: setup complete "
+                "(dedicated toolBox_exploring created, combo sync wired)"
+            )
 
         except Exception as e:
-            logger.error(f"_setup_dual_mode_exploring failed: {e}", exc_info=True)
+            logger.error(
+                f"_setup_exploring_as_toolbox_pages failed: {e}",
+                exc_info=True
+            )
 
     def _on_dual_mode_layer_changed(self, layer):
-        """Auto-switch dual mode based on active layer type in QGIS layer tree."""
+        """Auto-switch exploring QToolBox page and sync combos based on active layer type.
+
+        Switches _toolBox_exploring between EXPLORING VECTOR (page 0) and
+        EXPLORING RASTER (page 1) based on the selected layer type.
+        Also synchronizes the header combos and filtering combo.
+        Does NOT touch toolBox_tabTools (FILTERING/EXPORTING/CONFIGURATION).
+        """
         if layer is None:
             return
         try:
+            exploring_tb = getattr(self, '_toolBox_exploring', None)
+            if exploring_tb is None:
+                return
             from qgis.core import QgsRasterLayer
-            from .ui.widgets.dual_mode_toggle import DualMode
             if isinstance(layer, QgsRasterLayer):
-                self._dual_mode_toggle.setMode(DualMode.RASTER)
+                # Switch to EXPLORING RASTER page (index 1)
+                exploring_tb.setCurrentIndex(1)
                 if self._raster_exploring_ctrl:
                     self._raster_exploring_ctrl.set_raster_layer(layer)
+                # Sync raster header combo
+                self._sync_raster_exploring_combo(layer)
             elif isinstance(layer, QgsVectorLayer):
-                self._dual_mode_toggle.setMode(DualMode.VECTOR)
-            # Other layer types (mesh, point cloud): keep current mode
+                # Switch to EXPLORING VECTOR page (index 0)
+                exploring_tb.setCurrentIndex(0)
+                # Sync vector header combo -> filtering combo
+                self._sync_vector_exploring_combo(layer)
+                self._sync_exploring_combo_to_filtering(layer)
+            # Other layer types (mesh, point cloud): keep current page
         except Exception as e:
             logger.debug(f"_on_dual_mode_layer_changed: {e}")
+
+    def _sync_vector_exploring_combo(self, layer):
+        """Sync the vector exploring header combo to the given layer.
+
+        Phase C: Updates _combo_exploring_vector_layer to reflect
+        the active vector layer selected in the layer tree.
+        Uses blockSignals to prevent signal loops.
+        """
+        try:
+            combo = getattr(self, '_combo_exploring_vector_layer', None)
+            if combo is None:
+                return
+            if hasattr(combo, 'setLayer'):
+                combo.blockSignals(True)
+                combo.setLayer(layer)
+                combo.blockSignals(False)
+        except Exception as e:
+            logger.debug(f"_sync_vector_exploring_combo: {e}")
+
+    def _sync_raster_exploring_combo(self, layer):
+        """Sync the raster exploring header combo to the given layer.
+
+        Phase C: Updates _combo_exploring_raster_layer to reflect
+        the active raster layer selected in the layer tree.
+        Uses blockSignals to prevent signal loops.
+        """
+        try:
+            combo = getattr(self, '_combo_exploring_raster_layer', None)
+            if combo is None:
+                return
+            if hasattr(combo, 'setLayer'):
+                combo.blockSignals(True)
+                combo.setLayer(layer)
+                combo.blockSignals(False)
+        except Exception as e:
+            logger.debug(f"_sync_raster_exploring_combo: {e}")
+
+    def _sync_exploring_combo_to_filtering(self, layer):
+        """Sync exploring vector combo selection -> filtering combo.
+
+        Phase C: When a vector layer is selected in the exploring
+        header combo, propagate to comboBox_filtering_current_layer.
+        Uses blockSignals to prevent infinite signal loops.
+        """
+        try:
+            combo = getattr(self, 'comboBox_filtering_current_layer', None)
+            if combo is None:
+                return
+            if hasattr(combo, 'setLayer'):
+                combo.blockSignals(True)
+                combo.setLayer(layer)
+                combo.blockSignals(False)
+            logger.debug(
+                f"_sync_exploring_combo_to_filtering: synced to "
+                f"{layer.name() if layer else 'None'}"
+            )
+        except Exception as e:
+            logger.debug(f"_sync_exploring_combo_to_filtering: {e}")
+
+    def _on_exploring_vector_combo_changed(self, layer):
+        """Handle user changing the vector exploring header combo.
+
+        Phase C: When user manually selects a different vector layer
+        in _combo_exploring_vector_layer, sync to filtering combo.
+        """
+        if layer is None:
+            return
+        try:
+            self._sync_exploring_combo_to_filtering(layer)
+        except Exception as e:
+            logger.debug(f"_on_exploring_vector_combo_changed: {e}")
+
+    def _scroll_to_raster_groupbox(self, groupbox):
+        """Scroll the raster exploring scroll area to make groupbox visible.
+
+        Phase B: Called when raster key buttons (INFO/SMPL/HIST/BAND) are clicked.
+        Expands the groupbox if it is collapsible and collapsed.
+        """
+        try:
+            if not hasattr(self, '_scroll_area_raster'):
+                return
+            # Expand the groupbox if it supports setChecked (QgsCollapsibleGroupBox)
+            if hasattr(groupbox, 'setChecked') and hasattr(groupbox, 'isChecked'):
+                if not groupbox.isChecked():
+                    groupbox.setChecked(True)
+            # Scroll to make groupbox visible
+            self._scroll_area_raster.ensureWidgetVisible(groupbox)
+        except Exception as e:
+            logger.debug(f"_scroll_to_raster_groupbox: {e}")
+
+    def _on_raster_auto_current_layer_toggled(self, checked):
+        """Sync raster AUTO key button -> original auto_current_layer button.
+
+        Phase B: When the raster AUTO button is toggled, propagate to the
+        original button and call filtering_auto_current_layer_changed().
+        Uses blockSignals to prevent infinite recursion.
+        """
+        try:
+            original_btn = getattr(
+                self,
+                'pushButton_checkable_filtering_auto_current_layer',
+                None
+            )
+            if original_btn and original_btn.isChecked() != checked:
+                original_btn.blockSignals(True)
+                original_btn.setChecked(checked)
+                original_btn.blockSignals(False)
+            self.filtering_auto_current_layer_changed(checked)
+        except Exception as e:
+            logger.debug(f"_on_raster_auto_current_layer_toggled: {e}")
+
+    def _on_vector_auto_current_layer_toggled(self, checked):
+        """Sync original auto_current_layer button -> raster AUTO key button.
+
+        Phase B: When the original button is toggled, propagate to the
+        raster AUTO button. Uses blockSignals to prevent infinite recursion.
+        """
+        try:
+            raster_auto_btn = self._raster_key_buttons.get(
+                "btn_raster_key_auto"
+            )
+            if raster_auto_btn and raster_auto_btn.isChecked() != checked:
+                raster_auto_btn.blockSignals(True)
+                raster_auto_btn.setChecked(checked)
+                raster_auto_btn.blockSignals(False)
+        except Exception as e:
+            logger.debug(f"_on_vector_auto_current_layer_toggled: {e}")
 
     def _on_raster_operator_changed(self, index):
         """Show/hide the max threshold spinbox when BETWEEN operator is selected."""
@@ -3592,9 +4058,31 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Refresh all button icons for the current theme."""
         if not ICON_THEME_AVAILABLE or not self.widgets_initialized: return
         try:
-            for idx, icon in enumerate(["filter_multi.png", "save.png", "parameters.png"]):
+            # toolBox_tabTools icons (FILTERING/EXPORTING/CONFIGURATION)
+            toolset_icons = {
+                0: "filter_multi.png",
+                1: "save.png",
+                2: "parameters.png",
+            }
+            for idx, icon in toolset_icons.items():
                 p = os.path.join(self.plugin_dir, "icons", icon)
-                if os.path.exists(p): self.toolBox_tabTools.setItemIcon(idx, get_themed_icon(p))
+                if os.path.exists(p):
+                    self.toolBox_tabTools.setItemIcon(
+                        idx, get_themed_icon(p)
+                    )
+            # _toolBox_exploring icons (EXPLORING VECTOR/RASTER)
+            exploring_tb = getattr(self, '_toolBox_exploring', None)
+            if exploring_tb is not None:
+                exploring_icons = {
+                    0: "identify.png",
+                    1: "layer.png",
+                }
+                for idx, icon in exploring_icons.items():
+                    p = os.path.join(self.plugin_dir, "icons", icon)
+                    if os.path.exists(p):
+                        exploring_tb.setItemIcon(
+                            idx, get_themed_icon(p)
+                        )
             for wg in self.widgets:
                 for wn in self.widgets[wg]:
                     wi = self.widgets[wg][wn]

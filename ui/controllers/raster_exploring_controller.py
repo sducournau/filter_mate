@@ -36,7 +36,7 @@ class RasterExploringController(BaseController):
     """Controller for the Raster Exploring panel.
 
     Phase 1: Manages Layer Info + Value Sampling groupboxes.
-    Wired to dockwidget widgets created in _setup_dual_mode_exploring().
+    Wired to dockwidget widgets created in _setup_exploring_as_toolbox_pages().
 
     Attributes:
         raster_layer_changed: Signal emitted when the active raster layer changes.

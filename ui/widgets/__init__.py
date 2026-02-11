@@ -12,7 +12,6 @@ from .custom_widgets import (  # noqa: F401
     QgsCheckableComboBoxLayer,
     QgsCheckableComboBoxFeaturesListPickerWidget
 )
-from .dual_mode_toggle import DualModeToggle, DualMode  # noqa: F401
 from .raster_histogram_widget import RasterHistogramWidget  # noqa: F401
 
 __all__ = [
@@ -23,7 +22,5 @@ __all__ = [
     'ListWidgetWrapper',
     'QgsCheckableComboBoxLayer',
     'QgsCheckableComboBoxFeaturesListPickerWidget',
-    'DualModeToggle',
-    'DualMode',
     'RasterHistogramWidget',
 ]
