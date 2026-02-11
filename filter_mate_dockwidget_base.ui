@@ -280,7 +280,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_identify">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -293,14 +293,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -352,7 +352,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_zoom">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -365,14 +365,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -424,7 +424,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_selecting">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -437,14 +437,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -508,7 +508,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_tracking">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -521,14 +521,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -592,7 +592,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_checkable_exploring_linking_widgets">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -605,14 +605,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">
@@ -676,7 +676,7 @@
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_reset_layer_properties">
                        <property name="sizePolicy">
-                        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                          <horstretch>0</horstretch>
                          <verstretch>0</verstretch>
                         </sizepolicy>
@@ -689,14 +689,14 @@
                        </property>
                        <property name="maximumSize">
                         <size>
-                         <width>16777215</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="baseSize">
                         <size>
-                         <width>0</width>
-                         <height>25</height>
+                         <width>32</width>
+                         <height>32</height>
                         </size>
                        </property>
                        <property name="font">

@@ -281,18 +281,17 @@ class DimensionsManager(LayoutManagerBase):
         # Get widget_keys padding from config (widget_keys_config already loaded above)
         widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
 
-        # Apply to widget keys containers with enhanced styling
+        # Apply to widget keys containers - no margins for compact layout
         for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self.dockwidget, widget_name):
                 widget = getattr(self.dockwidget, widget_name)
                 widget.setMinimumWidth(widget_keys_min_width)
                 widget.setMaximumWidth(widget_keys_max_width)
-                # Apply consistent padding via layout margins
+                # Zero margins on widget_keys containers
                 layout = widget.layout()
                 if layout:
-                    layout.setContentsMargins(widget_keys_padding, widget_keys_padding,
-                                            widget_keys_padding, widget_keys_padding)
-                    layout.setSpacing(0)  # No extra spacing in container
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    layout.setSpacing(0)
 
         # Apply to frame_exploring with size policy
         if hasattr(self.dockwidget, 'frame_exploring'):
