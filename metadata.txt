@@ -31,7 +31,7 @@ about=🎯 FilterMate 4.5 - Your Swiss Army Knife for Spatial Data!
     🎨 Beautiful UI that adapts to your QGIS theme
     ⚡ Filter chaining with dynamic buffer expressions
     
-    💡 v4.4.6: Latest maintenance release
+    💡 v4.5.1: Website launch, org migration, 600 unit tests, score 9.0/10
     💡 v4.4.0: Quality release - 396 unit tests, hexagonal architecture, 75%% coverage!
     
     📖 Full docs: https://imagodata.github.io/filter_mate
@@ -44,7 +44,7 @@ repository=https://github.com/imagodata/filter_mate
 
 hasProcessingProvider=no
 
-changelog=v4.4.0 (2026-01-22): Major quality release - 396 standalone unit tests, DockwidgetSignalManager extraction (778 lines), hexagonal architecture complete. Test coverage 75%%, quality score 8.5/10.
+changelog=v4.5.1 (2026-02-11): Website launch, GitHub org migration to imagodata, 600 tests, startup optimization, quality score 9.0/10. v4.4.0 (2026-01-22): Major quality release - 396 unit tests, hexagonal architecture, 75%% coverage.
 
 # Tags are comma separated with spaces allowed
 tags=python,filter,vector,layers,geofilter,search,postgis,ogr,spatialite,data,exploration,subset,export

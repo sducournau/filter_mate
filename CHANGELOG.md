@@ -6,7 +6,14 @@ All notable changes to FilterMate will be documented in this file.
 
 ### Changes
 
-- Version bump
+- Website launch at https://imagodata.github.io/filter_mate/
+- GitHub org migration: all URLs moved from sducournau to imagodata
+- 600 unit tests across 34 files (quality score 9.0/10)
+- Startup optimization for large GeoPackage projects (7 quick wins)
+- filter_task.py reduced to 2,929 lines (-50.3%), 12 extracted handlers
+- SignalBlocker context manager replaces all manual blockSignals
+- CI/CD: GitHub Actions pytest (Python 3.10 + 3.12)
+- i18n: 22 languages supported
 
 ---
 
