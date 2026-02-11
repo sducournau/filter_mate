@@ -19,6 +19,7 @@ import weakref
 
 # Import logging for error handling
 from .infrastructure.logging import get_app_logger
+from .infrastructure.signal_utils import SignalBlocker
 logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
@@ -2352,9 +2353,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                             # Update button widget
                             has_layers_widget = self.widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
                             if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
-                                has_layers_widget.blockSignals(True)
-                                has_layers_widget.setChecked(has_layers)
-                                has_layers_widget.blockSignals(False)
+                                with SignalBlocker(has_layers_widget):
+                                    has_layers_widget.setChecked(has_layers)
                             logger.info(f"✅ Synced HAS_LAYERS_TO_EXPORT = {has_layers} (found {len(layers_to_export)} checked layers)")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to sync HAS_LAYERS_TO_EXPORT: {e}")
@@ -2540,15 +2540,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
                 is_always_enabled = widget_name in always_enabled_widgets if widget_name else False
 
-                w.blockSignals(True)
-                if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state:
-                    w.setChecked(False)
-                    if wt == "GroupBox":
-                        w.setCollapsed(True)
+                with SignalBlocker(w):
+                    if wt in ("PushButton", "GroupBox") and w.isCheckable() and not state:
+                        w.setChecked(False)
+                        if wt == "GroupBox":
+                            w.setCollapsed(True)
 
-                # v4.0.5: Apply state or force enabled
-                w.setEnabled(True if is_always_enabled else state)
-                w.blockSignals(False)
+                    # v4.0.5: Apply state or force enabled
+                    w.setEnabled(True if is_always_enabled else state)
 
     def connect_widgets_signals(self):
         """Connect all widget signals to their handlers.
@@ -3212,15 +3211,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             # Disconnect existing signals first
             for gb, _ in gbs:
-                try:
-                    gb.blockSignals(True)
+                with SignalBlocker(gb):
                     try:
                         gb.toggled.disconnect()
                         gb.collapsedStateChanged.disconnect()
                     except TypeError:  # Signals not connected yet - expected on first setup
                         pass
-                finally:
-                    gb.blockSignals(False)  # Always unblock even if disconnect fails
 
             # Now connect new signals
             for gb, name in gbs:
@@ -3230,12 +3226,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             logger.debug("_connect_groupbox_signals_directly: Signals connected successfully")
         except Exception as e:
             logger.warning(f"_connect_groupbox_signals_directly error: {e}")
-            # Ensure all groupboxes have signals unblocked
-            for gb, _ in gbs:
-                try:
-                    gb.blockSignals(False)
-                except (RuntimeError, AttributeError):
-                    pass  # Widget may have been deleted
 
     def _force_exploring_groupbox_exclusive(self, active_groupbox):
         """v4.0 S18: Force exclusive state for exploring groupboxes.
@@ -3270,19 +3260,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                    "custom": self.widgets["DOCK"]["CUSTOM_SELECTION"]["WIDGET"]}
             active_key = active_groupbox.split("_")[0]
 
-            # Block all signals AND disable QGIS state saving during update
+            # FIX 2026-01-19: Disable QGIS auto-save to prevent interference
             for gb in gbs.values():
-                gb.blockSignals(True)
-                # FIX 2026-01-19: Disable QGIS auto-save to prevent interference
                 if hasattr(gb, 'setSaveCheckedState'):
                     gb.setSaveCheckedState(False)
                 if hasattr(gb, 'setSaveCollapsedState'):
                     gb.setSaveCollapsedState(False)
 
-            # Update states
-            for key, gb in gbs.items():
-                gb.setChecked(key == active_key)
-                gb.setCollapsed(key != active_key)
+            # Block all signals and update states
+            with SignalBlocker(*gbs.values()):
+                for key, gb in gbs.items():
+                    gb.setChecked(key == active_key)
+                    gb.setCollapsed(key != active_key)
 
             # FIX 2026-01-19: Force layout update to prevent key widgets from disappearing
             # When groupboxes collapse/expand, the layout needs to be explicitly updated
@@ -3300,11 +3289,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         except Exception as e:
             logger.warning(f"_force_exploring_groupbox_exclusive error: {e}")
         finally:
-            # CRITICAL: Always unblock signals, re-enable state saving, and reset flag
+            # CRITICAL: Re-enable state saving and reset flag
             if gbs:
                 for gb in gbs.values():
                     try:
-                        gb.blockSignals(False)
                         # FIX 2026-01-19: Re-enable QGIS auto-save
                         if hasattr(gb, 'setSaveCheckedState'):
                             gb.setSaveCheckedState(True)
@@ -3364,12 +3352,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not any(gbs[k].isChecked() for k in gbs if k != groupbox):
             # No other groupbox checked - re-check this one (prevent all unchecked)
             gb = gbs[groupbox]
-            try:
-                gb.blockSignals(True)
+            with SignalBlocker(gb):
                 gb.setChecked(True)
                 gb.setCollapsed(False)
-            finally:
-                gb.blockSignals(False)
         else:
             # Another groupbox is checked - switch to it
             for name, gb in gbs.items():
@@ -4876,7 +4861,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 S18: Sync widgets after additive mode."""
         try:
             for key in ["SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR"]:
-                w = self.widgets["FILTERING"][key]["WIDGET"]; w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
+                w = self.widgets["FILTERING"][key]["WIDGET"]
+                with SignalBlocker(w):
+                    w.setCurrentIndex(0)
         except Exception as e: logger.debug(f"Error syncing additive mode widgets: {e}")
 
     def _synchronize_layer_widgets(self, layer, layer_props, manual_change=False):
@@ -4943,8 +4930,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         continue
 
                     # Sync widget based on type
-                    widget.blockSignals(True)
-                    try:
+                    with SignalBlocker(widget):
                         if widget_type == 'PushButton' and widget.isCheckable():
                             widget.setChecked(bool(stored_value))
                             if "ICON_ON_TRUE" in widget_info and "ICON_ON_FALSE" in widget_info:
@@ -4972,8 +4958,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                                 widget.setCrs(crs)
                         elif widget_type == 'PropertyOverrideButton':
                             widget.setActive(bool(stored_value))
-                    finally:
-                        widget.blockSignals(False)
 
         # Populate layers combobox
         self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
@@ -5149,11 +5133,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                   "custom_selection": (False, True, False, True, True, False)}
         s = states.get(groupbox_name, states["single_selection"])
         gbs = [self.widgets["DOCK"][k]["WIDGET"] for k in ["SINGLE_SELECTION", "MULTIPLE_SELECTION", "CUSTOM_SELECTION"]]
-        for gb in gbs: gb.blockSignals(True)
-        try:
-            for i, gb in enumerate(gbs): gb.setChecked(s[i * 2]); gb.setCollapsed(s[i * 2 + 1]); gb.update()
-        finally:
-            for gb in gbs: gb.blockSignals(False)
+        with SignalBlocker(*gbs):
+            for i, gb in enumerate(gbs):
+                gb.setChecked(s[i * 2]); gb.setCollapsed(s[i * 2 + 1]); gb.update()
 
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """v4.0 S18: → LayerSyncController with fallback."""
@@ -5232,27 +5214,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         stored_is_selecting = exploring.get("is_selecting", False)
         if btn_selecting.isChecked() != stored_is_selecting:
             logger.info(f"Force sync IS_SELECTING button: {btn_selecting.isChecked()} → {stored_is_selecting}")  # nosec B608
-            btn_selecting.blockSignals(True)
-            btn_selecting.setChecked(stored_is_selecting)
-            btn_selecting.blockSignals(False)
+            with SignalBlocker(btn_selecting):
+                btn_selecting.setChecked(stored_is_selecting)
 
         # Sync IS_TRACKING button with stored state
         btn_tracking = self.pushButton_checkable_exploring_tracking
         stored_is_tracking = exploring.get("is_tracking", False)
         if btn_tracking.isChecked() != stored_is_tracking:
             logger.info(f"Force sync IS_TRACKING button: {btn_tracking.isChecked()} → {stored_is_tracking}")
-            btn_tracking.blockSignals(True)
-            btn_tracking.setChecked(stored_is_tracking)
-            btn_tracking.blockSignals(False)
+            with SignalBlocker(btn_tracking):
+                btn_tracking.setChecked(stored_is_tracking)
 
         # Sync IS_LINKING button with stored state
         btn_linking = self.pushButton_checkable_exploring_linking_widgets
         stored_is_linking = exploring.get("is_linking", False)
         if btn_linking.isChecked() != stored_is_linking:
             logger.info(f"Force sync IS_LINKING button: {btn_linking.isChecked()} → {stored_is_linking}")
-            btn_linking.blockSignals(True)
-            btn_linking.setChecked(stored_is_linking)
-            btn_linking.blockSignals(False)
+            with SignalBlocker(btn_linking):
+                btn_linking.setChecked(stored_is_linking)
 
     def _ensure_valid_current_layer(self, requested_layer):
         """v4.0 Sprint 18: Ensure valid layer - delegates to LayerSyncController."""
@@ -6090,7 +6069,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             exp = layer_props["exploring"]
             for key, prop in [("IS_SELECTING", "is_selecting"), ("IS_TRACKING", "is_tracking"), ("IS_LINKING", "is_linking")]:
                 w = self.widgets["EXPLORING"][key]["WIDGET"]
-                w.blockSignals(True); w.setChecked(exp[prop]); w.blockSignals(False)
+                with SignalBlocker(w):
+                    w.setChecked(exp[prop])
         except Exception as e:
             logger.debug(f"Error resetting exploring button states: {e}")
 
@@ -6102,15 +6082,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
             for k, v in btns.items():
                 w = self.widgets["FILTERING"][k]["WIDGET"]
-                w.blockSignals(True); w.setChecked(v); w.blockSignals(False)
+                with SignalBlocker(w):
+                    w.setChecked(v)
 
             for combo in ["SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR"]:
                 w = self.widgets["FILTERING"][combo]["WIDGET"]
-                w.blockSignals(True); w.setCurrentIndex(0); w.blockSignals(False)
+                with SignalBlocker(w):
+                    w.setCurrentIndex(0)
 
             for widget_key, val, method in [("BUFFER_VALUE", 0.0, "setValue"), ("GEOMETRIC_PREDICATES", [], "setCheckedItems"), ("LAYERS_TO_FILTER", [], "setCheckedItems")]:
                 w = self.widgets["FILTERING"][widget_key]["WIDGET"]
-                w.blockSignals(True); getattr(w, method)(val); w.blockSignals(False)
+                with SignalBlocker(w):
+                    getattr(w, method)(val)
         except Exception as e: logger.debug(f"_reset_filtering_button_states cosmetic update: {e}")
 
     def setProjectVariablesEvent(self):
@@ -6307,9 +6290,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.project_props['EXPORTING']['HAS_LAYERS_TO_EXPORT'] = has_layers
                         has_layers_widget = self.widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
                         if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
-                            has_layers_widget.blockSignals(True)
-                            has_layers_widget.setChecked(has_layers)
-                            has_layers_widget.blockSignals(False)
+                            with SignalBlocker(has_layers_widget):
+                                has_layers_widget.setChecked(has_layers)
             except Exception as e:
                 logger.warning(f"Failed to sync HAS_LAYERS_TO_EXPORT: {e}")
 
@@ -6327,9 +6309,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.project_props['EXPORTING']['DATATYPE_TO_EXPORT'] = current_datatype
                         has_datatype_widget = self.widgets.get('EXPORTING', {}).get('HAS_DATATYPE_TO_EXPORT', {}).get('WIDGET')
                         if has_datatype_widget and hasattr(has_datatype_widget, 'setChecked'):
-                            has_datatype_widget.blockSignals(True)
-                            has_datatype_widget.setChecked(True)
-                            has_datatype_widget.blockSignals(False)
+                            with SignalBlocker(has_datatype_widget):
+                                has_datatype_widget.setChecked(True)
 
                 # Sync HAS_OUTPUT_FOLDER_TO_EXPORT
                 output_folder_widget = self.widgets.get('EXPORTING', {}).get('OUTPUT_FOLDER_TO_EXPORT', {}).get('WIDGET')
@@ -6340,9 +6321,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.project_props['EXPORTING']['OUTPUT_FOLDER_TO_EXPORT'] = current_folder
                         has_folder_widget = self.widgets.get('EXPORTING', {}).get('HAS_OUTPUT_FOLDER_TO_EXPORT', {}).get('WIDGET')
                         if has_folder_widget and hasattr(has_folder_widget, 'setChecked'):
-                            has_folder_widget.blockSignals(True)
-                            has_folder_widget.setChecked(True)
-                            has_folder_widget.blockSignals(False)
+                            with SignalBlocker(has_folder_widget):
+                                has_folder_widget.setChecked(True)
 
                 # Sync HAS_PROJECTION_TO_EXPORT
                 projection_widget = self.widgets.get('EXPORTING', {}).get('PROJECTION_TO_EXPORT', {}).get('WIDGET')
@@ -6353,9 +6333,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.project_props['EXPORTING']['PROJECTION_TO_EXPORT'] = crs.toWkt()
                         has_proj_widget = self.widgets.get('EXPORTING', {}).get('HAS_PROJECTION_TO_EXPORT', {}).get('WIDGET')
                         if has_proj_widget and hasattr(has_proj_widget, 'setChecked'):
-                            has_proj_widget.blockSignals(True)
-                            has_proj_widget.setChecked(True)
-                            has_proj_widget.blockSignals(False)
+                            with SignalBlocker(has_proj_widget):
+                                has_proj_widget.setChecked(True)
 
                 # Sync HAS_STYLES_TO_EXPORT
                 styles_widget = self.widgets.get('EXPORTING', {}).get('STYLES_TO_EXPORT', {}).get('WIDGET')
@@ -6366,9 +6345,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                         self.project_props['EXPORTING']['STYLES_TO_EXPORT'] = current_style
                         has_styles_widget = self.widgets.get('EXPORTING', {}).get('HAS_STYLES_TO_EXPORT', {}).get('WIDGET')
                         if has_styles_widget and hasattr(has_styles_widget, 'setChecked'):
-                            has_styles_widget.blockSignals(True)
-                            has_styles_widget.setChecked(True)
-                            has_styles_widget.blockSignals(False)
+                            with SignalBlocker(has_styles_widget):
+                                has_styles_widget.setChecked(True)
             except Exception as e:
                 logger.warning(f"Failed to sync export flags: {e}")
             self.launchingTask.emit(task_name)
