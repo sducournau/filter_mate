@@ -752,6 +752,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.manage_configuration_model()
         self.dockwidget_widgets_configuration()
         self._load_all_pushbutton_icons()
+        self._load_raster_key_icons()
+        self._setup_exclusive_groupboxes()
+        self._reparent_centroids_checkbox_to_exploring()
+        self._hide_filtering_combo_and_sync()
         self._setup_truncation_tooltips()
 
     def _load_all_pushbutton_icons(self):
@@ -833,6 +837,235 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             ("EXPORTING", "HAS_OUTPUT_FOLDER_TO_EXPORT"): "pushButton_checkable_exporting_output_folder",
             ("EXPORTING", "HAS_ZIP_TO_EXPORT"): "pushButton_checkable_exporting_zip"}
         return widget_map.get((widget_group, widget_name), "")
+
+    def _load_raster_key_icons(self):
+        """Load icons for raster key buttons (INFO, SMPL, HIST, BAND, AUTO).
+
+        Uses the same icon theming pattern as vector key buttons.
+        Icons are chosen from the existing icons/ directory.
+        """
+        try:
+            raster_icon_map = {
+                "btn_raster_key_info": "identify_alt.png",
+                "btn_raster_key_sampling": "pointing_black.png",
+                "btn_raster_key_histogram": "selection_1.png",
+                "btn_raster_key_band": "layers.png",
+                "btn_raster_key_auto": "auto_layer_white.png",
+            }
+            raster_keys = getattr(self, '_raster_key_buttons', {})
+            if not raster_keys:
+                return
+            loaded = 0
+            for btn_name, icon_file in raster_icon_map.items():
+                btn = raster_keys.get(btn_name)
+                if btn is None:
+                    continue
+                icon_path = os.path.join(self.plugin_dir, "icons", icon_file)
+                if not os.path.exists(icon_path):
+                    logger.warning(
+                        f"_load_raster_key_icons: icon not found: {icon_path}"
+                    )
+                    continue
+                icon = (
+                    get_themed_icon(icon_path)
+                    if ICON_THEME_AVAILABLE
+                    else QtGui.QIcon(icon_path)
+                )
+                btn.setIcon(icon)
+                btn.setIconSize(QtCore.QSize(16, 16))
+                btn.setText("")
+                loaded += 1
+            logger.info(
+                f"_load_raster_key_icons: loaded {loaded} icons"
+            )
+        except Exception as e:
+            logger.error(f"_load_raster_key_icons failed: {e}")
+
+    def _setup_exclusive_groupboxes(self):
+        """Setup exclusive (accordion) behavior for GroupBoxes.
+
+        Within each panel (EXPLORING VECTOR, EXPLORING RASTER), only one
+        GroupBox can be expanded at a time. When a GroupBox is checked/expanded,
+        the others in the same panel are collapsed.
+        Uses blockSignals to prevent infinite signal loops.
+        """
+        try:
+            # EXPLORING VECTOR groupboxes
+            vector_groupboxes = [
+                gb for gb in [
+                    getattr(self, 'mGroupBox_exploring_single_selection', None),
+                    getattr(self, 'mGroupBox_exploring_multiple_selection', None),
+                    getattr(self, 'mGroupBox_exploring_custom_selection', None),
+                ] if gb is not None
+            ]
+            self._connect_exclusive_groupbox_group(vector_groupboxes)
+
+            # EXPLORING RASTER groupboxes
+            raster_groupboxes = [
+                gb for gb in [
+                    getattr(self, 'mGroupBox_raster_layer_info', None),
+                    getattr(self, 'mGroupBox_raster_value_sampling', None),
+                    getattr(self, 'mGroupBox_raster_histogram', None),
+                    getattr(self, 'mGroupBox_raster_band_viewer', None),
+                ] if gb is not None
+            ]
+            self._connect_exclusive_groupbox_group(raster_groupboxes)
+
+            logger.info(
+                f"_setup_exclusive_groupboxes: "
+                f"vector={len(vector_groupboxes)}, "
+                f"raster={len(raster_groupboxes)}"
+            )
+        except Exception as e:
+            logger.error(f"_setup_exclusive_groupboxes failed: {e}")
+
+    def _connect_exclusive_groupbox_group(self, groupboxes):
+        """Connect toggled signals for a group of groupboxes so only one is expanded.
+
+        Args:
+            groupboxes (list): List of QGroupBox/QgsCollapsibleGroupBox widgets.
+        """
+        for gb in groupboxes:
+            # Use default argument to capture gb in closure
+            gb.toggled.connect(
+                lambda checked, current_gb=gb, group=groupboxes:
+                    self._on_exclusive_groupbox_toggled(
+                        checked, current_gb, group
+                    )
+            )
+
+    def _on_exclusive_groupbox_toggled(self, checked, current_gb, group):
+        """Collapse all other groupboxes in the group when one is expanded.
+
+        Args:
+            checked (bool): Whether the groupbox was checked (expanded).
+            current_gb: The groupbox that was toggled.
+            group (list): The group of groupboxes for exclusive behavior.
+        """
+        if not checked:
+            return
+        for gb in group:
+            if gb is current_gb:
+                continue
+            if gb.isChecked():
+                gb.blockSignals(True)
+                gb.setChecked(False)
+                gb.blockSignals(False)
+
+    def _reparent_centroids_checkbox_to_exploring(self):
+        """Move checkBox_filtering_use_centroids_source_layer to exploring vector header.
+
+        Reparents the centroids checkbox from the FILTERING source layer row
+        to the EXPLORING VECTOR header, next to the vector layer combo.
+        Preserves the widget's objectName and all existing signal connections.
+        """
+        try:
+            checkbox = getattr(
+                self, 'checkBox_filtering_use_centroids_source_layer', None
+            )
+            combo = getattr(self, '_combo_exploring_vector_layer', None)
+            if checkbox is None or combo is None:
+                logger.debug(
+                    "_reparent_centroids_checkbox: widget(s) not found"
+                )
+                return
+
+            # Find the combo's parent layout
+            combo_parent = combo.parentWidget()
+            if combo_parent is None:
+                return
+            parent_layout = combo_parent.layout()
+            if parent_layout is None:
+                return
+
+            # The combo is the first widget in a QVBoxLayout (right_vector_layout).
+            # We need to replace the combo with an HBox containing combo + checkbox.
+            combo_index = parent_layout.indexOf(combo)
+            if combo_index < 0:
+                logger.debug(
+                    "_reparent_centroids_checkbox: combo not found in layout"
+                )
+                return
+
+            # Remove combo from its current position
+            parent_layout.removeWidget(combo)
+
+            # Create horizontal container: combo + checkbox
+            header_widget = QtWidgets.QWidget()
+            header_layout = QtWidgets.QHBoxLayout(header_widget)
+            header_layout.setContentsMargins(0, 0, 0, 0)
+            header_layout.setSpacing(4)
+
+            # Re-add combo (takes most space)
+            header_layout.addWidget(combo, 1)
+
+            # Remove checkbox from its old parent layout
+            old_layout = (
+                self.horizontalLayout_filtering_source_layer
+                if hasattr(self, 'horizontalLayout_filtering_source_layer')
+                else None
+            )
+            if old_layout is not None:
+                old_layout.removeWidget(checkbox)
+
+            # Add checkbox to header (fixed size)
+            checkbox.setParent(header_widget)
+            header_layout.addWidget(checkbox, 0)
+
+            # Insert header widget at the combo's old position
+            parent_layout.insertWidget(combo_index, header_widget)
+
+            logger.info(
+                "_reparent_centroids_checkbox: moved to exploring vector header"
+            )
+        except Exception as e:
+            logger.error(
+                f"_reparent_centroids_checkbox failed: {e}"
+            )
+
+    def _hide_filtering_combo_and_sync(self):
+        """Hide comboBox_filtering_current_layer and ensure silent sync.
+
+        The filtering layer combo is no longer needed as the exploring vector
+        header combo serves as the primary layer selector. The filtering combo
+        is hidden but kept alive for backward compatibility (70+ references).
+        Sync is already handled by _sync_exploring_combo_to_filtering().
+        """
+        try:
+            combo = getattr(
+                self, 'comboBox_filtering_current_layer', None
+            )
+            if combo is None:
+                return
+            combo.hide()
+            # Also hide any label associated with it in the filtering source row
+            source_layout = getattr(
+                self, 'horizontalLayout_filtering_source_layer', None
+            )
+            if source_layout is not None:
+                # Hide the entire source layer layout row if both widgets removed
+                # The combo is hidden, the checkbox has been reparented
+                # Check if any visible widgets remain in the layout
+                has_visible = False
+                for i in range(source_layout.count()):
+                    item = source_layout.itemAt(i)
+                    if item and item.widget() and item.widget().isVisible():
+                        has_visible = True
+                        break
+                if not has_visible:
+                    # Find and hide the parent widget or spacer
+                    for i in range(source_layout.count()):
+                        item = source_layout.itemAt(i)
+                        if item and item.widget():
+                            item.widget().hide()
+            logger.info(
+                "_hide_filtering_combo_and_sync: "
+                "comboBox_filtering_current_layer hidden"
+            )
+        except Exception as e:
+            logger.error(
+                f"_hide_filtering_combo_and_sync failed: {e}"
+            )
 
     def _setup_main_splitter(self):
         """v4.0 S16: Setup splitter."""
