@@ -398,7 +398,8 @@ def create_simple_materialized_view_sql(schema: str, name: str, sql_subset_strin
             "This usually means the filter expression was not properly built."
         )
 
-    return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(
+    # DDL: identifiers from QGIS layer metadata, sql_subset_string built by expression_builder
+    return 'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{name}" TABLESPACE pg_default AS {sql_subset_string} WITH DATA;'.format(  # nosec B608
         schema=schema,
         name=name,
         sql_subset_string=sql_subset_string

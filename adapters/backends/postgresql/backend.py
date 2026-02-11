@@ -362,7 +362,7 @@ class PostgreSQLBackend(BackendPort):
 
             # Generate unique MV name (unified fm_temp_src_ prefix)
             import hashlib
-            fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in fids[:10]).encode()).hexdigest()[:8]
+            fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode(), usedforsecurity=False).hexdigest()[:8]  # nosec B324
             mv_name = f"fm_temp_src_{self._session_id[:6]}_{fid_hash}"
 
             # Create MV using mv_manager
@@ -513,7 +513,7 @@ class PostgreSQLBackend(BackendPort):
             import hashlib
             from ....infrastructure.constants import DEFAULT_TEMP_SCHEMA
 
-            fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in fids[:10]).encode()).hexdigest()[:8]
+            fid_hash = hashlib.md5(','.join(str(f) for f in fids[:10]).encode(), usedforsecurity=False).hexdigest()[:8]  # nosec B324
             temp_name = f"fm_temp_src_sel_{fid_hash}"
 
             # FIX v4.3.1 (2026-01-22): Clean field names (remove table prefixes if present)

@@ -147,7 +147,7 @@ class PostgreSQLPreparedStatements(PreparedStatementManager):
         try:
             cursor = self.connection.cursor()
             for stmt_name in self._stmt_names:
-                cursor.execute(f"DEALLOCATE {stmt_name}")
+                cursor.execute(f"DEALLOCATE {stmt_name}")  # nosec B608 — stmt_name is internally generated
             self._stmt_names.clear()
         except Exception as e:
             logger.debug(f"Error deallocating prepared statements: {e}")

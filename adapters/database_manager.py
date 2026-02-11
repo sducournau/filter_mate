@@ -224,9 +224,9 @@ class DatabaseManager:
 
         cursor.execute("""
             INSERT INTO filterMate_db VALUES(
-                1, 'FilterMate', datetime(), datetime(), '{version}'
+                1, 'FilterMate', datetime(), datetime(), ?
             );
-        """.format(version=self.SCHEMA_VERSION))
+        """, (self.SCHEMA_VERSION,))
 
         cursor.execute("""
             CREATE TABLE fm_projects (

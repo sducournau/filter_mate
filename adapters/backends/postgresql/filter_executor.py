@@ -448,8 +448,9 @@ def build_postgis_predicates(
 
         # CRITICAL FIX: Use subquery with EXISTS to avoid "missing FROM-clause"
         # setSubsetString cannot reference other tables directly, need subquery
+        # DDL: identifiers from QGIS layer metadata (trusted), used in setSubsetString
         postgis_sub_expression_array.append(
-            'EXISTS (SELECT 1 FROM "{source_schema}"."{source_table}" '
+            'EXISTS (SELECT 1 FROM "{source_schema}"."{source_table}" '  # nosec B608
             'AS __source WHERE {predicate}({distant_geom},{source_geom}))'.format(
                 source_schema=source_schema,
                 source_table=source_table,

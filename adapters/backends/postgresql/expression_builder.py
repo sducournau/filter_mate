@@ -955,6 +955,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         # FIX v4.3.1 (2026-01-22): Remove table prefix from fields in CREATE TABLE AS SELECT
         # In single-table SELECT, field references should be unqualified (implicit scope)
         # buffer_expr_sql already contains unqualified field names (e.g., "homecount", not "table"."homecount")
+        # DDL: identifiers come from QGIS layer metadata (trusted), can't be parameterized
         sql_create = f"""
             CREATE TABLE IF NOT EXISTS "{temp_schema}"."{temp_table_name}" AS
             SELECT
@@ -966,7 +967,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 ) as buffered_geom
             FROM "{source_schema}"."{source_table}"
             {f"WHERE {source_filter}" if source_filter else ""}
-        """
+        """  # nosec B608
 
         # Create spatial index
         sql_index = f'CREATE INDEX IF NOT EXISTS "idx_{temp_table_name}_geom" ON "{temp_schema}"."{temp_table_name}" USING GIST (buffered_geom)'  # nosec B608

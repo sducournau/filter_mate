@@ -1112,11 +1112,9 @@ def get_last_subset_info(cur, layer, project_uuid: str, conn=None) -> tuple:
     try:
         cur.execute(
             """SELECT * FROM fm_subset_history
-               WHERE fk_project = '{fk_project}' AND layer_id = '{layer_id}'
-               ORDER BY seq_order DESC LIMIT 1;""".format(
-                fk_project=project_uuid,
-                layer_id=layer.id()
-            )
+               WHERE fk_project = ? AND layer_id = ?
+               ORDER BY seq_order DESC LIMIT 1;""",
+            (project_uuid, layer.id())
         )
 
         results = cur.fetchall()

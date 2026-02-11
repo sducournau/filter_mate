@@ -673,7 +673,7 @@ class CombinedQueryOptimizer:
         # v2.9.0: If FID count exceeds threshold, create a source MV with pre-computed buffer
         if fid_count > self.SOURCE_FID_MV_THRESHOLD:
             # Generate unique source MV name (unified fm_temp_src_ prefix)
-            fid_hash = hashlib.md5(','.join(str(f, usedforsecurity=False) for f in sorted(fid_list)).encode()).hexdigest()[:8]
+            fid_hash = hashlib.md5(','.join(str(f) for f in sorted(fid_list)).encode(), usedforsecurity=False).hexdigest()[:8]  # nosec B324
             src_mv_name = f"fm_temp_src_{fid_hash}"
 
             # Build CREATE MATERIALIZED VIEW SQL for source selection
@@ -1453,7 +1453,7 @@ class CombinedQueryOptimizer:
     def _get_cache_key(self, old_subset: str, new_expression: str, operator: str) -> str:
         """Generate cache key for expression combination."""
         combined = f"{old_subset}|{operator}|{new_expression}"
-        return hashlib.md5(combined.encode('utf-8', usedforsecurity=False)).hexdigest()[:16]
+        return hashlib.md5(combined.encode('utf-8'), usedforsecurity=False).hexdigest()[:16]  # nosec B324
 
     def _cache_result(self, key: str, result: OptimizationResult) -> None:
         """Cache optimization result with LRU eviction."""
