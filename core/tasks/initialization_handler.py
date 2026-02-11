@@ -21,7 +21,7 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-from qgis.core import QgsProject, QgsVectorLayer
+from qgis.core import QgsGeometry, QgsProject, QgsVectorLayer
 
 from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS
@@ -176,12 +176,12 @@ class InitializationHandler:
 
             # Get optimal metric CRS using layer extent for better accuracy
             layer_extent = source_layer.extent() if source_layer else None
-            result['crs_authid'] = get_optimal_metric_crs(
-                project=project,
+            extent_geom = QgsGeometry.fromRect(layer_extent) if layer_extent else None
+            metric_crs = get_optimal_metric_crs(
+                geometry=extent_geom,
                 source_crs=source_crs,
-                extent=layer_extent,
-                prefer_utm=True
             )
+            result['crs_authid'] = metric_crs.authid()
 
             # Log CRS conversion info
             crs_info = get_layer_crs_info(source_layer)

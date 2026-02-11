@@ -1259,14 +1259,12 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # This ensures accurate buffer distances in meters instead of imprecise degrees
             if is_geographic:
                 # Use optimal metric CRS (UTM or Web Mercator)
-                metric_crs_authid = get_optimal_metric_crs(
-                    project=QgsProject.instance(),
+                metric_crs = get_optimal_metric_crs(
+                    geometry=QgsGeometry.fromRect(geom.boundingBox()),
                     source_crs=layer_crs,
-                    extent=geom.boundingBox(),
-                    prefer_utm=True
                 )
-                work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
-                logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
+                work_crs = metric_crs
+                logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs.authid()} for zoom buffer")
 
                 to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
                 geom.transform(to_metric)
