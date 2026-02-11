@@ -6017,9 +6017,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self._updating_layers, self._plugin_busy = False, False
 
     def open_project_page(self):
-        """v4.0 S18: Open Discord server invite page."""
+        """v4.0 S18: Open project website page."""
         options = self.CONFIG_DATA.get("APP", {}).get("OPTIONS", {})
-        url = options.get("DISCORD_INVITE", "") or options.get("GITHUB_PAGE", "")
+        url = options.get("GITHUB_PAGE", "") or options.get("DISCORD_INVITE", "")
         if url and url.startswith("http"): webbrowser.open(url)
 
     def reload_plugin(self):
