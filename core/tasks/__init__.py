@@ -57,6 +57,16 @@ from .task_completion_handler import (  # noqa: F401
     cleanup_memory_layer
 )
 
+# Phase 3 C1: Extracted handlers (February 2026)
+from .cleanup_handler import CleanupHandler  # noqa: F401
+from .export_handler import ExportHandler  # noqa: F401
+from .geometry_handler import GeometryHandler  # noqa: F401
+
+# Phase 3 C1 Pass 2: Additional extracted handlers (February 2026)
+from .initialization_handler import InitializationHandler  # noqa: F401
+from .source_geometry_preparer import SourceGeometryPreparer  # noqa: F401
+from .subset_management_handler import SubsetManagementHandler  # noqa: F401
+
 __all__ = [
     # Main filter task
     'FilterEngineTask',
@@ -76,4 +86,12 @@ __all__ = [
     # Raster sampling (Phase 1)
     'RasterSamplingSignals',
     'RasterSamplingTask',
+    # Phase 3 C1: Extracted handlers
+    'CleanupHandler',
+    'ExportHandler',
+    'GeometryHandler',
+    # Phase 3 C1 Pass 2: Additional extracted handlers
+    'InitializationHandler',
+    'SourceGeometryPreparer',
+    'SubsetManagementHandler',
 ]

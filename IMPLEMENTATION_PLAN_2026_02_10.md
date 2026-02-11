@@ -731,38 +731,52 @@ Semaine 16 : E2 (documentation) + E3 (metriques finales)
 
 ## RECAPITULATIF DES ACTIONS PAR PRIORITE
 
-### Immediat (cette semaine)
-- [x] QW-1 : Deplacer imports `iface` (1h)
-- [x] QW-2 : Mettre a jour `qgisMinimumVersion` (15min)
-- [x] QW-3 : Creer `requirements-optional.txt` (15min)
-- [x] A1 : Versionner `tests/` (2-4h)
+### Immediat (cette semaine) -- COMPLETE
+- [x] QW-1 : Deplacer imports `iface` (1h) -- commit 8a27ce23
+- [x] QW-2 : Mettre a jour `qgisMinimumVersion` (15min) -- commit 8a27ce23
+- [x] QW-3 : Creer `requirements-optional.txt` (15min) -- commit 8a27ce23
+- [x] A1 : Versionner `tests/` -- recree le 11/02/2026 (15 fichiers, conftest + 5 modules de tests)
 
-### Sprint 1 (Semaines 1-3) -- Filet de securite
-- [ ] A1-bis : Corriger la CI (2-4h)
-- [ ] A2 : Ecrire tests critiques (1 semaine)
-- [ ] QW-4 : Decorator `@main_thread_only` (1h30)
+### Sprint 1 (Semaines 1-3) -- Filet de securite -- COMPLETE
+- [x] A1-bis : Corriger la CI -- test.yml mis a jour (actions v4/v5, pip cache, markers, coverage)
+- [x] A2 : Ecrire tests critiques -- 235 tests unitaires (domain:110, exceptions:37, sql_utils:33, signal_manager:32, expression_builder:23)
+- [x] QW-4 : Decorator `@main_thread_only` (1h30) -- commit 49625eb1
 
-### Sprint 2 (Semaines 3-5) -- Assainissement erreurs
-- [ ] B1 : Eliminer exceptions silencieuses (2 jours)
-- [ ] B2 : Specialiser exceptions DB (1 semaine)
-- [ ] B2-bis : Hierarchie exceptions metier (3 jours)
-- [ ] B3 : Audit connect/disconnect signaux (2-3 jours)
+### Sprint 2 (Semaines 3-5) -- Assainissement erreurs -- COMPLETE
+- [x] B1 : Eliminer exceptions silencieuses (2 jours) -- commit 6c50e79c
+- [x] B2 : Specialiser exceptions DB (1 semaine) -- commit 4c5a6161
+- [x] B2-bis : Hierarchie exceptions metier (3 jours) -- commit a3799dcf
+- [x] B3 : Audit connect/disconnect signaux (2-3 jours) -- commit d6366541
 
-### Sprint 3-4 (Semaines 5-11) -- Decomposition
-- [ ] C1 : Decomposer `FilterEngineTask` (2-3 semaines)
-- [ ] C2 : Decomposer `FilterMateDockWidget` (2-3 semaines)
-- [ ] C3 : Auditer `nosec B608` (2 jours)
+### Sprint 3-4 (Semaines 5-11) -- Decomposition -- EN COURS
+- [x] C1 : Decomposer `FilterEngineTask` -- 5890->4800 lignes (-18.5%). 6 handlers extraits :
+  - cleanup_handler.py (421), export_handler.py (513), geometry_handler.py (712)
+  - initialization_handler.py (431), source_geometry_preparer.py (368), subset_management_handler.py (943)
+  - Note: objectif <2500 non atteint, code restant profondement couple a self
+- [ ] C2 : Decomposer `FilterMateDockWidget` (2-3 semaines) -- **PROCHAIN**
+- [x] C3 : Auditer `nosec B608` (2 jours) -- commit 48c29142
 
 ### Sprint 5 (Semaines 11-14) -- Architecture
 - [ ] D1 : Ports QGIS dans `core/services/` (1-2 semaines)
 - [ ] D2 : Activer le DI container (1 semaine)
-- [ ] D3 : Nettoyer commentaires version (1 jour)
+- [x] D3 : Nettoyer commentaires version (1 jour) -- commit 48c29142
 - [ ] D4 : `max-line-length = 120` (2 jours)
 
 ### Sprint 6 (Semaines 14-16) -- Consolidation
 - [ ] E1 : Validation non-regression (3 jours)
 - [ ] E2 : Documentation (2 jours)
 - [ ] E3 : Metriques finales (1 jour)
+
+### Progression globale (mise a jour 11/02/2026)
+- **Fait** : QW-1, QW-2, QW-3, QW-4, A1, A1-bis, A2, B1, B2, B2-bis, B3, C1, C3, D3 (14/19 actions)
+- **Phase 0** : COMPLETE
+- **Phase 1** : COMPLETE (235 tests, CI corrigee)
+- **Phase 2** : COMPLETE (exceptions assainies, signaux audites)
+- **Phase 3** : EN COURS
+  - C1 fait : 6 handlers extraits, filter_task.py 5890->4800 (-18.5%)
+  - C2 : pas encore commence (DockWidget 7651 lignes)
+- **Prochain** : C2 (DockWidget 7651->3000 lignes)
+- **Restant** : C2, D1, D2, D4, E1, E2, E3 (5 actions majeures)
 
 ---
 

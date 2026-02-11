@@ -127,6 +127,14 @@ from ...infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
 # Import from core (EPIC-1 migration - relative import now that we're in core/)
 from ..optimization import get_combined_query_optimizer
 
+# Phase 3 C1: Import extracted handlers (February 2026)
+from .cleanup_handler import CleanupHandler
+from .export_handler import ExportHandler
+from .geometry_handler import GeometryHandler
+from .initialization_handler import InitializationHandler
+from .source_geometry_preparer import SourceGeometryPreparer
+from .subset_management_handler import SubsetManagementHandler
+
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
 from .executors.spatial_filter_executor import SpatialFilterExecutor
@@ -410,115 +418,32 @@ class FilterEngineTask(QgsTask):
         # Phase E13 Step 6: ActionDispatcher for clean action routing
         self._action_dispatcher = None
 
+        # Phase 3 C1: Initialize extracted handlers (February 2026)
+        # These handlers encapsulate cohesive groups of methods to reduce
+        # FilterEngineTask complexity from ~5890 to ~4000 lines.
+        self._cleanup_handler = CleanupHandler()
+        self._export_handler = ExportHandler()
+        self._geometry_handler = GeometryHandler()
+
+        # Phase 3 C1 Pass 2: Additional extracted handlers
+        self._init_handler = InitializationHandler()
+        self._source_geom_preparer = SourceGeometryPreparer()
+        self._subset_handler = SubsetManagementHandler()
+
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
     # ========================================================================
 
     def _initialize_current_predicates(self):
-        """
-        Initialize current_predicates from task parameters EARLY in the filtering process.
-
-        FIX 2026-01-16: This method MUST be called at the start of execute_filtering(),
-        BEFORE execute_source_layer_filtering(). Previously, predicates were only
-        initialized in STEP 2/2 (distant layers), but ExpressionBuilder and
-        FilterOrchestrator are lazy-initialized during STEP 1/2 and need predicates.
-
-        Without early initialization:
-        - ExpressionBuilder received EMPTY predicates
-        - FilterOrchestrator received EMPTY predicates
-        - Geometric filtering failed silently
-
-        With early initialization:
-        - All components receive correct predicates from the start
-        - OGR backend gets both SQL names AND numeric QGIS codes
-        """
-        # Get geometric predicates from filtering parameters
-        filtering_params = self.task_parameters.get("filtering", {})
-        geom_predicates = filtering_params.get("geometric_predicates", [])
-
-        # Log FULL filtering params for diagnosis
-        from qgis.core import QgsMessageLog, Qgis as QgisLevel
-
-        logger.info("=" * 70)
-        logger.info("🔍 FILTERING PARAMETERS RECEIVED:")
-        logger.info(f"   has_geometric_predicates: {filtering_params.get('has_geometric_predicates', 'NOT SET')}")
-        logger.info(f"   geometric_predicates: {geom_predicates}")
-        logger.info(f"   has_layers_to_filter: {filtering_params.get('has_layers_to_filter', 'NOT SET')}")
-        logger.info(f"   layers_to_filter count: {len(filtering_params.get('layers_to_filter', []))}")
-        logger.info("=" * 70)
-
-        if not geom_predicates:
-            # CRITICAL: Log to QGIS panel - this explains why distant layers won't be filtered!
-            logger.warning("⚠️ No geometric predicates in task_parameters - distant layers will NOT be filtered!")
-            QgsMessageLog.logMessage(
-                "⚠️ No geometric predicates configured - check 'Intersect' checkbox in Filtering panel",
-                "FilterMate", QgisLevel.Warning
-            )
-            self.current_predicates = {}
-            return
-
-        logger.info("🔧 EARLY PREDICATE INITIALIZATION")
-        logger.info(f"   Input geometric_predicates: {geom_predicates}")
-        QgsMessageLog.logMessage(
-            f"🔧 Predicates: {geom_predicates}",
-            "FilterMate", QgisLevel.Info
+        """Initialize current_predicates from task parameters. Delegates to InitializationHandler."""
+        result = self._init_handler.initialize_current_predicates(
+            task_parameters=self.task_parameters,
+            predicates_map=self.predicates,
+            expression_builder=self._expression_builder,
+            filter_orchestrator=self._filter_orchestrator,
         )
-
-        # Mapping SQL function → QGIS predicate code (pour OGR/processing)
-        sql_to_qgis_code = {
-            'ST_Intersects': 0,
-            'ST_Contains': 1,
-            'ST_Disjoint': 2,
-            'ST_Equals': 3,
-            'ST_Touches': 4,
-            'ST_Overlaps': 5,
-            'ST_Within': 6,
-            'ST_Crosses': 7,
-            'ST_Covers': 1,     # maps to Contains
-            'ST_CoveredBy': 6,  # maps to Within
-        }
-
-        # Reset current_predicates
-        self.current_predicates = {}
-        # Separate numeric predicates for OGR (prevent duplicates in PostgreSQL)
-        self.numeric_predicates = {}
-
-        for key in geom_predicates:
-            if key in self.predicates:
-                func_name = self.predicates[key]
-                # Store SQL name (for PostgreSQL/Spatialite)
-                # Only store string key to prevent duplicate EXISTS generation
-                # Previously, storing BOTH string and numeric keys caused build_expression()
-                # to iterate twice with same predicate → duplicate EXISTS clauses
-                self.current_predicates[func_name] = func_name
-
-                # Store numeric code separately for OGR/processing
-                qgis_code = sql_to_qgis_code.get(func_name)
-                if qgis_code is not None:
-                    self.numeric_predicates[qgis_code] = func_name
-                    logger.debug(f"   Mapped: {key} → {func_name} → QGIS code {qgis_code}")
-                else:
-                    logger.warning(f"   ⚠️ No QGIS code for: {key} → {func_name}")
-            else:
-                logger.warning(f"   ⚠️ Unknown predicate key: {key}")
-
-        # Log final state
-        # Current_predicates only has string keys, numeric_predicates has numeric keys
-        logger.info(f"   current_predicates (SQL): {self.current_predicates}")
-        logger.info(f"   numeric_predicates (OGR): {self.numeric_predicates}")
-        logger.info("   v2.10.0: Predicates now stored separately to prevent duplicate EXISTS")
-        logger.info("=" * 70)
-
-        # FIX 2026-01-16: Propagate predicates to EXISTING instances
-        # TaskRunOrchestrator may have already created expression_builder and filter_orchestrator
-        # with current_predicates=[], so we must update them here.
-        if self._expression_builder is not None:
-            self._expression_builder.current_predicates = self.current_predicates
-            logger.debug("Propagated predicates to existing ExpressionBuilder")
-
-        if self._filter_orchestrator is not None:
-            self._filter_orchestrator.current_predicates = self.current_predicates
-            logger.debug("Propagated predicates to existing FilterOrchestrator")
+        self.current_predicates = result['current_predicates']
+        self.numeric_predicates = result['numeric_predicates']
 
     # ========================================================================
     # Phase E13: Lazy Initialization for Extracted Classes
@@ -941,126 +866,29 @@ class FilterEngineTask(QgsTask):
         )
 
     def _initialize_source_layer(self):
-        """
-        Initialize source layer and basic layer count.
-
-        Returns:
-            bool: True if source layer found, False otherwise
-        """
-        # Validate required keys in task_parameters["infos"]
-        if "infos" not in self.task_parameters:
-            logger.error("task_parameters missing 'infos' dictionary")
-            self.exception = KeyError("task_parameters missing 'infos' dictionary")
+        """Initialize source layer and basic layer count. Delegates to InitializationHandler."""
+        result = self._init_handler.initialize_source_layer(self.task_parameters, self.PROJECT)
+        if not result['success']:
+            self.exception = result['exception']
             return False
-
-        infos = self.task_parameters["infos"]
-
-        # First, we need layer_id to find the layer (cannot be auto-filled)
-        if "layer_id" not in infos or infos["layer_id"] is None:
-            error_msg = "task_parameters['infos'] missing required key: ['layer_id']"
-            logger.error(error_msg)
-            self.exception = KeyError(error_msg)
-            return False
-
-        # Try to find the layer by ID first (more reliable than name)
-        layer_id = infos["layer_id"]
-        layer_obj = self.PROJECT.mapLayer(layer_id)
-
-        # Fallback: try by name if available
-        if layer_obj is None and infos.get("layer_name"):
-            layers = [
-                layer for layer in self.PROJECT.mapLayersByName(infos["layer_name"])
-                if layer.id() == layer_id
-            ]
-            if layers:
-                layer_obj = layers[0]
-
-        if layer_obj is None:
-            error_msg = f"Layer with id '{layer_id}' not found in project"
-            logger.error(error_msg)
-            self.exception = KeyError(error_msg)
-            return False
-
-        # Auto-fill missing required keys from the QGIS layer object
-        if "layer_name" not in infos or infos["layer_name"] is None:
-            infos["layer_name"] = layer_obj.name()
-            logger.info(f"Auto-filled layer_name='{infos['layer_name']}' for source layer")
-
-        if "layer_crs_authid" not in infos or infos["layer_crs_authid"] is None:
-            infos["layer_crs_authid"] = layer_obj.sourceCrs().authid()
-            logger.info(f"Auto-filled layer_crs_authid='{infos['layer_crs_authid']}' for source layer")
-
         self.layers_count = 1
-        self.source_layer = layer_obj
-        self.source_crs = self.source_layer.sourceCrs()
-        self.source_layer_crs_authid = infos["layer_crs_authid"]
-
-        # Extract feature count limit if provided
-        task_options = self.task_parameters.get("task", {}).get("options", {})
-        if "LAYERS" in task_options and "FEATURE_COUNT_LIMIT" in task_options["LAYERS"]:
-            limit = task_options["LAYERS"]["FEATURE_COUNT_LIMIT"]
-            if isinstance(limit, int) and limit > 0:
-                self.feature_count_limit = limit
-
+        self.source_layer = result['source_layer']
+        self.source_crs = result['source_crs']
+        self.source_layer_crs_authid = result['source_layer_crs_authid']
+        if result['feature_count_limit'] is not None:
+            self.feature_count_limit = result['feature_count_limit']
         return True
 
     def _configure_metric_crs(self):
-        """
-        Configure CRS for metric calculations, reprojecting if necessary.
-
-        IMPROVED v2.5.7: Uses crs_utils module for better CRS detection and
-        optimal metric CRS selection (including UTM zones).
-
-        Sets has_to_reproject_source_layer flag and updates source_layer_crs_authid
-        if the source CRS is geographic or non-metric.
-        """
-        # Use crs_utils if available for better CRS handling
-        if CRS_UTILS_AVAILABLE:
-            is_non_metric = is_geographic_crs(self.source_crs) or not is_metric_crs(self.source_crs)
-
-            if is_non_metric:
-                self.has_to_reproject_source_layer = True
-
-                # Get optimal metric CRS using layer extent for better accuracy
-                layer_extent = self.source_layer.extent() if self.source_layer else None
-                self.source_layer_crs_authid = get_optimal_metric_crs(
-                    project=self.PROJECT,
-                    source_crs=self.source_crs,
-                    extent=layer_extent,
-                    prefer_utm=True
-                )
-
-                # Log CRS conversion info
-                crs_info = get_layer_crs_info(self.source_layer)
-                logger.info(
-                    f"Source layer CRS: {crs_info.get('authid', 'unknown')} "
-                    f"(units: {crs_info.get('units', 'unknown')}, "
-                    f"geographic: {crs_info.get('is_geographic', False)})"
-                )
-                logger.info(
-                    f"Source layer will be reprojected to {self.source_layer_crs_authid} "
-                    "for metric calculations"
-                )
-            else:
-                logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
-        else:
-            # Legacy CRS handling (fallback)
-            source_crs_distance_unit = self.source_crs.mapUnits()
-
-            is_non_metric = (
-                source_crs_distance_unit in ['DistanceUnit.Degrees', 'DistanceUnit.Unknown']
-                or self.source_crs.isGeographic()
-            )
-
-            if is_non_metric:
-                self.has_to_reproject_source_layer = True
-                self.source_layer_crs_authid = get_best_metric_crs(self.PROJECT, self.source_crs)
-                logger.info(
-                    f"Source layer will be reprojected to {self.source_layer_crs_authid} "
-                    "for metric calculations"
-                )
-            else:
-                logger.info(f"Source layer CRS is already metric: {self.source_layer_crs_authid}")
+        """Configure CRS for metric calculations. Delegates to InitializationHandler."""
+        result = self._init_handler.configure_metric_crs(
+            source_crs=self.source_crs,
+            source_layer=self.source_layer,
+            project=self.PROJECT,
+            source_layer_crs_authid=self.source_layer_crs_authid,
+        )
+        self.has_to_reproject_source_layer = result['has_to_reproject']
+        self.source_layer_crs_authid = result['crs_authid']
 
     def _organize_layers_to_filter(self):
         """
@@ -1596,60 +1424,30 @@ class FilterEngineTask(QgsTask):
             return None
 
     def _initialize_source_filtering_parameters(self):
-        """
-        Extract and initialize all parameters needed for source layer filtering.
-
-        EPIC-1 Phase 14.4: Delegates to core.services.filter_parameter_builder.
-        """
-        from ..services.filter_parameter_builder import build_filter_parameters
-        from ...infrastructure.utils import detect_layer_provider_type
-
-        # Delegate to FilterParameterBuilder service
-        params = build_filter_parameters(
+        """Extract and initialize all parameters. Delegates to InitializationHandler."""
+        result = self._init_handler.initialize_source_filtering_parameters(
             task_parameters=self.task_parameters,
             source_layer=self.source_layer,
             postgresql_available=POSTGRESQL_AVAILABLE,
-            detect_provider_fn=detect_layer_provider_type,
-            sanitize_subset_fn=self._sanitize_subset_string
+            sanitize_subset_fn=self._sanitize_subset_string,
         )
-
-        # Update task state from result
-        self.param_source_provider_type = params.provider_type
-        self.param_source_layer_name = params.layer_name
-        self.param_source_layer_id = params.layer_id
-        self.param_source_table = params.table_name
-        self.param_source_schema = params.schema
-        self.param_source_geom = params.geometry_field
-        self.primary_key_name = params.primary_key_name
-        self._source_forced_backend = params.forced_backend
-        self._source_postgresql_fallback = params.postgresql_fallback
-        self.has_combine_operator = params.has_combine_operator
-        self.param_source_layer_combine_operator = params.source_layer_combine_operator
-        self.param_other_layers_combine_operator = params.other_layers_combine_operator
-        self.param_source_old_subset = params.old_subset
-        self.source_layer_fields_names = params.field_names
-
-        # Update task_parameters with source table info
-        # This is critical for ExpressionBuilder to access param_source_table
-        # which is needed for adapting EXISTS clauses when filtering distant layers
-        self.task_parameters['param_source_table'] = params.table_name
-        self.task_parameters['param_source_schema'] = params.schema
-
-        logger.debug(
-            f"Filtering layer: {self.param_source_layer_name} "
-            f"(table: {self.param_source_table}, Provider: {self.param_source_provider_type})"
-        )
-
-        # NOTE: The following code was extracted to FilterParameterBuilder service:
-        # - Auto-fill missing metadata (layer_name, layer_id, provider_type, geometry_field, primary_key, schema)
-        # - Provider type detection and PostgreSQL fallback
-        # - Schema validation for PostgreSQL layers
-        # - Filtering configuration extraction (combine operators, old subset, field names)
-
-        # Preserve original infos dict for backward compatibility (optional)
-        self.task_parameters.get("infos", {})
-        # Preserve original infos dict for backward compatibility (optional)
-        self.task_parameters.get("infos", {})
+        self.param_source_provider_type = result['provider_type']
+        self.param_source_layer_name = result['layer_name']
+        self.param_source_layer_id = result['layer_id']
+        self.param_source_table = result['table_name']
+        self.param_source_schema = result['schema']
+        self.param_source_geom = result['geometry_field']
+        self.primary_key_name = result['primary_key_name']
+        self._source_forced_backend = result['forced_backend']
+        self._source_postgresql_fallback = result['postgresql_fallback']
+        self.has_combine_operator = result['has_combine_operator']
+        self.param_source_layer_combine_operator = result['source_layer_combine_operator']
+        self.param_other_layers_combine_operator = result['other_layers_combine_operator']
+        self.param_source_old_subset = result['old_subset']
+        self.source_layer_fields_names = result['field_names']
+        # Critical for ExpressionBuilder to access source table info
+        self.task_parameters['param_source_table'] = result['table_name']
+        self.task_parameters['param_source_schema'] = result['schema']
 
     def _sanitize_subset_string(self, subset_string):
         """
@@ -1857,73 +1655,37 @@ class FilterEngineTask(QgsTask):
         return result_obj.success
 
     def _initialize_source_subset_and_buffer(self):
-        """
-        Initialize source subset expression and buffer parameters (v2).
-
-        PHASE 14.5: Migrated to SourceSubsetBufferBuilder service.
-        Delegates to build_source_subset_buffer_config() for actual initialization.
-
-        Extracted 163 lines to core/services/source_subset_buffer_builder.py (v5.0-alpha).
-        """
-        # PHASE 14.5: Delegate to SourceSubsetBufferBuilder service
-        from ..services.source_subset_buffer_builder import build_source_subset_buffer_config
-
-        # Build configuration using service
-        config = build_source_subset_buffer_config(
+        """Initialize source subset and buffer parameters. Delegates to InitializationHandler."""
+        result = self._init_handler.initialize_source_subset_and_buffer(
             task_parameters=self.task_parameters,
             expression=self.expression,
             old_subset=self.param_source_old_subset,
-            is_field_expression=getattr(self, 'is_field_expression', None)
+            is_field_expression=getattr(self, 'is_field_expression', None),
         )
-
-        # Apply results to task instance
-        self.param_source_new_subset = config.source_new_subset
-        self.param_use_centroids_source_layer = config.use_centroids_source_layer
-        self.param_use_centroids_distant_layers = config.use_centroids_distant_layers
-        self.approved_optimizations = config.approved_optimizations
-        self.auto_apply_optimizations = config.auto_apply_optimizations
-
-        # Buffer configuration
-        if config.has_buffer:
-            self.param_buffer_value = config.buffer_value
-            self.param_buffer_expression = config.buffer_expression
-        else:
-            self.param_buffer_value = 0
-            self.param_buffer_expression = None
-
-        self.param_buffer_type = config.buffer_type
-        self.param_buffer_segments = config.buffer_segments
+        self.param_source_new_subset = result['source_new_subset']
+        self.param_use_centroids_source_layer = result['use_centroids_source_layer']
+        self.param_use_centroids_distant_layers = result['use_centroids_distant_layers']
+        self.approved_optimizations = result['approved_optimizations']
+        self.auto_apply_optimizations = result['auto_apply_optimizations']
+        self.param_buffer_value = result['buffer_value']
+        self.param_buffer_expression = result['buffer_expression']
+        self.param_buffer_type = result['buffer_type']
+        self.param_buffer_segments = result['buffer_segments']
 
     def _prepare_geometries_by_provider(self, provider_list):
-        """
-        Prepare source geometries for each provider type.
-
-        Delegates to core.services.geometry_preparer.prepare_geometries_by_provider()
-        for actual geometry preparation logic.
-
-        Args:
-            provider_list: List of unique provider types to prepare
-
-        Returns:
-            bool: True if all required geometries prepared successfully
-        """
-        from ..services.geometry_preparer import prepare_geometries_by_provider
-
-        result = prepare_geometries_by_provider(
+        """Prepare source geometries for each provider. Delegates to SourceGeometryPreparer."""
+        result = self._source_geom_preparer.prepare_geometries_by_provider(
             provider_list=provider_list,
             task_parameters=self.task_parameters,
             source_layer=self.source_layer,
             param_source_provider_type=self.param_source_provider_type,
             param_buffer_expression=self.param_buffer_expression,
             layers_dict=self.layers if hasattr(self, 'layers') else None,
-            prepare_postgresql_geom_callback=lambda: self.prepare_postgresql_source_geom(),
-            prepare_spatialite_geom_callback=lambda: self.prepare_spatialite_source_geom(),
-            prepare_ogr_geom_callback=lambda: self.prepare_ogr_source_geom(),
-            logger=logger,
-            postgresql_available=POSTGRESQL_AVAILABLE
+            prepare_postgresql_callback=lambda: self.prepare_postgresql_source_geom(),
+            prepare_spatialite_callback=lambda: self.prepare_spatialite_source_geom(),
+            prepare_ogr_callback=lambda: self.prepare_ogr_source_geom(),
+            postgresql_available=POSTGRESQL_AVAILABLE,
         )
-
-        # Apply results to instance attributes
         if result['postgresql_source_geom'] is not None:
             self.postgresql_source_geom = result['postgresql_source_geom']
         if result['spatialite_source_geom'] is not None:
@@ -1932,7 +1694,6 @@ class FilterEngineTask(QgsTask):
             self.ogr_source_geom = result['ogr_source_geom']
         if result.get('spatialite_fallback_mode', False):
             self._spatialite_fallback_mode = result['spatialite_fallback_mode']
-
         return result['success']
 
     def _filter_all_layers_with_progress(self):
@@ -2328,138 +2089,64 @@ class FilterEngineTask(QgsTask):
         return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
 
     def prepare_postgresql_source_geom(self) -> str:
-        """Prepare PostgreSQL source geometry with buffer/centroid. Delegated to BackendServices facade.
-
-        Returns:
-            str: PostgreSQL geometry expression (e.g., '"schema"."table"."geom"' or buffered variant)
-        """
-        # Add diagnostic logging to trace PostgreSQL geometry preparation
-        logger.info("=" * 60)
-        logger.info("🐘 PREPARING PostgreSQL SOURCE GEOMETRY")
-        logger.info("=" * 60)
-        logger.info(f"   source_schema: {self.param_source_schema}")
-        logger.info(f"   source_table: {self.param_source_table}")
-        logger.info(f"   source_geom: {self.param_source_geom}")
-        logger.info(f"   buffer_value: {getattr(self, 'param_buffer_value', None)}")
-        logger.info(f"   buffer_expression: {getattr(self, 'param_buffer_expression', None)}")
-        logger.info(f"   use_centroids: {getattr(self, 'param_use_centroids_source_layer', False)}")
-        logger.info(f"   session_id: {getattr(self, 'session_id', None)}")
-        logger.info(f"   mv_schema: {getattr(self, 'current_materialized_view_schema', 'filter_mate_temp')}")
-
-        # Use cached feature count for consistent threshold decisions
+        """Prepare PostgreSQL source geometry. Delegates to SourceGeometryPreparer."""
         source_fc = getattr(self, '_cached_source_feature_count', None)
-        if source_fc is None:
-            # Fallback if not cached (e.g., called from different code path)
-            source_fc = self.source_layer.featureCount() if self.source_layer else None
-            logger.warning(f"   ⚠️ Using fresh featureCount (not cached): {source_fc}")
-        logger.info(f"   source_feature_count: {source_fc} (threshold=10000)")
-
-        result_geom, mv_name = _backend_services.prepare_postgresql_source_geom(
+        result = self._source_geom_preparer.prepare_postgresql_source_geom(
             source_table=self.param_source_table, source_schema=self.param_source_schema,
-            source_geom=self.param_source_geom, buffer_value=getattr(self, 'param_buffer_value', None),
+            source_geom=self.param_source_geom,
+            buffer_value=getattr(self, 'param_buffer_value', None),
             buffer_expression=getattr(self, 'param_buffer_expression', None),
             use_centroids=getattr(self, 'param_use_centroids_source_layer', False),
             buffer_segments=getattr(self, 'param_buffer_segments', 5),
             buffer_type=self.task_parameters.get("filtering", {}).get("buffer_type", "Round"),
             primary_key_name=getattr(self, 'primary_key_name', None),
-            session_id=getattr(self, 'session_id', None),  # Pass session_id for MV name prefix
-            mv_schema=getattr(self, 'current_materialized_view_schema', 'filter_mate_temp'),  # Pass MV schema
-            source_feature_count=source_fc  # Use cached value for consistent threshold
+            session_id=getattr(self, 'session_id', None),
+            mv_schema=getattr(self, 'current_materialized_view_schema', 'filter_mate_temp'),
+            source_feature_count=source_fc,
+            source_layer=self.source_layer,
         )
-        self.postgresql_source_geom = result_geom
-        if mv_name:
-            self.current_materialized_view_name = mv_name
-
-        # Log result for debugging
-        logger.info(f"   ✓ postgresql_source_geom = '{str(result_geom)[:100]}...'")
-        logger.info("=" * 60)
-
-        # CRITICAL - Return the geometry expression!
-        # The callback in geometry_preparer.py expects a return value.
-        return result_geom
+        self.postgresql_source_geom = result['geom']
+        if result['mv_name']:
+            self.current_materialized_view_name = result['mv_name']
+        return result['geom']
 
     def _get_optimization_thresholds(self):
-        """Get optimization thresholds config. Delegated to core.optimization.config_provider."""
-        from ..optimization.config_provider import get_optimization_thresholds
-        return get_optimization_thresholds(getattr(self, 'task_parameters', None))
+        """Get optimization thresholds. Delegates to GeometryHandler."""
+        return self._geometry_handler.get_optimization_thresholds(getattr(self, 'task_parameters', None))
 
     def _get_simplification_config(self):
-        """Get geometry simplification config. Delegated to core.optimization.config_provider."""
-        from ..optimization.config_provider import get_simplification_config
-        return get_simplification_config(getattr(self, 'task_parameters', None))
+        """Get simplification config. Delegates to GeometryHandler."""
+        return self._geometry_handler.get_simplification_config(getattr(self, 'task_parameters', None))
 
     def _get_wkt_precision(self, crs_authid: str = None) -> int:
-        """Get appropriate WKT precision based on CRS units. Delegated to BufferService."""
-        from ..services.buffer_service import BufferService
+        """Get WKT precision. Delegates to GeometryHandler."""
         if crs_authid is None:
             crs_authid = getattr(self, 'source_layer_crs_authid', None)
-        return BufferService().get_wkt_precision(crs_authid)
+        return self._geometry_handler.get_wkt_precision(crs_authid)
 
     def _geometry_to_wkt(self, geometry, crs_authid: str = None) -> str:
-        """Convert geometry to WKT with optimized precision based on CRS."""
-        if geometry is None or geometry.isEmpty():
-            return ""
-        precision = self._get_wkt_precision(crs_authid)
-        wkt = geometry.asWkt(precision)
-        logger.debug(f"  📏 WKT precision: {precision} decimals (CRS: {crs_authid})")
-        return wkt
+        """Convert geometry to WKT. Delegates to GeometryHandler."""
+        return self._geometry_handler.geometry_to_wkt(geometry, crs_authid)
 
     def _get_buffer_aware_tolerance(self, buffer_value, buffer_segments, buffer_type, extent_size, is_geographic=False):
-        """Calculate optimal simplification tolerance. Delegated to BufferService."""
-        from ..services.buffer_service import BufferService, BufferConfig, BufferEndCapStyle
-        config = BufferConfig(distance=buffer_value or 0, segments=buffer_segments, end_cap_style=BufferEndCapStyle(buffer_type))
-        return BufferService().calculate_buffer_aware_tolerance(config, extent_size, is_geographic)
+        """Calculate simplification tolerance. Delegates to GeometryHandler."""
+        return self._geometry_handler.get_buffer_aware_tolerance(
+            buffer_value, buffer_segments, buffer_type, extent_size, is_geographic
+        )
 
     def _simplify_geometry_adaptive(self, geometry: Any, max_wkt_length: Optional[int] = None, crs_authid: Optional[str] = None) -> Any:
-        """Simplify geometry adaptively. Delegated to BackendServices facade."""
-
-        if not geometry or geometry.isEmpty():
-            return geometry
-
-        try:
-            adapter = _backend_services.get_geometry_preparation_adapter()
-            if adapter is None:
-                logger.warning("GeometryPreparationAdapter not available, returning original geometry")
-                return geometry
-
-            # Get buffer parameters for tolerance calculation
-            buffer_value = getattr(self, 'param_buffer_value', None)
-            buffer_segments = getattr(self, 'param_buffer_segments', 5)
-            buffer_type = getattr(self, 'param_buffer_type', 0)
-
-            result = adapter.simplify_geometry_adaptive(
-                geometry=geometry,
-                max_wkt_length=max_wkt_length,
-                crs_authid=crs_authid,
-                buffer_value=buffer_value,
-                buffer_segments=buffer_segments,
-                buffer_type=buffer_type
-            )
-
-            if result.success and result.geometry:
-                return result.geometry
-            logger.warning(f"GeometryPreparationAdapter simplify failed: {result.message}")
-            return geometry
-        except ImportError as e:
-            logger.error(f"GeometryPreparationAdapter not available: {e}")
-            return geometry
-        except Exception as e:
-            logger.error(f"GeometryPreparationAdapter simplify error: {e}")
-            return geometry
+        """Simplify geometry adaptively. Delegates to GeometryHandler."""
+        return self._geometry_handler.simplify_geometry_adaptive(
+            geometry, max_wkt_length, crs_authid,
+            buffer_value=getattr(self, 'param_buffer_value', None),
+            buffer_segments=getattr(self, 'param_buffer_segments', 5),
+            buffer_type=getattr(self, 'param_buffer_type', 0),
+        )
 
     def prepare_spatialite_source_geom(self) -> Optional[str]:
-        """Prepare source geometry for Spatialite filtering. Delegated to BackendServices facade.
-
-        Returns:
-            str: WKT geometry string, or None if preparation failed
-        """
-        SpatialiteSourceContext = _backend_services.get_spatialite_source_context_class()
-        if SpatialiteSourceContext is None:
-            raise ImportError("SpatialiteSourceContext not available")
-
-        context = SpatialiteSourceContext(
-            source_layer=self.source_layer,
-            task_parameters=self.task_parameters,
+        """Prepare Spatialite source geometry. Delegates to SourceGeometryPreparer."""
+        result = self._source_geom_preparer.prepare_spatialite_source_geom(
+            source_layer=self.source_layer, task_parameters=self.task_parameters,
             is_field_expression=getattr(self, 'is_field_expression', None),
             expression=getattr(self, 'expression', None),
             param_source_new_subset=getattr(self, 'param_source_new_subset', None),
@@ -2468,266 +2155,127 @@ class FilterEngineTask(QgsTask):
             source_layer_crs_authid=getattr(self, 'source_layer_crs_authid', None),
             source_crs=getattr(self, 'source_crs', None),
             param_use_centroids_source_layer=getattr(self, 'param_use_centroids_source_layer', False),
-            PROJECT=getattr(self, 'PROJECT', None),
+            project=getattr(self, 'PROJECT', None),
             geom_cache=getattr(self, 'geom_cache', None),
-            geometry_to_wkt=self._geometry_to_wkt,
-            simplify_geometry_adaptive=self._simplify_geometry_adaptive,
-            get_optimization_thresholds=self._get_optimization_thresholds,
+            geometry_to_wkt_fn=self._geometry_to_wkt,
+            simplify_geometry_adaptive_fn=self._simplify_geometry_adaptive,
+            get_optimization_thresholds_fn=self._get_optimization_thresholds,
         )
-
-        result = _backend_services.prepare_spatialite_source_geom(context)
-        if result.success:
-            self.spatialite_source_geom = result.wkt
+        if result['success']:
+            self.spatialite_source_geom = result['wkt']
             if hasattr(self, 'task_parameters') and self.task_parameters:
                 if 'infos' not in self.task_parameters:
                     self.task_parameters['infos'] = {}
-                self.task_parameters['infos']['source_geom_wkt'] = result.wkt
-                self.task_parameters['infos']['buffer_state'] = result.buffer_state
-            logger.debug(f"prepare_spatialite_source_geom: WKT length = {len(result.wkt) if result.wkt else 0}")
-            logger.info(f"✓ Spatialite source geom prepared: {len(result.wkt)} chars")
-            return result.wkt  # FIX: Return WKT string for lambda callback
+                self.task_parameters['infos']['source_geom_wkt'] = result['wkt']
+                self.task_parameters['infos']['buffer_state'] = result['buffer_state']
+            return result['wkt']
         else:
-            error_msg = result.error_message or "Unknown error"
-            logger.error(f"prepare_spatialite_source_geom failed: {error_msg}")
-            # FIX 2026-01-16: Also log to QGIS message panel for visibility
-            from qgis.core import QgsMessageLog, Qgis
-            QgsMessageLog.logMessage(
-                f"❌ Spatialite geometry preparation FAILED: {error_msg}",
-                "FilterMate", Qgis.Critical
-            )
-            logger.error("  → This will cause distant layer filtering to fail!")
-            logger.error("  → Check if source layer has valid geometry")
-            logger.error("  → Check if source layer has features selected or filtered")
             self.spatialite_source_geom = None
-            return None  # FIX: Return None to signal failure
+            return None
 
     def _copy_filtered_layer_to_memory(self, layer: QgsVectorLayer, layer_name: str = "filtered_copy") -> QgsVectorLayer:
-        """Copy filtered layer to memory layer. Delegated to GeometryPreparationAdapter."""
-        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
-        if GeometryPreparationAdapter is None:
-            raise Exception("GeometryPreparationAdapter not available")
-        result = GeometryPreparationAdapter().copy_filtered_to_memory(layer, layer_name)
-        if result.success and result.layer:
-            self._verify_and_create_spatial_index(result.layer, layer_name)
-            return result.layer
-        raise Exception(f"Failed to copy filtered layer: {result.error_message or 'Unknown'}")
+        """Copy filtered layer to memory. Delegates to GeometryHandler."""
+        return self._geometry_handler.copy_filtered_layer_to_memory(
+            layer, layer_name, self._verify_and_create_spatial_index
+        )
 
     def _copy_selected_features_to_memory(self, layer: QgsVectorLayer, layer_name: str = "selected_copy") -> QgsVectorLayer:
-        """Copy selected features to memory layer. Delegated to GeometryPreparationAdapter."""
-        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
-        if GeometryPreparationAdapter is None:
-            raise Exception("GeometryPreparationAdapter not available")
-        result = GeometryPreparationAdapter().copy_selected_to_memory(layer, layer_name)
-        if result.success and result.layer:
-            self._verify_and_create_spatial_index(result.layer, layer_name)
-            return result.layer
-        raise Exception(f"Failed to copy selected features: {result.error_message or 'Unknown'}")
+        """Copy selected features to memory. Delegates to GeometryHandler."""
+        return self._geometry_handler.copy_selected_features_to_memory(
+            layer, layer_name, self._verify_and_create_spatial_index
+        )
 
     def _create_memory_layer_from_features(self, features: List[QgsFeature], crs: QgsCoordinateReferenceSystem, layer_name: str = "from_features") -> Optional[QgsVectorLayer]:
-        """Create memory layer from QgsFeature objects. Delegated to GeometryPreparationAdapter."""
-        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
-        if GeometryPreparationAdapter is None:
-            logger.error("GeometryPreparationAdapter not available")
-            return None
-        result = GeometryPreparationAdapter().create_memory_from_features(features, crs, layer_name)
-        if result.success and result.layer:
-            self._verify_and_create_spatial_index(result.layer, layer_name)
-            return result.layer
-        logger.error(f"_create_memory_layer_from_features failed: {result.error_message or 'Unknown'}")
-        return None
+        """Create memory layer from features. Delegates to GeometryHandler."""
+        return self._geometry_handler.create_memory_layer_from_features(
+            features, crs, layer_name, self._verify_and_create_spatial_index
+        )
 
     def _convert_layer_to_centroids(self, layer: QgsVectorLayer) -> Optional[QgsVectorLayer]:
-        """Convert layer geometries to centroids. Delegated to GeometryPreparationAdapter."""
-        GeometryPreparationAdapter = _backend_services.get_geometry_preparation_adapter()
-        if GeometryPreparationAdapter is None:
-            logger.error("GeometryPreparationAdapter not available")
-            return None
-        result = GeometryPreparationAdapter().convert_to_centroids(layer)
-        if result.success and result.layer:
-            return result.layer
-        logger.error(f"_convert_layer_to_centroids failed: {result.error_message or 'Unknown'}")
-        return None
+        """Convert to centroids. Delegates to GeometryHandler."""
+        return self._geometry_handler.convert_layer_to_centroids(layer)
 
     def _fix_invalid_geometries(self, layer, output_key):
-        """Fix invalid geometries. DISABLED: Returns input layer unchanged."""
-        return layer
+        """Fix invalid geometries. Delegates to GeometryHandler."""
+        return self._geometry_handler.fix_invalid_geometries(layer, output_key)
 
     def _reproject_layer(self, layer, target_crs):
-        """Reproject layer to target CRS without geometry validation."""
-        alg_params = {
-            'INPUT': layer,
-            'TARGET_CRS': target_crs,
-            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
-        }
-
-        context = QgsProcessingContext()
-        context.setInvalidGeometryCheck(QgsFeatureRequest.GeometryNoCheck)
-        feedback = QgsProcessingFeedback()
-
-        self.outputs['alg_source_layer_params_reprojectlayer'] = processing.run(
-            'qgis:reprojectlayer',
-            alg_params,
-            context=context,
-            feedback=feedback
-        )
-        layer = self.outputs['alg_source_layer_params_reprojectlayer']['OUTPUT']
-        processing.run('qgis:createspatialindex', {"INPUT": layer})
-        return layer
+        """Reproject layer. Delegates to GeometryHandler."""
+        return self._geometry_handler.reproject_layer(layer, target_crs, self.outputs)
 
     def _store_warning_message(self, message):
         """Store a warning message for display in UI thread (thread-safe callback)."""
-        if message and message not in self.warning_messages:
-            self.warning_messages.append(message)
+        self._geometry_handler.store_warning_message(message, self.warning_messages)
 
     def _get_buffer_distance_parameter(self):
-        """Get buffer distance parameter from task configuration."""
-        if self.param_buffer_expression:
-            return QgsProperty.fromExpression(self.param_buffer_expression)
-        elif self.param_buffer_value is not None:
-            return float(self.param_buffer_value)
-        return None
+        """Get buffer distance parameter. Delegates to GeometryHandler."""
+        return self._geometry_handler.get_buffer_distance_parameter(
+            self.param_buffer_expression, self.param_buffer_value
+        )
 
     def _apply_qgis_buffer(self, layer, buffer_distance):
-        """Apply buffer - delegated to core.geometry.apply_qgis_buffer."""
-        try:
-            from ..geometry import apply_qgis_buffer, BufferConfig
-            config = BufferConfig(buffer_type=self.param_buffer_type, buffer_segments=self.param_buffer_segments, dissolve=True)
-            buffered_layer = apply_qgis_buffer(layer, buffer_distance, config, self._convert_geometry_collection_to_multipolygon)
-            self.outputs['alg_source_layer_params_buffer'] = {'OUTPUT': buffered_layer}
-            return buffered_layer
-        except ImportError as e:
-            logger.error(f"core.geometry module not available: {e}")
-            raise Exception(f"Buffer operation requires core.geometry module: {e}")
-        except Exception as e:
-            logger.error(f"Buffer operation failed: {e}")
-            raise
+        """Apply QGIS buffer. Delegates to GeometryHandler."""
+        return self._geometry_handler.apply_qgis_buffer(
+            layer, buffer_distance, self.param_buffer_type, self.param_buffer_segments, self.outputs
+        )
 
     def _convert_geometry_collection_to_multipolygon(self, layer):
-        """Convert GeometryCollection to MultiPolygon. Delegated to core.geometry."""
-        from ..geometry import convert_geometry_collection_to_multipolygon
-        return convert_geometry_collection_to_multipolygon(layer)
+        """Convert GeometryCollection to MultiPolygon. Delegates to GeometryHandler."""
+        return self._geometry_handler.convert_geometry_collection_to_multipolygon(layer)
 
     def _evaluate_buffer_distance(self, layer, buffer_param):
-        """Delegates to core.geometry.buffer_processor.evaluate_buffer_distance()."""
-        from ..geometry.buffer_processor import evaluate_buffer_distance
-
-        return evaluate_buffer_distance(layer, buffer_param)
+        """Evaluate buffer distance. Delegates to GeometryHandler."""
+        return self._geometry_handler.evaluate_buffer_distance(layer, buffer_param)
 
     def _create_memory_layer_for_buffer(self, layer):
-        """
-        Create empty memory layer for buffered features.
-
-        EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.geometry.buffer_processor.
-
-        Args:
-            layer: Source layer for CRS and geometry type
-
-        Returns:
-            QgsVectorLayer: Empty memory layer configured for buffered geometries
-        """
-        from ..geometry.buffer_processor import create_memory_layer_for_buffer
-
-        return create_memory_layer_for_buffer(layer)
+        """Create memory layer for buffer. Delegates to GeometryHandler."""
+        return self._geometry_handler.create_memory_layer_for_buffer(layer)
 
     def _buffer_all_features(self, layer, buffer_dist):
-        """Buffer all features from layer. Delegated to core.geometry.buffer_processor."""
-        from ..geometry.buffer_processor import buffer_all_features
-        segments = getattr(self, 'param_buffer_segments', 5)
-        return buffer_all_features(layer, buffer_dist, segments)
+        """Buffer all features. Delegates to GeometryHandler."""
+        return self._geometry_handler.buffer_all_features(
+            layer, buffer_dist, getattr(self, 'param_buffer_segments', 5)
+        )
 
     def _dissolve_and_add_to_layer(self, geometries, buffered_layer):
-        """Delegates to core.geometry.buffer_processor.dissolve_and_add_to_layer()."""
-        from ..geometry.buffer_processor import dissolve_and_add_to_layer
-        return dissolve_and_add_to_layer(geometries, buffered_layer, self._verify_and_create_spatial_index)
+        """Dissolve and add to layer. Delegates to GeometryHandler."""
+        return self._geometry_handler.dissolve_and_add_to_layer(
+            geometries, buffered_layer, self._verify_and_create_spatial_index
+        )
 
     def _create_buffered_memory_layer(self, layer, buffer_distance):
-        """Delegates to core.geometry.create_buffered_memory_layer()."""
-        from ..geometry import create_buffered_memory_layer
-        return create_buffered_memory_layer(layer, buffer_distance, self.param_buffer_segments, self._verify_and_create_spatial_index, self._store_warning_message)
+        """Create buffered memory layer. Delegates to GeometryHandler."""
+        return self._geometry_handler.create_buffered_memory_layer(
+            layer, buffer_distance, self.param_buffer_segments,
+            self._verify_and_create_spatial_index, self._store_warning_message
+        )
 
     def _aggressive_geometry_repair(self, geom):
-        """Delegates to core.geometry.aggressive_geometry_repair()."""
-        from ..geometry import aggressive_geometry_repair
-        return aggressive_geometry_repair(geom)
+        """Aggressive geometry repair. Delegates to GeometryHandler."""
+        return self._geometry_handler.aggressive_geometry_repair(geom)
 
     def _repair_invalid_geometries(self, layer):
-        """Validate and repair invalid geometries. Delegated to core.geometry."""
-        from ..geometry import repair_invalid_geometries
-        return repair_invalid_geometries(
-            layer=layer,
-            verify_spatial_index_fn=self._verify_and_create_spatial_index
+        """Repair invalid geometries. Delegates to GeometryHandler."""
+        return self._geometry_handler.repair_invalid_geometries(
+            layer, self._verify_and_create_spatial_index
         )
 
     def _simplify_buffer_result(self, layer, buffer_distance):
-        """Simplify polygon(s) from buffer operations. Delegated to core.geometry."""
-        from ..backends.auto_optimizer import get_auto_optimization_config
-        from ..geometry import simplify_buffer_result
-        config = get_auto_optimization_config()
-        return simplify_buffer_result(
-            layer=layer,
-            buffer_distance=buffer_distance,
-            auto_simplify=config.get('auto_simplify_after_buffer', True),
-            tolerance=config.get('buffer_simplify_after_tolerance', 0.5),
-            verify_spatial_index_fn=self._verify_and_create_spatial_index
+        """Simplify buffer result. Delegates to GeometryHandler."""
+        return self._geometry_handler.simplify_buffer_result(
+            layer, buffer_distance, self._verify_and_create_spatial_index
         )
 
     def _apply_buffer_with_fallback(self, layer, buffer_distance):
-        """Apply buffer with fallback to manual method. Validates geometries before buffering."""
-        logger.info(f"Applying buffer: distance={buffer_distance}")
-
-        # Validate input layer before any operations
-        if layer is None:
-            logger.error("_apply_buffer_with_fallback: Input layer is None")
-            return None
-
-        if not layer.isValid():
-            logger.error("_apply_buffer_with_fallback: Input layer is not valid")
-            return None
-
-        if layer.featureCount() == 0:
-            logger.warning("_apply_buffer_with_fallback: Input layer has no features")
-            return None
-
-        result = None
-
-        try:
-            # Try QGIS buffer algorithm first
-            result = self._apply_qgis_buffer(layer, buffer_distance)
-
-            # Validate result before returning
-            if result is None or not result.isValid() or result.featureCount() == 0:
-                logger.warning("_apply_qgis_buffer returned invalid/empty result, trying manual buffer")
-                raise Exception("QGIS buffer returned invalid result")
-
-        except Exception as e:
-            # Fallback to manual buffer
-            logger.warning(f"QGIS buffer algorithm failed: {str(e)}, using manual buffer approach")
-            try:
-                result = self._create_buffered_memory_layer(layer, buffer_distance)
-
-                # Validate result before returning
-                if result is None or not result.isValid() or result.featureCount() == 0:
-                    logger.error("Manual buffer also returned invalid/empty result")
-                    return None
-
-            except Exception as manual_error:
-                logger.error(f"Both buffer methods failed. QGIS: {str(e)}, Manual: {str(manual_error)}")
-                logger.error("Returning None - buffer operation failed completely")
-                return None
-
-        # Apply post-buffer simplification to reduce vertex count
-        if result is not None and result.isValid() and result.featureCount() > 0:
-            result = self._simplify_buffer_result(result, buffer_distance)
-
-        return result
+        """Apply buffer with fallback. Delegates to GeometryHandler."""
+        return self._geometry_handler.apply_buffer_with_fallback(
+            layer, buffer_distance, self.param_buffer_type, self.param_buffer_segments,
+            self.outputs, self._verify_and_create_spatial_index, self._store_warning_message,
+        )
 
     def prepare_ogr_source_geom(self):
-        """Prepare OGR source geometry with reprojection/buffering. Delegated to ogr_executor."""
-        if not OGR_EXECUTOR_AVAILABLE or not hasattr(ogr_executor, 'OGRSourceContext'):
-            logger.error("OGR executor not available")
-            self.ogr_source_geom = None
-            return None
-        context = ogr_executor.OGRSourceContext(
+        """Prepare OGR source geometry. Delegates to SourceGeometryPreparer."""
+        result = self._source_geom_preparer.prepare_ogr_source_geom(
             source_layer=self.source_layer, task_parameters=self.task_parameters,
             is_field_expression=getattr(self, 'is_field_expression', None),
             expression=getattr(self, 'expression', None),
@@ -2736,24 +2284,21 @@ class FilterEngineTask(QgsTask):
             source_layer_crs_authid=self.source_layer_crs_authid,
             param_use_centroids_source_layer=self.param_use_centroids_source_layer,
             spatialite_fallback_mode=getattr(self, '_spatialite_fallback_mode', False),
-            buffer_distance=None,
-            copy_filtered_layer_to_memory=self._copy_filtered_layer_to_memory,
-            copy_selected_features_to_memory=self._copy_selected_features_to_memory,
-            create_memory_layer_from_features=self._create_memory_layer_from_features,
-            reproject_layer=self._reproject_layer,
-            convert_layer_to_centroids=self._convert_layer_to_centroids,
-            get_buffer_distance_parameter=self._get_buffer_distance_parameter,
+            copy_filtered_layer_to_memory_fn=self._copy_filtered_layer_to_memory,
+            copy_selected_features_to_memory_fn=self._copy_selected_features_to_memory,
+            create_memory_layer_from_features_fn=self._create_memory_layer_from_features,
+            reproject_layer_fn=self._reproject_layer,
+            convert_layer_to_centroids_fn=self._convert_layer_to_centroids,
+            get_buffer_distance_parameter_fn=self._get_buffer_distance_parameter,
+            ogr_executor=ogr_executor,
+            ogr_executor_available=OGR_EXECUTOR_AVAILABLE,
         )
-        self.ogr_source_geom = ogr_executor.prepare_ogr_source_geom(context)
-        logger.debug(f"prepare_ogr_source_geom: {self.ogr_source_geom}")
-
-        # FIX 2026-01-17: Return the prepared geometry so the callback gets a value
+        self.ogr_source_geom = result
         return self.ogr_source_geom
 
     def _verify_and_create_spatial_index(self, layer, layer_name=None):
-        """Verify/create spatial index on layer. Delegated to core.geometry.spatial_index."""
-        from ..geometry.spatial_index import verify_and_create_spatial_index
-        return verify_and_create_spatial_index(layer, layer_name)
+        """Verify/create spatial index. Delegates to GeometryHandler."""
+        return self._geometry_handler.verify_and_create_spatial_index(layer, layer_name)
 
     def _get_source_reference(self, sub_expression):
         """Determine the source reference for spatial joins (MV or direct table)."""
@@ -4080,60 +3625,20 @@ class FilterEngineTask(QgsTask):
         return True
 
     def _validate_export_parameters(self):
-        """
-        Validate and extract export parameters from task configuration.
-
-        v4.7 E6-S1: Pure delegation to core.export.validate_export_parameters (legacy fallback removed).
-
-        Returns:
-            dict: Export configuration or None if validation fails
-                {
-                    'layers': list of layer names,
-                    'projection': QgsCoordinateReferenceSystem or None,
-                    'styles': style format (e.g., 'qml', 'sld') or None,
-                    'datatype': export format (e.g., 'GPKG', 'ESRI Shapefile'),
-                    'output_folder': output directory path,
-                    'zip_path': zip file path or None
-                }
-        """
-        from ..export import validate_export_parameters
-
-        result = validate_export_parameters(self.task_parameters, ENV_VARS)
-        if result.valid:
-            return {
-                'layers': result.layers,
-                'projection': result.projection,
-                'styles': result.styles,
-                'datatype': result.datatype,
-                'output_folder': result.output_folder,
-                'zip_path': result.zip_path,
-                'batch_output_folder': result.batch_output_folder,
-                'batch_zip': result.batch_zip
-            }
-        else:
-            logger.error(result.error_message)
-            return None
+        """Validate export parameters. Delegates to ExportHandler."""
+        return self._export_handler.validate_export_parameters(self.task_parameters)
 
     def _get_layer_by_name(self, layer_name):
-        """Get layer object from project by name."""
-        layers_found = self.PROJECT.mapLayersByName(layer_name)
-        if layers_found:
-            return layers_found[0]
-        logger.warning(f"Layer '{layer_name}' not found in project")
-        return None
+        """Get layer by name. Delegates to ExportHandler."""
+        return self._export_handler.get_layer_by_name(self.PROJECT, layer_name)
 
     def _save_layer_style(self, layer, output_path, style_format, datatype):
-        """Delegates to core.export.save_layer_style()."""
-        from ..export import save_layer_style
-
-        save_layer_style(layer, output_path, style_format, datatype)
+        """Save layer style. Delegates to ExportHandler."""
+        self._export_handler.save_layer_style(layer, output_path, style_format, datatype)
 
     def _save_layer_style_lyrx(self, layer, output_path):
-        """Delegates to core.export.StyleExporter for LYRX format."""
-        from ..export.style_exporter import StyleExporter, StyleFormat
-
-        exporter = StyleExporter()
-        exporter.save_style(layer, output_path, StyleFormat.LYRX)
+        """Save layer style LYRX. Delegates to ExportHandler."""
+        self._export_handler.save_layer_style_lyrx(layer, output_path)
 
     # =========================================================================
     # LEGACY EXPORT METHODS REMOVED - v4.0 E11.3
@@ -4154,370 +3659,32 @@ class FilterEngineTask(QgsTask):
     # =========================================================================
 
     def execute_exporting(self) -> bool:
-        """Export selected layers to various formats.
-
-        Supports multiple export modes:
-        - Standard: Single file with all layers (GPKG, GeoJSON)
-        - Batch folder: One file per layer in output folder
-        - Batch ZIP: One ZIP archive per layer
-        - Streaming: Memory-efficient export for large datasets
-
-        Returns:
-            True if export completed successfully, False otherwise.
-
-        Note:
-            - Delegates to BatchExporter and LayerExporter (v4.0 E11.2)
-            - Supports style export in QML/SLD formats
-            - Sets self.message with result summary or error details
-            - Progress is reported via setProgress()
-        """
-        # Validate and extract export parameters
-        export_config = self._validate_export_parameters()
-        if not export_config:
-            self.message = 'Export configuration validation failed'
-            return False
-
-        layers = export_config['layers']
-        projection = export_config['projection']
-        datatype = export_config['datatype']
-        output_folder = export_config['output_folder']
-        style_format = export_config['styles']
-        zip_path = export_config['zip_path']
-        batch_output_folder = export_config.get('batch_output_folder', False)
-        batch_zip = export_config.get('batch_zip', False)
-        save_styles = self.task_parameters["task"]['EXPORTING'].get("HAS_STYLES_TO_EXPORT", False)
-
-        # Initialize exporters (v4.0 E11.2 delegation)
-        from ..export import BatchExporter, LayerExporter, sanitize_filename
-        batch_exporter = BatchExporter(project=self.PROJECT)
-        layer_exporter = LayerExporter(project=self.PROJECT)
-
-        # Inject cancel check into batch_exporter
-        batch_exporter.is_canceled = lambda: self.isCanceled()
-
-        # Define progress/description callbacks
-        def progress_callback(percent):
-            self.setProgress(percent)
-
-        def description_callback(desc):
-            self.setDescription(desc)
-
-        # BATCH MODE: One file per layer in folder
-        if batch_output_folder:
-            logger.info("Batch output folder mode enabled - delegating to BatchExporter")
-            result = batch_exporter.export_to_folder(
-                layers, output_folder, datatype,
-                projection=projection,
-                style_format=style_format,
-                save_styles=save_styles,
-                progress_callback=progress_callback,
-                description_callback=description_callback
-            )
-
-            if result.success:
-                self.message = f'Batch export: {result.exported_count} layer(s) exported to <a href="file:///{output_folder}">{output_folder}</a>'
-            else:
-                self.message = f'Batch export completed with errors:\n{result.get_summary()}'
-                self.error_details = result.error_details
-
-            return result.success
-
-        # BATCH MODE: One ZIP per layer
-        if batch_zip:
-            logger.info("Batch ZIP mode enabled - delegating to BatchExporter")
-            result = batch_exporter.export_to_zip(
-                layers, output_folder, datatype,
-                projection=projection,
-                style_format=style_format,
-                save_styles=save_styles,
-                progress_callback=progress_callback,
-                description_callback=description_callback
-            )
-
-            if result.success:
-                self.message = f'Batch ZIP export: {result.exported_count} ZIP file(s) created in <a href="file:///{output_folder}">{output_folder}</a>'
-            else:
-                self.message = f'Batch ZIP export completed with errors:\n{result.get_summary()}'
-                self.error_details = result.error_details
-
-            return result.success
-
-        # GPKG STANDARD MODE: Delegate to LayerExporter
-        if datatype == 'GPKG':
-            # Determine GPKG output path
-            if output_folder.lower().endswith('.gpkg'):
-                gpkg_output_path = output_folder
-                gpkg_dir = os.path.dirname(gpkg_output_path)
-                if gpkg_dir and not os.path.exists(gpkg_dir):
-                    try:
-                        os.makedirs(gpkg_dir)
-                        logger.info(f"Created output directory: {gpkg_dir}")
-                    except Exception as e:
-                        logger.error(f"Failed to create output directory: {e}")
-                        self.message = f'Failed to create output directory: {gpkg_dir}'
-                        return False
-            else:
-                if not os.path.exists(output_folder):
-                    try:
-                        os.makedirs(output_folder)
-                    except Exception as e:
-                        logger.debug(f"Ignored in makedirs for export output: {e}")
-                        self.message = f'Failed to create output directory: {output_folder}'
-                        return False
-
-                # Default filename: use project name or "export"
-                project_title = self.PROJECT.title() if self.PROJECT.title() else None
-                project_basename = self.PROJECT.baseName() if self.PROJECT.baseName() else None
-                default_name = project_title or project_basename or 'export'
-                default_name = sanitize_filename(default_name)
-                gpkg_output_path = os.path.join(output_folder, f"{default_name}.gpkg")
-
-            # Delegate to LayerExporter (v4.0 E11.2)
-            logger.info(f"GPKG export - delegating to LayerExporter: {gpkg_output_path}")
-            result = layer_exporter.export_to_gpkg(layers, gpkg_output_path, save_styles)
-
-            if not result.success:
-                self.message = result.error_message or 'GPKG export failed'
-                return False
-
-            self.message = f'Layer(s) exported to <a href="file:///{gpkg_output_path}">{gpkg_output_path}</a>'
-
-            # Create zip if requested
-            if zip_path:
-                gpkg_dir = os.path.dirname(gpkg_output_path)
-                if BatchExporter.create_zip_archive(zip_path, gpkg_dir):
-                    self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
-
-            return True
-
-        # Check streaming export configuration
-        streaming_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('STREAMING_EXPORT', {})
-        streaming_enabled = streaming_config.get('enabled', {}).get('value', True)
-        feature_threshold = streaming_config.get('feature_threshold', {}).get('value', 10000)
-        chunk_size = streaming_config.get('chunk_size', {}).get('value', 5000)
-
-        # STREAMING MODE: For large datasets (non-GPKG)
-        if streaming_enabled:
-            total_features = self._calculate_total_features(layers)
-            if total_features >= feature_threshold:
-                logger.info(f"🚀 Using STREAMING export mode ({total_features} features >= {feature_threshold} threshold)")
-                export_success = self._export_with_streaming(
-                    layers, output_folder, projection, datatype, style_format, save_styles, chunk_size
-                )
-                if export_success:
-                    self.message = f'Streaming export: {len(layers)} layer(s) ({total_features} features) exported to <a href="file:///{output_folder}">{output_folder}</a>'
-                elif not self.message:
-                    self.message = f'Streaming export failed for {len(layers)} layer(s)'
-
-                if export_success and zip_path:
-                    if BatchExporter.create_zip_archive(zip_path, output_folder):
-                        self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
-
-                return export_success
-
-        # STANDARD MODE: Single or multiple layers
-        if not os.path.exists(output_folder):
-            self.message = f'Output path does not exist: {output_folder}'
-            return False
-
-        export_success = False
-
-        if len(layers) == 1:
-            # Single layer export - delegate to LayerExporter (v4.0 E11.2)
-            layer_name = layers[0]['layer_name'] if isinstance(layers[0], dict) else layers[0]
-            logger.info(f"Single layer export - delegating to LayerExporter: {layer_name}")
-            result = layer_exporter.export_single_layer(
-                layer_name, output_folder, projection, datatype, style_format, save_styles
-            )
-            export_success = result.success
-            if not result.success:
-                self.message = result.error_message or 'Export failed'
-
-        elif os.path.isdir(output_folder):
-            # Multiple layers to directory - delegate to LayerExporter (v4.0 E11.2)
-            logger.info(f"Multiple layers export - delegating to LayerExporter: {len(layers)} layers")
-            from ..export import ExportConfig
-            result = layer_exporter.export_multiple_to_directory(
-                ExportConfig(
-                    layers=layers,
-                    output_path=output_folder,
-                    datatype=datatype,
-                    projection=projection,
-                    style_format=style_format,
-                    save_styles=save_styles
-                )
-            )
-            export_success = result.success
-            if not result.success:
-                self.message = result.error_message or 'Export failed'
-        else:
-            self.message = f'Invalid export configuration: {len(layers)} layers but output is not a directory'
-            return False
-
-        if not export_success:
-            return False
-
-        if self.isCanceled():
-            self.message = 'Export cancelled by user'
-            return False
-
-        # Create zip archive if requested
-        zip_created = False
-        if zip_path:
-            zip_created = BatchExporter.create_zip_archive(zip_path, output_folder)
-            if not zip_created:
-                self.message = 'Failed to create ZIP archive'
-                return False
-
-        # Build success message
-        self.message = f'Layer(s) has been exported to <a href="file:///{output_folder}">{output_folder}</a>'
-        if zip_created:
-            self.message += f' and Zip file has been exported to <a href="file:///{zip_path}">{zip_path}</a>'
-
-        logger.info("Export completed successfully")
-        return True
+        """Export selected layers. Delegates to ExportHandler."""
+        success, message, error_details = self._export_handler.execute_exporting(
+            task_parameters=self.task_parameters,
+            project=self.PROJECT,
+            set_progress=self.setProgress,
+            set_description=self.setDescription,
+            is_canceled=self.isCanceled,
+        )
+        self.message = message
+        if error_details:
+            self.error_details = error_details
+        return success
 
     def _calculate_total_features(self, layers) -> int:
-        """
-        Calculate total feature count across all layers.
-
-        Args:
-            layers: List of layer info dicts or layer names
-
-        Returns:
-            int: Total feature count
-        """
-        total = 0
-        for layer_info in layers:
-            layer_name = layer_info['layer_name'] if isinstance(layer_info, dict) else layer_info
-            layer = self._get_layer_by_name(layer_name)
-            if layer:
-                total += layer.featureCount()
-        return total
+        """Calculate total features. Delegates to ExportHandler."""
+        return self._export_handler.calculate_total_features(layers, self.PROJECT)
 
     def _export_with_streaming(self, layers, output_folder, projection, datatype, style_format, save_styles, chunk_size):
-        """
-        Export layers using streaming for large datasets.
-
-        Args:
-            layers: List of layer info dicts or layer names
-            output_folder: Output directory path
-            projection: Target CRS
-            datatype: Output format (GPKG, SHP, etc.)
-            style_format: Style format (QML, SLD, etc.)
-            save_styles: Whether to save styles
-            chunk_size: Number of features per batch
-
-        Returns:
-            bool: True if export successful
-        """
-        try:
-            # Note: StreamingConfig uses batch_size, not chunk_size
-            config = StreamingConfig(batch_size=chunk_size)
-            exporter = StreamingExporter(config)
-
-            # Map datatype to format string expected by StreamingExporter
-            format_map = {
-                'GPKG': 'gpkg',
-                'SHP': 'shp',
-                'GEOJSON': 'geojson',
-                'GML': 'gml',
-                'KML': 'kml',
-                'CSV': 'csv'
-            }
-            export_format = format_map.get(datatype.upper(), datatype.lower())
-
-            # Ensure output folder exists
-            if not os.path.exists(output_folder):
-                try:
-                    os.makedirs(output_folder)
-                    logger.info(f"Created output folder: {output_folder}")
-                except OSError as e:
-                    error_msg = f"Cannot create output folder '{output_folder}': {e}"
-                    logger.error(error_msg)
-                    self.message = error_msg
-                    return False
-
-            # Progress callback - ExportProgress uses percent_complete, not percentage
-            def progress_callback(progress):
-                self.setProgress(int(progress.percent_complete))
-                self.setDescription(f"Streaming export: {progress.features_processed}/{progress.total_features} features")
-
-            exported_count = 0
-            failed_layers = []
-
-            for layer_info in layers:
-                layer_name = layer_info['layer_name'] if isinstance(layer_info, dict) else layer_info
-                layer = self._get_layer_by_name(layer_name)
-
-                if not layer:
-                    logger.warning(f"Layer not found: {layer_name}")
-                    failed_layers.append(f"{layer_name} (not found)")
-                    continue
-
-                # Determine output path
-                if datatype == 'GPKG':
-                    output_path = os.path.join(output_folder, f"{layer_name}.gpkg")
-                elif datatype == 'SHP':
-                    output_path = os.path.join(output_folder, f"{layer_name}.shp")
-                elif datatype == 'GEOJSON':
-                    output_path = os.path.join(output_folder, f"{layer_name}.geojson")
-                else:
-                    output_path = os.path.join(output_folder, f"{layer_name}.{datatype.lower()}")
-
-                logger.info(f"Streaming export: {layer_name} → {output_path}")
-
-                # StreamingExporter.export_layer_streaming expects:
-                # source_layer (not layer), format (not target_crs)
-                # and returns a dict with 'success' key
-                result = exporter.export_layer_streaming(
-                    source_layer=layer,
-                    output_path=output_path,
-                    format=export_format,
-                    progress_callback=progress_callback,
-                    cancel_check=self.isCanceled
-                )
-
-                # Check the 'success' key in the returned dict
-                if not result.get('success', False):
-                    error_msg = result.get('error', 'Unknown error')
-                    logger.error(f"Streaming export failed for {layer_name}: {error_msg}")
-                    failed_layers.append(f"{layer_name} ({error_msg})")
-                    continue
-
-                exported_count += 1
-
-                # Save styles if requested
-                if save_styles and style_format:
-                    self._save_layer_style(layer, output_path, style_format, datatype)
-
-                if self.isCanceled():
-                    logger.info("Export cancelled by user")
-                    self.message = "Export cancelled by user"
-                    return False
-
-            # Check results
-            if failed_layers:
-                if exported_count > 0:
-                    self.message = f"Partial export: {exported_count}/{len(layers)} layers exported. Failed: {', '.join(failed_layers[:3])}"
-                    if len(failed_layers) > 3:
-                        self.message += f" and {len(failed_layers) - 3} more"
-                    logger.warning(self.message)
-                    return True  # Partial success
-                else:
-                    self.message = f"Export failed for all {len(layers)} layers. Errors: {', '.join(failed_layers[:3])}"
-                    if len(failed_layers) > 3:
-                        self.message += f" and {len(failed_layers) - 3} more"
-                    logger.error(self.message)
-                    return False
-
-            return True
-
-        except Exception as e:
-            error_msg = f"Streaming export error: {e}"
-            logger.error(error_msg)
-            self.message = error_msg
-            return False
+        """Export with streaming. Delegates to ExportHandler."""
+        success, message = self._export_handler._export_with_streaming(
+            layers, output_folder, projection, datatype,
+            style_format, save_styles, chunk_size,
+            self.PROJECT, self.setProgress, self.setDescription, self.isCanceled,
+        )
+        self.message = message
+        return success
 
     def _get_spatialite_datasource(self, layer):
         """
@@ -4688,195 +3855,68 @@ class FilterEngineTask(QgsTask):
             )
 
     def _create_simple_materialized_view_sql(self, schema: str, name: str, sql_subset_string: str) -> str:
-        """Delegated to BackendServices facade."""
-        return _backend_services.create_simple_materialized_view_sql(schema, name, sql_subset_string)
+        """Create simple MV SQL. Delegates to CleanupHandler."""
+        return self._cleanup_handler.create_simple_materialized_view_sql(schema, name, sql_subset_string)
 
     def _parse_where_clauses(self) -> Any:
-        """Delegated to BackendServices facade."""
-        return _backend_services.parse_case_to_where_clauses(self.where_clause)
+        """Parse WHERE clauses. Delegates to CleanupHandler."""
+        return self._cleanup_handler.parse_where_clauses(self.where_clause)
 
     def _create_custom_buffer_view_sql(self, schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string):
-        """
-        Create SQL for custom buffer materialized view.
-
-        Args:
-            schema: PostgreSQL schema name
-            name: Layer identifier
-            geom_key_name: Geometry field name
-            where_clause_fields_arr: List of WHERE clause fields
-            last_subset_id: Previous subset ID (None if first)
-            sql_subset_string: SQL SELECT statement for source
-
-        Returns:
-            str: SQL CREATE MATERIALIZED VIEW statement
-        """
-        # Common parts
-        postgresql_source_geom = self.postgresql_source_geom
-        if self.has_to_reproject_source_layer:
-            postgresql_source_geom = f'ST_Transform({postgresql_source_geom}, {self.source_layer_crs_authid.split(":")[1]})'
-
-        # Build ST_Buffer style parameters (quad_segs for segments, endcap for buffer type)
-        buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
-        buffer_type_str = self.task_parameters["filtering"].get("buffer_type", "Round")
-        endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
-        quad_segs = self.param_buffer_segments
-
-        # Build style string for PostGIS ST_Buffer
-        style_params = f"quad_segs={quad_segs}"
-        if endcap_style != 'round':
-            style_params += f" endcap={endcap_style}"
-
-        # Use source layer subset for buffer MV filtering
-        #
-        # Problem: When creating buffer MV, sql_subset_string contains the SELECT for
-        #          the DISTANT layer filter, not the SOURCE layer filter.
-        #          This causes buffer MV to ignore existing source layer filters (e.g., zone_pop selection).
-        #
-        # Solution: Use source_layer.subsetString() to filter the buffer MV instead.
-        #           This ensures the buffer MV respects existing source layer filtering.
-        #
-        # Example scenario:
-        #   1. User filters ducts by zone_pop (5 UUIDs selected)
-        #   2. User launches new filter with buffer_expression from ducts (already filtered)
-        #   3. Buffer MV should use zone_pop filter, not ducts filter
-        #
-        source_filter_for_mv = sql_subset_string
-        if self.source_layer and self.source_layer.subsetString():
-            source_subset = self.source_layer.subsetString()
-            logger.info("🎯 Buffer MV: Using source layer subset for filtering")
-            logger.info(f"   Source subset preview: {source_subset[:200]}...")
-
-            # FIX: Use source subset as-is if it's a valid SELECT statement
-            if 'SELECT' in source_subset.upper():
-                source_filter_for_mv = source_subset
-                logger.info("   Using source layer SELECT statement for buffer MV")  # nosec B608 - false positive: logger statement, no SQL execution
-            else:
-                # Fallback: source_subset is a WHERE clause, wrap it in SELECT
-                source_filter_for_mv = (
-                    f'(SELECT "{self.param_source_table}"."{self.primary_key_name}" '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
-                    f'FROM "{self.param_source_schema}"."{self.param_source_table}" '
-                    f'WHERE {source_subset})'
-                )
-                logger.info("   Wrapped source WHERE clause in SELECT for buffer MV")  # nosec B608 - false positive: logger statement, no SQL execution
-        else:
-            logger.debug("   Buffer MV: No source layer subset, using sql_subset_string")
-
-        template = '''CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{name}" TABLESPACE pg_default AS
-            SELECT ST_Buffer({postgresql_source_geom}, {param_buffer_expression}, '{style_params}') as {geometry_field},
-                   "{table_source}"."{primary_key_name}",
-                   {where_clause_fields},
-                   {param_buffer_expression} as buffer_value
-            FROM "{schema_source}"."{table_source}"
-            WHERE "{table_source}"."{primary_key_name}" IN (SELECT sub."{primary_key_name}" FROM {source_new_subset} sub)
-              AND {where_expression}
-            WITH DATA;'''
-
-        return template.format(
-            schema=schema,
-            name=name,
-            postgresql_source_geom=postgresql_source_geom,
-            geometry_field=geom_key_name,
-            schema_source=self.param_source_schema,
+        """Create SQL for custom buffer MV. Delegates to CleanupHandler."""
+        return self._cleanup_handler.create_custom_buffer_view_sql(
+            schema=schema, name=name, geom_key_name=geom_key_name,
+            where_clause_fields_arr=where_clause_fields_arr,
+            last_subset_id=last_subset_id, sql_subset_string=sql_subset_string,
+            postgresql_source_geom=self.postgresql_source_geom,
+            has_to_reproject_source_layer=self.has_to_reproject_source_layer,
+            source_layer_crs_authid=self.source_layer_crs_authid,
+            task_parameters=self.task_parameters,
+            param_buffer_segments=self.param_buffer_segments,
+            param_source_schema=self.param_source_schema,
+            param_source_table=self.param_source_table,
             primary_key_name=self.primary_key_name,
-            table_source=self.param_source_table,
-            where_clause_fields=','.join(where_clause_fields_arr).replace('mv_', ''),
-            param_buffer_expression=self.param_buffer.replace('mv_', ''),
-            source_new_subset=source_filter_for_mv,
-            where_expression=' OR '.join(self._parse_where_clauses()).replace('mv_', ''),
-            style_params=style_params
+            source_layer=self.source_layer,
+            param_buffer=self.param_buffer,
+            where_clause=self.where_clause,
         )
 
     def _ensure_temp_schema_exists(self, connexion, schema_name):
-        """
-        Ensure the temporary schema exists in PostgreSQL database.
-
-        Delegated to adapters.backends.postgresql.schema_manager.ensure_temp_schema_exists().
-
-        Args:
-            connexion: psycopg2 connection
-            schema_name: Name of the schema to create
-
-        Returns:
-            str: Name of the schema to use (schema_name if created, 'public' as fallback)
-        """
-        result = _backend_services.ensure_temp_schema_exists(connexion, schema_name)
-
-        # Track schema error for instance state if fallback occurred
+        """Ensure temp schema exists in PostgreSQL. Delegates to CleanupHandler."""
+        result = self._cleanup_handler.ensure_temp_schema_exists(connexion, schema_name)
         if result == 'public' and schema_name != 'public':
             self._last_schema_error = f"Using 'public' schema as fallback (could not create '{schema_name}')"
-
         return result
 
     def _get_session_prefixed_name(self, base_name: str) -> str:
-        """
-        Generate a session-unique materialized view name.
-
-        Delegated to BackendServices facade.
-        """
-        return _backend_services.get_session_prefixed_name(base_name, self.session_id)
+        """Generate a session-unique MV name. Delegates to CleanupHandler."""
+        return self._cleanup_handler.get_session_prefixed_name(base_name, self.session_id)
 
     def _cleanup_session_materialized_views(self, connexion: Any, schema_name: str) -> Any:
-        """
-        Clean up all materialized views for the current session.
-
-        Delegated to BackendServices facade.
-        """
-        # Strangler Fig: Delegate to extracted module (pg_executor or facade)
-        if PG_EXECUTOR_AVAILABLE and pg_executor:
-            return pg_executor.cleanup_session_materialized_views(
-                connexion, schema_name, self.session_id
-            )
-
-        # Fallback to facade
-        return _backend_services.cleanup_session_materialized_views(connexion, schema_name, self.session_id)
+        """Clean up session MVs. Delegates to CleanupHandler."""
+        return self._cleanup_handler.cleanup_session_materialized_views(
+            connexion, schema_name, self.session_id,
+            pg_executor=pg_executor, pg_executor_available=PG_EXECUTOR_AVAILABLE,
+        )
 
     def _cleanup_orphaned_materialized_views(self, connexion: Any, schema_name: str, max_age_hours: int = 24) -> Any:
-        """
-        Clean up orphaned materialized views older than max_age_hours.
-
-        Delegated to BackendServices facade.
-        """
-        return _backend_services.cleanup_orphaned_materialized_views(connexion, schema_name, self.session_id, max_age_hours)
+        """Clean up orphaned MVs. Delegates to CleanupHandler."""
+        return self._cleanup_handler.cleanup_orphaned_materialized_views(
+            connexion, schema_name, self.session_id, max_age_hours
+        )
 
     def _execute_postgresql_commands(self, connexion: Any, commands: List[str]) -> bool:
-        """
-        Execute PostgreSQL commands with automatic reconnection on failure.
-
-        Delegated to BackendServices facade.
-
-        Args:
-            connexion: psycopg2 connection
-            commands: List of SQL commands to execute
-
-        Returns:
-            bool: True if all commands succeeded
-        """
-        # Test connection and reconnect if needed
-        try:
-            with connexion.cursor() as cursor:
-                cursor.execute("SELECT 1")
-        except (psycopg2.OperationalError, psycopg2.InterfaceError, AttributeError) as e:
-            logger.debug(f"PostgreSQL connection test failed, reconnecting: {e}")
-            connexion, _ = get_datasource_connexion_from_layer(self.source_layer)
-
-        return _backend_services.execute_commands(connexion, commands)
+        """Execute PostgreSQL commands with reconnection. Delegates to CleanupHandler."""
+        return self._cleanup_handler.execute_postgresql_commands(
+            connexion, commands,
+            source_layer=self.source_layer,
+            psycopg2_module=psycopg2,
+            get_datasource_connexion_fn=get_datasource_connexion_from_layer,
+        )
 
     def _ensure_source_table_stats(self, connexion: Any, schema: str, table: str, geom_field: str) -> bool:
-        """
-        Ensure PostgreSQL statistics exist for source table geometry column.
-
-        Delegated to BackendServices facade.
-
-        Args:
-            connexion: psycopg2 connection
-            schema: Schema name
-            table: Table name
-            geom_field: Geometry column name
-
-        Returns:
-            bool: True if stats were verified/created
-        """
-        return _backend_services.ensure_table_stats(connexion, schema, table, geom_field)
+        """Ensure PostgreSQL statistics exist. Delegates to CleanupHandler."""
+        return self._cleanup_handler.ensure_source_table_stats(connexion, schema, table, geom_field)
 
     def _insert_subset_history(self, cur, conn, layer, sql_subset_string, seq_order):
         """
@@ -5293,94 +4333,42 @@ class FilterEngineTask(QgsTask):
         return True
 
     def manage_layer_subset_strings(self, layer, sql_subset_string=None, primary_key_name=None, geom_key_name=None, custom=False):
-        """
-        Manage layer subset strings using materialized views or temp tables.
-
-        REFACTORED: Decomposed from 384 lines to ~60 lines using helper methods.
-        Main method now orchestrates the process, delegates to specialized methods.
-
-        Args:
-            layer: QgsVectorLayer to manage
-            sql_subset_string: SQL SELECT statement for filtering
-            primary_key_name: Primary key field name
-            geom_key_name: Geometry field name
-            custom: Whether this is a custom buffer filter
-
-        Returns:
-            bool: True if successful
-        """
-        with self._safe_spatialite_connect() as conn:
-            self.active_connections.append(conn)
-            cur = conn.cursor()
-
-            try:
-                # Get layer info and history
-                last_subset_id, last_seq_order, layer_name, name = self._get_last_subset_info(cur, layer)
-
-                # Determine backend to use
-                provider_type, use_postgresql, use_spatialite = self._determine_backend(layer)
-
-                # Log performance warning if needed
-                self._log_performance_warning_if_needed(use_spatialite, layer)
-
-                # Execute appropriate action based on task_action
-                if self.task_action == 'filter':
-                    current_seq_order = last_seq_order + 1
-
-                    # CRITICAL FIX: Skip materialized view creation if sql_subset_string is empty
-                    # Empty sql_subset_string causes SQL syntax error in materialized view creation
-                    if not sql_subset_string or not sql_subset_string.strip():
-                        logger.warning(
-                            f"Skipping subset management for {layer.name()}: "
-                            "sql_subset_string is empty. Filter was applied via setSubsetString but "
-                            "history/materialized view creation is skipped."
-                        )
-                        return True
-
-                    # Use Spatialite backend for local layers
-                    if use_spatialite:
-                        backend_name = "Spatialite" if provider_type == PROVIDER_SPATIALITE else "Local (OGR)"
-                        logger.debug(f"Using {backend_name} backend")
-                        success = self._manage_spatialite_subset(
-                            layer, sql_subset_string, primary_key_name, geom_key_name,
-                            name, custom, cur, conn, current_seq_order
-                        )
-                        return success
-
-                    # Use PostgreSQL backend for remote layers
-                    return self._filter_action_postgresql(
-                        layer, sql_subset_string, primary_key_name, geom_key_name,
-                        name, custom, cur, conn, current_seq_order
-                    )
-
-                elif self.task_action == 'reset':
-                    # EPIC-1 Phase E4-S8: Distinguish OGR from Spatialite
-                    if use_postgresql:
-                        return self._reset_action_postgresql(layer, name, cur, conn)
-                    elif provider_type == PROVIDER_OGR:
-                        return self._reset_action_ogr(layer, name, cur, conn)
-                    elif use_spatialite:
-                        return self._reset_action_spatialite(layer, name, cur, conn)
-
-                elif self.task_action == 'unfilter':
-                    return self._unfilter_action(
-                        layer, primary_key_name, geom_key_name, name, custom,
-                        cur, conn, last_subset_id, use_postgresql, use_spatialite
-                    )
-
-                return True
-
-            finally:
-                # Always cleanup cursor and bookkeeping
-                try:
-                    cur.close()
-                except Exception as e:
-                    logger.debug(f"Could not close database cursor: {e}")
-                if conn in self.active_connections:
-                    self.active_connections.remove(conn)
-                # Reset prepared statements manager when connection closes
-                # to avoid "Cannot operate on a closed database" errors
-                self._ps_manager = None
+        """Manage layer subset strings. Delegates to SubsetManagementHandler."""
+        result = self._subset_handler.manage_layer_subset_strings(
+            layer=layer, task_action=self.task_action,
+            safe_connect_fn=self._safe_spatialite_connect,
+            active_connections=self.active_connections,
+            project_uuid=self.project_uuid, session_id=self.session_id,
+            source_layer=self.source_layer, db_file_path=self.db_file_path,
+            ps_manager=self._ps_manager, postgresql_available=POSTGRESQL_AVAILABLE,
+            queue_subset_fn=self._queue_subset_string,
+            get_session_name_fn=self._get_session_prefixed_name,
+            get_connection_fn=self._get_valid_postgresql_connection,
+            ensure_stats_fn=self._ensure_source_table_stats,
+            extract_where_fn=self._extract_where_clause_from_select,
+            insert_history_fn=self._insert_subset_history,
+            ensure_schema_fn=self._ensure_temp_schema_exists,
+            execute_commands_fn=self._execute_postgresql_commands,
+            create_simple_mv_fn=self._create_simple_materialized_view_sql,
+            create_custom_mv_fn=self._create_custom_buffer_view_sql,
+            parse_where_clauses_fn=self._parse_where_clauses,
+            manage_spatialite_subset_fn=self._manage_spatialite_subset,
+            get_spatialite_datasource_fn=self._get_spatialite_datasource,
+            pg_execute_filter_fn=pg_execute_filter, pg_execute_reset_fn=pg_execute_reset,
+            pg_execute_unfilter_fn=pg_execute_unfilter, pg_executor_available=PG_EXECUTOR_AVAILABLE,
+            ogr_execute_reset_fn=ogr_execute_reset, ogr_execute_unfilter_fn=ogr_execute_unfilter,
+            current_mv_schema=self.current_materialized_view_schema,
+            param_source_schema=self.param_source_schema,
+            param_source_table=self.param_source_table,
+            param_source_geom=self.param_source_geom,
+            param_buffer_expression=getattr(self, 'param_buffer_expression', None),
+            task_parameters=self.task_parameters,
+            sql_subset_string=sql_subset_string, primary_key_name=primary_key_name,
+            geom_key_name=geom_key_name, custom=custom,
+        )
+        # Reset prepared statements manager when connection closes
+        self._ps_manager = None
+        return result
 
     def _has_expensive_spatial_expression(self, sql_string: str) -> bool:
         """
@@ -5472,94 +4460,16 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"Final canvas refresh skipped: {e}")
 
     def _cleanup_postgresql_materialized_views(self):
-        """
-        Cleanup PostgreSQL materialized views created during filtering.
-        This prevents accumulation of temporary MVs in the database.
-
-        FIX v4.2.8 (2026-01-21): Use reference tracker to prevent premature MV cleanup.
-        When filtering multiple layers, a shared MV (e.g., temp_buffered_demand_points_xxx)
-        may be referenced by multiple layers. Only drop MVs when no layers reference them.
-        """
-        if not POSTGRESQL_AVAILABLE:
-            return
-
-        try:
-            # Only cleanup if source layer is PostgreSQL
-            if self.param_source_provider_type != 'postgresql':
-                return
-
-            # Import reference tracker
-            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
-
-            # Get layer IDs from task (layers being filtered)
-            layer_ids = []
-
-            # Add source layer ID
-            if hasattr(self, 'source_layer') and self.source_layer:
-                layer_ids.append(self.source_layer.id())
-            elif 'source_layer' in self.task_parameters:
-                source_layer = self.task_parameters['source_layer']
-                if source_layer:
-                    layer_ids.append(source_layer.id())
-
-            # Add distant layer IDs
-            if hasattr(self, 'param_all_layers'):
-                for layer in self.param_all_layers:
-                    if layer and hasattr(layer, 'id'):
-                        layer_ids.append(layer.id())
-
-            if not layer_ids:
-                logger.debug("No layer IDs available for PostgreSQL MV cleanup")
-                return
-
-            # Remove references for these layers and get MVs that can be dropped
-            tracker = get_mv_reference_tracker()
-            mvs_to_drop = set()
-
-            for layer_id in layer_ids:
-                can_drop = tracker.remove_all_references_for_layer(layer_id)
-                mvs_to_drop.update(can_drop)
-
-            if not mvs_to_drop:
-                logger.debug(
-                    "PostgreSQL MV cleanup: All MVs still referenced by other layers "
-                    f"(removed references for {len(layer_ids)} layer(s))"
-                )
-                return
-
-            # Actually drop MVs that have no more references
-            logger.info(
-                f"PostgreSQL MV cleanup: Dropping {len(mvs_to_drop)} MV(s) "
-                "with no remaining references"
-            )
-
-            # Get PostgreSQL connection and drop MVs
-            connexion = self._get_valid_postgresql_connection()
-            if not connexion:
-                logger.warning("No PostgreSQL connection for MV cleanup")
-                return
-
-            cursor = connexion.cursor()
-            schema = getattr(self, 'current_materialized_view_schema', 'filtermate_temp')
-
-            for mv_name in mvs_to_drop:
-                try:
-                    # Extract just the view name if it's fully qualified
-                    if '.' in mv_name:
-                        mv_name = mv_name.split('.')[-1].strip('"')
-
-                    drop_sql = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{mv_name}" CASCADE;'
-                    cursor.execute(drop_sql)
-                    logger.debug(f"Dropped MV: {schema}.{mv_name}")
-                except Exception as e:
-                    logger.warning(f"Failed to drop MV {mv_name}: {e}")
-
-            connexion.commit()
-            logger.debug(f"PostgreSQL MV cleanup completed: dropped {len(mvs_to_drop)} MV(s)")
-
-        except Exception as e:
-            # Non-critical error - log but don't fail the task
-            logger.debug(f"Error during PostgreSQL MV cleanup: {e}")
+        """Cleanup PostgreSQL materialized views. Delegates to CleanupHandler."""
+        self._cleanup_handler.cleanup_postgresql_materialized_views(
+            postgresql_available=POSTGRESQL_AVAILABLE,
+            source_provider_type=self.param_source_provider_type,
+            source_layer=getattr(self, 'source_layer', None),
+            task_parameters=self.task_parameters,
+            param_all_layers=getattr(self, 'param_all_layers', None),
+            get_connection_fn=self._get_valid_postgresql_connection,
+            current_mv_schema=getattr(self, 'current_materialized_view_schema', 'filtermate_temp'),
+        )
 
     def cancel(self) -> None:
         """Cancel the task and cleanup all resources.
