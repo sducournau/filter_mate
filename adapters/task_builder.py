@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any
 from enum import Enum
 import logging
 
+from qgis.PyQt.QtCore import QCoreApplication
+
 if TYPE_CHECKING:
     from qgis.core import QgsVectorLayer, QgsProject
 
@@ -906,7 +908,10 @@ class TaskParameterBuilder:
                 )
                 iface.messageBar().pushWarning(
                     "FilterMate",
-                    "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
+                    QCoreApplication.translate(
+                        "TaskParameterBuilder",
+                        "Aucune entité sélectionnée! Le widget de sélection a perdu la feature. Re-sélectionnez une entité."
+                    )
                 )
                 logger.warning("⚠️ ABORTING filter task - single_selection mode with no selection!")
                 raise ValueError("No features in single_selection mode")
@@ -1021,7 +1026,10 @@ class TaskParameterBuilder:
             )
             iface.messageBar().pushWarning(
                 "FilterMate",
-                "La couche sélectionnée est invalide ou sa source est introuvable. Opération annulée."
+                QCoreApplication.translate(
+                    "TaskParameterBuilder",
+                    "La couche sélectionnée est invalide ou sa source est introuvable. Opération annulée."
+                )
             )
             return "invalid_layer"
 
@@ -1033,8 +1041,11 @@ class TaskParameterBuilder:
             )
             iface.messageBar().pushWarning(
                 "FilterMate",
-                f"La couche '{current_layer.name()}' n'est pas encore initialisée. "
-                "Essayez de sélectionner une autre couche puis revenez à celle-ci."
+                QCoreApplication.translate(
+                    "TaskParameterBuilder",
+                    "La couche '{0}' n'est pas encore initialisée. "
+                    "Essayez de sélectionner une autre couche puis revenez à celle-ci."
+                ).format(current_layer.name())
             )
             return "layer_not_initialized"
 

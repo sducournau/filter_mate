@@ -17,7 +17,7 @@ v4.4: Strangler Fig Pattern - New service with fallback to FilterMateApp legacy 
 """
 
 from typing import Callable, List, Any
-from qgis.PyQt.QtCore import QTimer
+from qgis.PyQt.QtCore import QTimer, QCoreApplication
 from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import QgsVectorLayer, QgsProject
 from qgis.utils import iface
@@ -176,7 +176,10 @@ class AppInitializer:
             cleared_layers = cleanup_corrupted_layer_filters()  # Pass None to use all project layers
             if cleared_layers:
                 show_warning(
-                    f"Cleared corrupted filters from {len(cleared_layers)} layer(s). Please re-apply your filters."
+                    QCoreApplication.translate(
+                        "AppInitializer",
+                        "Cleared corrupted filters from {0} layer(s). Please re-apply your filters."
+                    ).format(len(cleared_layers))
                 )
 
         # Get initial layers
@@ -224,7 +227,10 @@ class AppInitializer:
             self._process_initial_layers(init_layers)
         else:
             logger.info("FilterMate: Plugin started with empty project - waiting for layers to be added")
-            show_info("Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin.")
+            show_info(QCoreApplication.translate(
+                "AppInitializer",
+                "Projet vide détecté. Ajoutez des couches vectorielles pour activer le plugin."
+            ))
 
         # Connect layer store signals
         self._connect_layer_store_signals()
@@ -289,8 +295,11 @@ class AppInitializer:
             if db_conn is None:
                 logger.error("Database health check failed: Cannot connect to Spatialite database")
                 iface.messageBar().pushCritical(
-                    "FilterMate - Erreur base de données",
-                    "Impossible d'accéder à la base de données FilterMate. Vérifiez les permissions du répertoire du projet."
+                    "FilterMate",
+                    QCoreApplication.translate(
+                        "AppInitializer",
+                        "Impossible d'accéder à la base de données FilterMate. Vérifiez les permissions du répertoire du projet."
+                    )
                 )
                 return False
             else:
@@ -300,8 +309,11 @@ class AppInitializer:
         except Exception as db_err:
             logger.error(f"Database health check failed with exception: {db_err}", exc_info=True)
             iface.messageBar().pushCritical(
-                "FilterMate - Erreur base de données",
-                f"Erreur lors de la vérification de la base de données: {str(db_err)}"
+                "FilterMate",
+                QCoreApplication.translate(
+                    "AppInitializer",
+                    "Erreur lors de la vérification de la base de données: {0}"
+                ).format(str(db_err))
             )
             return False
 
@@ -574,7 +586,10 @@ class AppInitializer:
             logger.error("Final safety timer: Failed to load layers after recovery")
             iface.messageBar().pushWarning(
                 "FilterMate",
-                "Échec du chargement des couches. Utilisez F5 pour forcer le rechargement."
+                QCoreApplication.translate(
+                    "AppInitializer",
+                    "Échec du chargement des couches. Utilisez F5 pour forcer le rechargement."
+                )
             )
 
     def _refresh_layers_if_needed(self, project: QgsProject):

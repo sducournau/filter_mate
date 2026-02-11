@@ -31,6 +31,7 @@ try:
         QgsCoordinateReferenceSystem,
         QgsProject,
     )
+    from qgis.PyQt.QtCore import QCoreApplication
     from qgis import processing
     QGIS_AVAILABLE = True
 except ImportError:
@@ -340,7 +341,10 @@ class LayerExporter:
                 from qgis.utils import iface
                 iface.messageBar().pushSuccess(
                     "FilterMate",
-                    f"Export terminé: {len(layer_objects)} couche(s) exportée(s) vers {output_path}"
+                    QCoreApplication.translate(
+                        "LayerExporter",
+                        "Export terminé: {0} couche(s) exportée(s) vers {1}"
+                    ).format(len(layer_objects), output_path)
                 )
             except Exception:
                 pass  # Don't fail if message bar not available
