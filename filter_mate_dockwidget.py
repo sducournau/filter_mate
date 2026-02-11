@@ -23,7 +23,8 @@ logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
 # v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
-from .ui.managers import ConfigurationManager, DockwidgetSignalManager
+# v5.0 P2-2: Add OptimizationManager for optimization settings extraction
+from .ui.managers import ConfigurationManager, DockwidgetSignalManager, OptimizationManager
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
     Qt,
@@ -261,6 +262,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
         # v5.0 Phase 2: Initialize signal manager for progressive migration
         self._signal_manager = DockwidgetSignalManager(self)
+        # v5.0 P2-2 E1: Initialize optimization manager
+        self._optimization_manager = OptimizationManager(self)
         # FIX 2026-02-11: Register as active dockwidget for FeaturePickerWidget crash prevention
         global _active_dockwidget
         _active_dockwidget = self
@@ -1421,166 +1424,62 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     # OPTIMIZATION SETTINGS METHODS
     # ========================================
 
+    # v5.0 P2-2 E1: Optimization methods delegated to OptimizationManager
     def _toggle_optimization_enabled(self):
-        """v4.0 S16: → BackendController."""
-        if self._backend_ctrl:
-            enabled = self._backend_ctrl.toggle_optimization_enabled()
-            (show_success if enabled else show_info)("FilterMate", self.tr("Auto-optimization {0}").format(self.tr("enabled") if enabled else self.tr("disabled")))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.toggle_optimization_enabled()
 
     def _toggle_centroid_auto(self):
-        """v4.0 S16: → BackendController."""
-        if self._backend_ctrl:
-            enabled = self._backend_ctrl.toggle_centroid_auto()
-            (show_success if enabled else show_info)("FilterMate", self.tr("Auto-centroid {0}").format(self.tr("enabled") if enabled else self.tr("disabled")))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.toggle_centroid_auto()
 
     def _toggle_optimization_ask_before(self):
-        """v4.0 S16: Toggle confirmation."""
-        self._optimization_ask_before = not getattr(self, '_optimization_ask_before', True)
-        (show_success if self._optimization_ask_before else show_info)("FilterMate", self.tr("Confirmation {0}").format(self.tr("enabled") if self._optimization_ask_before else self.tr("disabled")))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.toggle_optimization_ask_before()
 
     def _analyze_layer_optimizations(self):
-        """v4.0 S16: Analyze layer optimizations."""
-        if not self.current_layer: show_warning("FilterMate", self.tr("No layer selected. Please select a layer first.")); return
-        try:
-            from .core.services.auto_optimizer import LayerAnalyzer, AutoOptimizer, AUTO_OPTIMIZER_AVAILABLE
-            if not AUTO_OPTIMIZER_AVAILABLE: show_warning("FilterMate", self.tr("Auto-optimizer module not available")); return
-            layer_analysis = LayerAnalyzer().analyze_layer(self.current_layer)
-            if not layer_analysis: show_info("FilterMate", self.tr("Could not analyze layer '{0}'").format(self.current_layer.name())); return
-            has_buf = getattr(self, 'mQgsDoubleSpinBox_filtering_buffer_value', None) and self.mQgsDoubleSpinBox_filtering_buffer_value.value() != 0.0
-            has_buf_type = getattr(self, 'checkBox_filtering_buffer_type', None) and self.checkBox_filtering_buffer_type.isChecked()
-            recommendations = AutoOptimizer().get_recommendations(layer_analysis, user_centroid_enabled=self._is_centroid_already_enabled(self.current_layer), has_buffer=has_buf, has_buffer_type=has_buf_type, is_source_layer=True)
-            if not recommendations: show_success("FilterMate", self.tr("Layer '{0}' is already optimally configured.\nType: {1}\nFeatures: {2:,}").format(self.current_layer.name(), layer_analysis.location_type.value, layer_analysis.feature_count)); return
-            from .ui.dialogs.optimization_dialog import RecommendationDialog as OptimizationRecommendationDialog
-            dialog = OptimizationRecommendationDialog(layer_name=self.current_layer.name(), recommendations=[r.to_dict() for r in recommendations],
-                feature_count=layer_analysis.feature_count, location_type=layer_analysis.location_type.value, parent=self)
-            if dialog.exec_():
-                self._apply_optimization_selections(dialog.get_selected_optimizations(), self.current_layer)
-        except ImportError as e:
-            show_warning("FilterMate", self.tr("Auto-optimizer not available: {0}").format(str(e)))
-        except Exception as e:
-            show_warning("FilterMate", self.tr("Error analyzing layer: {0}").format(str(e)[:50]))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.analyze_layer_optimizations()
 
     def _apply_optimization_selections(self, selected, layer):
-        """v3.1 Sprint 15: Apply selected optimization overrides."""
-        applied = []
-        overrides = [('use_centroid_distant', '_layer_centroid_overrides', "Use Centroids"),
-                     ('simplify_before_buffer', '_layer_simplify_buffer_overrides', "Simplify before buffer"),
-                     ('reduce_buffer_segments', '_layer_reduced_segments_overrides', "Reduce buffer segments (3)")]
-        for key, attr, label in overrides:
-            if selected.get(key, False):
-                if not hasattr(self, attr): setattr(self, attr, {})
-                getattr(self, attr)[layer.id()] = True
-                if key == 'reduce_buffer_segments':
-                    self.mQgsSpinBox_filtering_buffer_segments.setValue(3)
-                applied.append(label)
-        if applied:
-            show_success("FilterMate", self.tr("Applied to '{0}':\n{1}").format(layer.name(), "\n".join(f"• {a}" for a in applied)))
-        else:
-            show_info("FilterMate", self.tr("No optimizations selected to apply."))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.apply_optimization_selections(selected, layer)
 
     def _show_optimization_settings_dialog(self):
-        """v3.1 Sprint 15: Show optimization settings dialog."""
-        try:
-            from .ui.dialogs.optimization_dialog import OptimizationDialog as BackendOptimizationDialog
-            dialog = BackendOptimizationDialog(self)
-            if dialog.exec_():
-                self._apply_optimization_dialog_settings(dialog.get_settings())
-        except ImportError:
-            try:
-                from .ui.dialogs.optimization_dialog import OptimizationDialog as OptimizationSettingsDialog
-                dialog = OptimizationSettingsDialog(self)
-                if dialog.exec_():
-                    s = dialog.get_settings()
-                    self._optimization_enabled = s.get('enabled', True)
-                    self._centroid_auto_enabled = s.get('auto_centroid_for_distant', True)
-                    self._optimization_ask_before = s.get('ask_before_apply', True)
-                    if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
-                    self._optimization_thresholds['centroid_distant'] = s.get('centroid_threshold_distant', get_optimization_thresholds(ENV_VARS)['centroid_optimization_threshold'])
-                    show_success("FilterMate", self.tr("Optimization settings saved"))
-            except ImportError as e:
-                show_warning("FilterMate", self.tr("Dialog not available: {0}").format(str(e)))
-        except Exception as e:
-            show_warning("FilterMate", self.tr("Error: {0}").format(str(e)[:50]))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.show_optimization_settings_dialog()
 
     def _apply_optimization_dialog_settings(self, all_settings):
-        """v3.1 Sprint 15: Apply settings from optimization dialog."""
-        global_s = all_settings.get('global', {})
-        self._optimization_enabled = global_s.get('auto_optimization_enabled', True)
-        self._centroid_auto_enabled = global_s.get('auto_centroid', {}).get('enabled', True)
-        self._optimization_ask_before = global_s.get('ask_before_apply', True)
-        if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
-        self._optimization_thresholds['centroid_distant'] = global_s.get('auto_centroid', {}).get('distant_threshold', 5000)
-        self._backend_optimization_settings = all_settings
-        show_success("FilterMate", self.tr("Backend optimization settings saved"))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.apply_optimization_dialog_settings(all_settings)
 
     def _show_backend_optimization_dialog(self):
-        """Show backend optimization dialog."""
-        try:
-            from .ui.dialogs.optimization_dialog import OptimizationDialog as BackendOptimizationDialog
-            dialog = BackendOptimizationDialog(self)
-            if not dialog.exec_(): return
-            all_settings, global_s = dialog.get_settings(), dialog.get_settings().get('global', {})
-            self._backend_optimization_settings = all_settings
-            self._optimization_enabled = global_s.get('auto_optimization_enabled', True)
-            self._centroid_auto_enabled = global_s.get('auto_centroid', {}).get('enabled', True)
-            self._optimization_ask_before = global_s.get('ask_before_apply', True)
-            pg_mv = all_settings.get('postgresql', {}).get('materialized_views', {}); self._pg_auto_cleanup_enabled = pg_mv.get('auto_cleanup', True)
-            if not hasattr(self, '_optimization_thresholds'): self._optimization_thresholds = {}
-            self._optimization_thresholds.update({'centroid_distant': global_s.get('auto_centroid', {}).get('distant_threshold', 5000), 'mv_threshold': pg_mv.get('threshold', 10000)})
-            show_success("FilterMate", self.tr("Backend optimizations configured"))
-        except ImportError as e: show_warning("FilterMate", self.tr("Dialog not available: {0}").format(str(e)))
-        except Exception as e: show_warning("FilterMate", self.tr("Error: {0}").format(str(e)[:50]))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.show_backend_optimization_dialog()
 
     def get_backend_optimization_setting(self, backend: str, setting_path: str, default=None):
-        """Get backend optimization setting by path."""
-        current = getattr(self, '_backend_optimization_settings', {}).get(backend, {})
-        for part in setting_path.split('.'): current = current.get(part, default) if isinstance(current, dict) else default
-        return current
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        return self._optimization_manager.get_backend_optimization_setting(backend, setting_path, default)
 
     def _is_centroid_already_enabled(self, layer) -> bool:
-        """Check if centroid optimization is already enabled."""
-        lid = layer.id() if layer else None
-        if hasattr(self, '_layer_centroid_overrides') and lid and self._layer_centroid_overrides.get(lid, False): return True
-        return (hasattr(self, 'checkBox_filtering_use_centroids_distant_layers') and self.checkBox_filtering_use_centroids_distant_layers.isChecked()) or \
-               (hasattr(self, 'checkBox_filtering_use_centroids_source_layer') and self.checkBox_filtering_use_centroids_source_layer.isChecked())
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        return self._optimization_manager.is_centroid_already_enabled(layer)
 
     def should_use_centroid_for_layer(self, layer) -> bool:
-        """Check if centroid optimization should be used for a layer."""
-        if hasattr(self, '_layer_centroid_overrides') and (override := self._layer_centroid_overrides.get(layer.id() if layer else None)) is not None: return override
-        if not getattr(self, '_optimization_enabled', True) or not getattr(self, '_centroid_auto_enabled', True): return False
-        try:
-            from .core.services.auto_optimizer import LayerAnalyzer, LayerLocationType, AUTO_OPTIMIZER_AVAILABLE
-            if not AUTO_OPTIMIZER_AVAILABLE or not (analysis := LayerAnalyzer().analyze_layer(layer)): return False
-            threshold = getattr(self, '_optimization_thresholds', {}).get('centroid_distant', get_optimization_thresholds(ENV_VARS).get('centroid_optimization_threshold', 1000))
-            return analysis.location_type in (LayerLocationType.REMOTE_SERVICE, LayerLocationType.REMOTE_DATABASE) and analysis.feature_count >= threshold
-        except (ImportError, AttributeError, TypeError) as e:
-            logger.debug(f"_should_use_centroid_for_layer: {e}")
-            return False
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        return self._optimization_manager.should_use_centroid_for_layer(layer)
 
     def get_optimization_state(self) -> dict:
-        """Get current optimization state for storage/restore."""
-        return {'enabled': getattr(self, '_optimization_enabled', True), 'centroid_auto': getattr(self, '_centroid_auto_enabled', True),
-                'ask_before': getattr(self, '_optimization_ask_before', True), 'thresholds': getattr(self, '_optimization_thresholds', {}),
-                'layer_overrides': getattr(self, '_layer_centroid_overrides', {})}
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        return self._optimization_manager.get_optimization_state()
 
     def restore_optimization_state(self, state: dict):
-        """Restore optimization state from saved settings."""
-        self._optimization_enabled = state.get('enabled', True); self._centroid_auto_enabled = state.get('centroid_auto', True)
-        self._optimization_ask_before = state.get('ask_before', True); self._optimization_thresholds = state.get('thresholds', {})
-        self._layer_centroid_overrides = state.get('layer_overrides', {})
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.restore_optimization_state(state)
 
     def auto_select_optimal_backends(self):
-        """Delegate to BackendController."""
-        if self._controller_integration and self._controller_integration.backend_controller:
-            try:
-                count = self._controller_integration.backend_controller.auto_select_optimal_backends()
-                (show_success if count > 0 else show_info)("FilterMate", self.tr("Optimized {0} layer(s)").format(count) if count > 0 else self.tr("All layers using auto-selection"))
-                if self.current_layer:
-                    _, _, layer_props = self._validate_and_prepare_layer(self.current_layer)
-                    self._synchronize_layer_widgets(self.current_layer, layer_props)
-            except Exception as e:
-                logger.warning(f"auto_select_optimal_backends failed: {e}")
-                show_warning("FilterMate", self.tr("Backend optimization unavailable"))
+        """v5.0 P2-2: Delegated to OptimizationManager."""
+        self._optimization_manager.auto_select_optimal_backends()
 
     def _setup_action_bar_layout(self):
         """v4.0 S16: → ActionBarManager."""

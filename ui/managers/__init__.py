@@ -6,9 +6,17 @@ Specialized managers for UI configuration and state management.
 Part of FilterMate v4.0 refactoring - Sprint 6.
 
 v5.0 Phase 2: Added DockwidgetSignalManager for signal management extraction.
+v5.0 P2-2: Added OptimizationManager, ConfigModelManager, ComboboxPopulationManager,
+           ExportDialogManager for God Class decomposition.
 """
 
 from .configuration_manager import ConfigurationManager  # noqa: F401
 from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChangeError  # noqa: F401
+from .optimization_manager import OptimizationManager  # noqa: F401
 
-__all__ = ['ConfigurationManager', 'DockwidgetSignalManager', 'SignalStateChangeError']
+__all__ = [
+    'ConfigurationManager',
+    'DockwidgetSignalManager',
+    'SignalStateChangeError',
+    'OptimizationManager',
+]
