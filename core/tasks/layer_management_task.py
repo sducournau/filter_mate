@@ -57,6 +57,7 @@ from ...infrastructure.utils import (
     detect_layer_provider_type,
     get_best_display_field
 )
+from ...infrastructure.database.sql_utils import sanitize_sql_identifier
 
 # Additional utilities from infrastructure
 try:
@@ -265,7 +266,7 @@ class LayersManagementEngineTask(QgsTask):
                     with self._safe_spatialite_connect() as conn:
                         pass  # Connection test - context manager handles close
                     logger.debug("Database accessibility check: OK")
-                except Exception as db_err:
+                except (OSError, RuntimeError) as db_err:
                     logger.error(f"Database accessibility check FAILED: {db_err}", exc_info=True)
                     raise
 
@@ -283,7 +284,7 @@ class LayersManagementEngineTask(QgsTask):
 
             return True
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: QgsTask.run() must not propagate exceptions
             self.exception = e
             # Provide detailed error information for database issues
             error_msg = f'LayerManagementEngineTask run() failed: {e}'
@@ -447,7 +448,7 @@ class LayersManagementEngineTask(QgsTask):
                 else:
                     fallback_field = "$id"
                     logger.warning(f"Layer {layer.id()} has no fields, using $id as fallback")
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 fallback_field = "$id"
                 logger.error(f"Error getting fields for layer {layer.id()}: {e}, using $id")
 
@@ -470,7 +471,7 @@ class LayersManagementEngineTask(QgsTask):
                     conn.commit()
                     cur.close()
                 logger.debug(f"Updated database for layer {layer.id()}")
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning(f"Could not update database for migration: {e}")
 
         # Add layer_table_name if missing
@@ -490,7 +491,7 @@ class LayersManagementEngineTask(QgsTask):
                     )
                     conn.commit()
                     cur.close()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning(f"Could not add layer_table_name to database: {e}")
 
         # Add layer_provider_type if missing
@@ -510,7 +511,7 @@ class LayersManagementEngineTask(QgsTask):
                     )
                     conn.commit()
                     cur.close()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning(f"Could not add layer_provider_type to database: {e}")
 
             # THREAD SAFETY (v2.3.10): Queue for main thread execution
@@ -533,7 +534,7 @@ class LayersManagementEngineTask(QgsTask):
                     )
                     conn.commit()
                     cur.close()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning(f"Could not add layer_geometry_type to database: {e}")
 
     def _detect_layer_metadata(self, layer, layer_provider_type):
@@ -574,7 +575,7 @@ class LayersManagementEngineTask(QgsTask):
 
                 logger.debug(f"PostgreSQL layer metadata: schema={source_schema}, geometry_field={geometry_field}")
 
-            except Exception as e:
+            except (RuntimeError, AttributeError, ValueError) as e:
                 logger.warning(f"Error parsing PostgreSQL layer source: {e}, falling back to regex")
                 # Fallback to regex if QgsDataSourceUri fails
                 layer_source = layer.source()
@@ -596,7 +597,7 @@ class LayersManagementEngineTask(QgsTask):
                 if geom_col and geom_col.strip():
                     detected_geom_field = geom_col
                     logger.debug(f"Geometry column from layer.geometryColumn(): '{detected_geom_field}'")
-            except Exception:
+            except (RuntimeError, AttributeError):
                 pass
 
             # METHOD 1: Query GeoPackage metadata (for .gpkg files)
@@ -1282,9 +1283,15 @@ class LayersManagementEngineTask(QgsTask):
             bool: True if successful
         """
         try:
+            # Sanitize all identifiers from QGIS URI metadata
+            safe_schema = sanitize_sql_identifier(schema)
+            safe_table = sanitize_sql_identifier(table)
+            safe_geom = sanitize_sql_identifier(geometry_field)
+            safe_pk = sanitize_sql_identifier(primary_key_name)
+
             with connexion.cursor() as cursor:
                 # PERFORMANCE: Check if GIST index already exists before creating
-                gist_index_name = f"{schema}_{table}_{geometry_field}_idx"
+                gist_index_name = sanitize_sql_identifier(f"{schema}_{table}_{geometry_field}_idx")
                 cursor.execute("""
                     SELECT 1 FROM pg_indexes
                     WHERE schemaname = %s AND tablename = %s AND indexname = %s
@@ -1292,17 +1299,17 @@ class LayersManagementEngineTask(QgsTask):
                 gist_exists = cursor.fetchone() is not None
 
                 if not gist_exists:
-                    logger.debug(f"Creating GIST spatial index on {schema}.{table}.{geometry_field}")
+                    logger.debug(f"Creating GIST spatial index on {safe_schema}.{safe_table}.{safe_geom}")
                     cursor.execute(
                         f'CREATE INDEX {gist_index_name} '
-                        f'ON "{schema}"."{table}" USING GIST ("{geometry_field}");'
+                        f'ON "{safe_schema}"."{safe_table}" USING GIST ("{safe_geom}");'
                     )
                 else:
                     logger.debug(f"GIST index {gist_index_name} already exists, skipping")
 
                 # PERFORMANCE: Check if primary key index already exists
                 # Note: PostgreSQL auto-creates index for PRIMARY KEY, but not for manual 'id' fields
-                pk_index_name = f"{schema}_{table}_{primary_key_name}_idx"
+                pk_index_name = sanitize_sql_identifier(f"{schema}_{table}_{primary_key_name}_idx")
                 cursor.execute("""
                     SELECT 1 FROM pg_indexes
                     WHERE schemaname = %s AND tablename = %s AND indexname = %s
@@ -1310,17 +1317,17 @@ class LayersManagementEngineTask(QgsTask):
                 pk_exists = cursor.fetchone() is not None
 
                 if not pk_exists and primary_key_name != 'ctid':
-                    logger.debug(f"Creating unique index on {schema}.{table}.{primary_key_name}")
+                    logger.debug(f"Creating unique index on {safe_schema}.{safe_table}.{safe_pk}")
                     try:
                         cursor.execute(
                             f'CREATE UNIQUE INDEX {pk_index_name} '
-                            f'ON "{schema}"."{table}" ("{primary_key_name}");'
+                            f'ON "{safe_schema}"."{safe_table}" ("{safe_pk}");'
                         )
                     except Exception as e:
                         # May fail if column has duplicates - not critical
-                        logger.debug(f"Could not create unique index on {primary_key_name}: {e}")
+                        logger.debug(f"Could not create unique index on {safe_pk}: {e}")
                 else:
-                    logger.debug(f"PK index for {primary_key_name} already exists or not needed, skipping")
+                    logger.debug(f"PK index for {safe_pk} already exists or not needed, skipping")
 
                 # PERFORMANCE: Skip CLUSTER at init - it's very slow on large tables
                 # CLUSTER will be done lazily during first filter if beneficial
@@ -1337,10 +1344,10 @@ class LayersManagementEngineTask(QgsTask):
                 has_stats = cursor.fetchone() is not None
 
                 if not has_stats:
-                    logger.debug(f"Running ANALYZE on {schema}.{table} (no statistics found)")
-                    cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                    logger.debug(f"Running ANALYZE on {safe_schema}.{safe_table} (no statistics found)")
+                    cursor.execute(f'ANALYZE "{safe_schema}"."{safe_table}";')
                 else:
-                    logger.debug(f"Table {schema}.{table} already has statistics, skipping ANALYZE")
+                    logger.debug(f"Table {safe_schema}.{safe_table} already has statistics, skipping ANALYZE")
 
             connexion.commit()
             logger.info(f"PostgreSQL layer {layer_name}: spatial index setup completed")

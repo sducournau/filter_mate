@@ -929,14 +929,14 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
             self.log_warning("Could not detect PK from PostgreSQL, trying common fallbacks")
             try:
                 with connexion.cursor() as cursor:
-                    # Check for common PK column names
+                    # Check for common PK column names (using parameterized query)
                     for candidate in ['id', 'fid', 'ogc_fid', 'cleabs', 'gid', 'objectid']:
                         cursor.execute("""
                             SELECT column_name FROM information_schema.columns
-                            WHERE table_schema = '{source_schema}'
-                            AND table_name = '{source_table}'
-                            AND column_name = '{candidate}'
-                        """)
+                            WHERE table_schema = %s
+                            AND table_name = %s
+                            AND column_name = %s
+                        """, (source_schema, source_table, candidate))
                         if cursor.fetchone():
                             primary_key_column = candidate
                             self.log_debug(f"Using fallback PK column: {primary_key_column}")

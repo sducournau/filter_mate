@@ -30,6 +30,8 @@ except ImportError:
     QgsVectorLayer = Any
     QgsProject = Any
 
+from ...infrastructure.database.sql_utils import sanitize_sql_identifier
+
 logger = logging.getLogger('FilterMate.LayerLifecycleService')
 
 
@@ -353,16 +355,18 @@ class LayerLifecycleService:
 
                     if views:
                         count = 0
+                        safe_schema = sanitize_sql_identifier(temp_schema)
                         for (view_name,) in views:
                             try:
                                 # Drop associated index first (handle both new and legacy prefixes)
                                 if view_name.startswith('fm_temp_mv_'):
-                                    index_name = f"{temp_schema}_{view_name[11:]}_cluster"  # Remove 'fm_temp_mv_' prefix
+                                    index_name = sanitize_sql_identifier(f"{temp_schema}_{view_name[11:]}_cluster")  # Remove 'fm_temp_mv_' prefix
                                 else:
-                                    index_name = f"{temp_schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix (legacy)
+                                    index_name = sanitize_sql_identifier(f"{temp_schema}_{view_name[3:]}_cluster")  # Remove 'mv_' prefix (legacy)
                                 cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
                                 # Drop the view
-                                cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{temp_schema}"."{view_name}" CASCADE;')
+                                safe_view = sanitize_sql_identifier(view_name)
+                                cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;')
                                 count += 1
                             except Exception as e:
                                 logger.debug(f"Error dropping view {view_name}: {e}")

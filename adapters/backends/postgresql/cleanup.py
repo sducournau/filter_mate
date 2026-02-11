@@ -24,6 +24,8 @@ import logging
 from typing import Optional, List, Tuple
 from datetime import datetime
 
+from ....infrastructure.database.sql_utils import sanitize_sql_identifier
+
 logger = logging.getLogger('FilterMate.Cleanup.PostgreSQL')
 
 
@@ -184,20 +186,22 @@ class PostgreSQLCleanupService:
 
             views = [row[0] for row in cursor.fetchall()]
 
+            safe_schema = sanitize_sql_identifier(self._schema)
             for view_name in views:
                 try:
                     # Drop associated index first
                     # Handle both new (fm_temp_mv_) and legacy (mv_) prefixes
                     if view_name.startswith('fm_temp_mv_'):
-                        index_name = f"{self._schema}_{view_name[11:]}_cluster"  # Remove 'fm_temp_mv_' prefix
+                        index_name = sanitize_sql_identifier(f"{self._schema}_{view_name[11:]}_cluster")  # Remove 'fm_temp_mv_' prefix
                     else:
-                        index_name = f"{self._schema}_{view_name[3:]}_cluster"  # Remove 'mv_' prefix (legacy)
+                        index_name = sanitize_sql_identifier(f"{self._schema}_{view_name[3:]}_cluster")  # Remove 'mv_' prefix (legacy)
                     cursor.execute(f'DROP INDEX IF EXISTS "{index_name}" CASCADE;')
                     self._metrics['indexes_cleaned'] += 1
 
                     # Drop the materialized view
+                    safe_view = sanitize_sql_identifier(view_name)
                     cursor.execute(
-                        f'DROP MATERIALIZED VIEW IF EXISTS "{self._schema}"."{view_name}" CASCADE;'
+                        f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;'
                     )
                     cleaned_views.append(view_name)
                     self._metrics['views_cleaned'] += 1
@@ -285,10 +289,12 @@ class PostgreSQLCleanupService:
 
             # Clean orphaned views
             cleaned = []
+            safe_schema = sanitize_sql_identifier(self._schema)
             for view_name in orphaned_views:
                 try:
+                    safe_view = sanitize_sql_identifier(view_name)
                     cursor.execute(
-                        f'DROP MATERIALIZED VIEW IF EXISTS "{self._schema}"."{view_name}" CASCADE;'
+                        f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;'
                     )
                     cleaned.append(view_name)
                     self._metrics['views_cleaned'] += 1
@@ -373,7 +379,8 @@ class PostgreSQLCleanupService:
                     return False
 
             # Drop the schema
-            cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
+            safe_schema = sanitize_sql_identifier(self._schema)
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{safe_schema}" CASCADE;')
             connexion.commit()
 
             logger.info(f"[PostgreSQL] Dropped schema '{self._schema}'")
@@ -400,7 +407,8 @@ class PostgreSQLCleanupService:
 
         try:
             cursor = connexion.cursor()
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self._schema}";')
+            safe_schema = sanitize_sql_identifier(self._schema)
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}";')
             connexion.commit()
 
             logger.debug(f"[PostgreSQL] Ensured schema '{self._schema}' exists")
@@ -542,7 +550,9 @@ class PostgreSQLCleanupService:
                     views = [row[0] for row in cursor.fetchall()]
 
                     for view_name in views:
-                        full_name = f'"{schema}"."{view_name}"'
+                        safe_s = sanitize_sql_identifier(schema)
+                        safe_v = sanitize_sql_identifier(view_name)
+                        full_name = f'"{safe_s}"."{safe_v}"'
 
                         if dry_run:
                             cleaned_objects.append(f"[DRY RUN] Would drop MV: {full_name}")
@@ -571,7 +581,9 @@ class PostgreSQLCleanupService:
                     tables = [row[0] for row in cursor.fetchall()]
 
                     for table_name in tables:
-                        full_name = f'"{schema}"."{table_name}"'
+                        safe_s = sanitize_sql_identifier(schema)
+                        safe_t = sanitize_sql_identifier(table_name)
+                        full_name = f'"{safe_s}"."{safe_t}"'
 
                         if dry_run:
                             cleaned_objects.append(f"[DRY RUN] Would drop TABLE: {full_name}")
@@ -588,7 +600,8 @@ class PostgreSQLCleanupService:
             # Drop filtermate_temp schema if empty or force
             if not dry_run:
                 try:
-                    cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
+                    safe_schema = sanitize_sql_identifier(self._schema)
+                    cursor.execute(f'DROP SCHEMA IF EXISTS "{safe_schema}" CASCADE;')
                     cleaned_objects.append(f"SCHEMA: {self._schema}")
                     logger.info(f"Dropped schema: {self._schema}")
                 except Exception as e:
@@ -642,8 +655,10 @@ class PostgreSQLCleanupService:
 
             logger.info(f"Found {len(views)} src_sel views to clean")
 
+            safe_schema = sanitize_sql_identifier(self._schema)
             for view_name in views:
-                full_name = f'"{self._schema}"."{view_name}"'
+                safe_view = sanitize_sql_identifier(view_name)
+                full_name = f'"{safe_schema}"."{safe_view}"'
 
                 if dry_run:
                     cleaned.append(f"[DRY RUN] {view_name}")

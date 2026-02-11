@@ -29,6 +29,8 @@ except ImportError:
 if TYPE_CHECKING:
     pass  # No QGIS type hints needed
 
+from ...infrastructure.database.sql_utils import sanitize_sql_identifier
+
 logger = logging.getLogger(__name__)
 
 
@@ -509,7 +511,8 @@ class PostgresSessionManager(QObject):
                 )
 
             # Drop schema
-            cursor.execute(f'DROP SCHEMA IF EXISTS "{self._schema}" CASCADE;')
+            safe_schema = sanitize_sql_identifier(self._schema)
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{safe_schema}" CASCADE;')
             connection.commit()
 
             logger.info(f"Dropped schema: {self._schema}")
@@ -541,7 +544,8 @@ class PostgresSessionManager(QObject):
         """
         try:
             cursor = connection.cursor()
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self._schema}";')
+            safe_schema = sanitize_sql_identifier(self._schema)
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}";')
             connection.commit()
 
             logger.debug(f"Ensured schema exists: {self._schema}")

@@ -18,6 +18,8 @@ Date: January 2026
 import logging
 from typing import Optional, Tuple
 
+from ....infrastructure.database.sql_utils import sanitize_sql_identifier
+
 logger = logging.getLogger('FilterMate.PostgreSQL.SchemaManager')
 
 
@@ -81,11 +83,12 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
         # Continue to try creating it
 
     # Try creating schema without explicit authorization (uses current user)
+    safe_schema = sanitize_sql_identifier(schema_name)
     try:
         with connexion.cursor() as cursor:
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}";')
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}";')
             connexion.commit()
-        logger.debug(f"[PostgreSQL] Ensured schema '{schema_name}' exists")
+        logger.debug(f"[PostgreSQL] Ensured schema '{safe_schema}' exists")
         return schema_name
     except Exception as e:
         logger.warning(f"[PostgreSQL] Error creating schema '{schema_name}' (no auth): {e}")
@@ -98,9 +101,9 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
         # Try with explicit AUTHORIZATION CURRENT_USER as fallback
         try:
             with connexion.cursor() as cursor:
-                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION CURRENT_USER;')
+                cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}" AUTHORIZATION CURRENT_USER;')
                 connexion.commit()
-            logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with CURRENT_USER authorization")
+            logger.debug(f"[PostgreSQL] Created schema '{safe_schema}' with CURRENT_USER authorization")
             return schema_name
         except Exception as e2:
             logger.warning(f"[PostgreSQL] Error creating schema with CURRENT_USER: {e2}")
@@ -112,9 +115,9 @@ def ensure_temp_schema_exists(connexion, schema_name: str) -> str:
             # Final fallback: try with postgres authorization
             try:
                 with connexion.cursor() as cursor:
-                    cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}" AUTHORIZATION postgres;')
+                    cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}" AUTHORIZATION postgres;')
                     connexion.commit()
-                logger.debug(f"[PostgreSQL] Created schema '{schema_name}' with postgres authorization")
+                logger.debug(f"[PostgreSQL] Created schema '{safe_schema}' with postgres authorization")
                 return schema_name
             except Exception as e3:
                 try:
@@ -211,10 +214,12 @@ def ensure_table_stats(connexion, schema: str, table: str, geom_field: str) -> b
             has_stats = result[0] > 0 if result else False
 
             if not has_stats:
-                logger.info(f"Running ANALYZE on source table \"{schema}\".\"{table}\" (missing stats for {geom_field})")
-                cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                safe_schema = sanitize_sql_identifier(schema)
+                safe_table = sanitize_sql_identifier(table)
+                logger.info(f"Running ANALYZE on source table \"{safe_schema}\".\"{safe_table}\" (missing stats for {geom_field})")
+                cursor.execute(f'ANALYZE "{safe_schema}"."{safe_table}";')
                 connexion.commit()
-                logger.debug(f"ANALYZE completed for \"{schema}\".\"{table}\"")
+                logger.debug(f"ANALYZE completed for \"{safe_schema}\".\"{safe_table}\"")
 
             return True
 
@@ -333,9 +338,11 @@ def cleanup_session_materialized_views(connexion, schema_name: str, session_id: 
             views = cursor.fetchall()
 
             count = 0
+            safe_schema = sanitize_sql_identifier(schema_name)
             for (view_name,) in views:
                 try:
-                    cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema_name}"."{view_name}" CASCADE;')
+                    safe_view = sanitize_sql_identifier(view_name)
+                    cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;')
                     count += 1
                 except Exception as e:
                     logger.warning(f"[PostgreSQL] Error dropping view {view_name}: {e}")

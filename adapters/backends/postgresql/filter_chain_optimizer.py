@@ -41,6 +41,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
+from ....infrastructure.database.sql_utils import sanitize_sql_identifier
+
 logger = logging.getLogger('FilterMate.Backend.PostgreSQL.FilterChainOptimizer')
 
 
@@ -218,13 +220,15 @@ class FilterChainOptimizer:
         # Execute MV creation
         try:
             cursor = self._connection.cursor()
+            safe_schema = sanitize_sql_identifier(self.MV_SCHEMA)
+            safe_mv = sanitize_sql_identifier(mv_name)
 
             # Ensure schema exists
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.MV_SCHEMA}"')
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}"')
 
             # Drop if exists (for refresh)
             cursor.execute(
-                f'DROP MATERIALIZED VIEW IF EXISTS "{self.MV_SCHEMA}"."{mv_name}" CASCADE'
+                f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_mv}" CASCADE'
             )
 
             # Create MV

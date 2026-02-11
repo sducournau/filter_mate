@@ -17,6 +17,7 @@ from qgis.PyQt.QtGui import QCursor
 from qgis.core import QgsVectorLayer
 
 from .base_controller import BaseController
+from ...infrastructure.database.sql_utils import sanitize_sql_identifier
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -922,9 +923,11 @@ class BackendController(BaseController):
                     return True
 
                 # Drop each view
+                safe_schema = sanitize_sql_identifier(schema)
                 for view in views:
                     try:
-                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                        safe_view = sanitize_sql_identifier(view)
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;')
                     except Exception as e:
                         logger.warning(f"Failed to drop view {view}: {e}")
 
@@ -990,7 +993,8 @@ class BackendController(BaseController):
                     return False
 
                 # Drop schema
-                cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
+                safe_schema = sanitize_sql_identifier(schema)
+                cursor.execute(f'DROP SCHEMA IF EXISTS "{safe_schema}" CASCADE;')
                 connexion.commit()
                 logger.info(f"Schema '{schema}' dropped successfully")
                 return True
@@ -1149,9 +1153,11 @@ class BackendController(BaseController):
                     return 0
 
                 count = 0
+                safe_schema = sanitize_sql_identifier(schema)
                 for view in views:
                     try:
-                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view}" CASCADE;')
+                        safe_view = sanitize_sql_identifier(view)
+                        cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{safe_schema}"."{safe_view}" CASCADE;')
                         count += 1
                     except Exception as e:
                         logger.warning(f"Failed to drop PostgreSQL view {view}: {e}")
@@ -1216,7 +1222,9 @@ class BackendController(BaseController):
                     # Drop each materialized view
                     for view_schema, view_name in all_views:
                         try:
-                            cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{view_schema}"."{view_name}" CASCADE;')
+                            safe_vs = sanitize_sql_identifier(view_schema)
+                            safe_vn = sanitize_sql_identifier(view_name)
+                            cursor.execute(f'DROP MATERIALIZED VIEW IF EXISTS "{safe_vs}"."{safe_vn}" CASCADE;')
                             total_count += 1
                             logger.debug(f"Dropped MV: {view_schema}.{view_name}")
                         except Exception as e:
@@ -1245,7 +1253,9 @@ class BackendController(BaseController):
                     # Drop each table
                     for table_schema, table_name in all_tables:
                         try:
-                            cursor.execute(f'DROP TABLE IF EXISTS "{table_schema}"."{table_name}" CASCADE;')  # nosec B608
+                            safe_ts = sanitize_sql_identifier(table_schema)
+                            safe_tn = sanitize_sql_identifier(table_name)
+                            cursor.execute(f'DROP TABLE IF EXISTS "{safe_ts}"."{safe_tn}" CASCADE;')  # nosec B608
                             total_count += 1
                             logger.debug(f"Dropped TABLE: {table_schema}.{table_name}")
                         except Exception as e:
@@ -1256,7 +1266,8 @@ class BackendController(BaseController):
                 # 3. Also try to drop the temp schemas if empty
                 for temp_schema in ['filter_mate_temp', 'filtermate_temp']:
                     try:
-                        cursor.execute(f'DROP SCHEMA IF EXISTS "{temp_schema}" CASCADE;')
+                        safe_schema = sanitize_sql_identifier(temp_schema)
+                        cursor.execute(f'DROP SCHEMA IF EXISTS "{safe_schema}" CASCADE;')
                         connexion.commit()
                         logger.debug(f"Dropped empty schema: {temp_schema}")
                     except Exception as e:

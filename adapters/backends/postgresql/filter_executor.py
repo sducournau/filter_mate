@@ -750,10 +750,12 @@ def ensure_source_table_stats(
             has_stats = result[0] > 0 if result else False
 
             if not has_stats:
-                logger.info(f"Running ANALYZE on source table \"{schema}\".\"{table}\" (missing stats for {geom_field})")
-                cursor.execute(f'ANALYZE "{schema}"."{table}";')
+                safe_schema = sanitize_sql_identifier(schema)
+                safe_table = sanitize_sql_identifier(table)
+                logger.info(f"Running ANALYZE on source table \"{safe_schema}\".\"{safe_table}\" (missing stats for {geom_field})")
+                cursor.execute(f'ANALYZE "{safe_schema}"."{safe_table}";')
                 connexion.commit()
-                logger.debug(f"ANALYZE completed for \"{schema}\".\"{table}\"")
+                logger.debug(f"ANALYZE completed for \"{safe_schema}\".\"{safe_table}\"")
 
             return True
 

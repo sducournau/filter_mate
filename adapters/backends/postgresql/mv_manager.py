@@ -26,6 +26,8 @@ from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+from ....infrastructure.database.sql_utils import sanitize_sql_identifier
+
 # Import port interface
 from ....core.ports.materialized_view_port import (
     MaterializedViewPort,
@@ -287,7 +289,9 @@ class MaterializedViewManager(MaterializedViewPort):
         """
         # Generate unique MV name
         mv_name = self._generate_mv_name(query, session_scoped)
-        full_name = f'"{self.MV_SCHEMA}"."{mv_name}"'
+        safe_schema = sanitize_sql_identifier(self.MV_SCHEMA)
+        safe_mv = sanitize_sql_identifier(mv_name)
+        full_name = f'"{safe_schema}"."{safe_mv}"'
 
         # Check if already exists
         if self.mv_exists(mv_name, connection=connection):
@@ -303,7 +307,7 @@ class MaterializedViewManager(MaterializedViewPort):
             cursor = conn.cursor()
 
             # Ensure schema exists
-            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{self.MV_SCHEMA}"')
+            cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{safe_schema}"')
 
             # Create MV
             "WITH DATA" if self._mv_config.with_data else "WITH NO DATA"
@@ -364,7 +368,9 @@ class MaterializedViewManager(MaterializedViewPort):
         Returns:
             True if refresh succeeded
         """
-        full_name = f'"{self.MV_SCHEMA}"."{mv_name}"'
+        safe_schema = sanitize_sql_identifier(self.MV_SCHEMA)
+        safe_mv = sanitize_sql_identifier(mv_name)
+        full_name = f'"{safe_schema}"."{safe_mv}"'
         use_concurrent = concurrent if concurrent is not None else self._mv_config.concurrent_refresh
 
         conn = connection or self._get_connection()
@@ -421,7 +427,9 @@ class MaterializedViewManager(MaterializedViewPort):
         Returns:
             True if drop succeeded
         """
-        full_name = f'"{self.MV_SCHEMA}"."{mv_name}"'
+        safe_schema = sanitize_sql_identifier(self.MV_SCHEMA)
+        safe_mv = sanitize_sql_identifier(mv_name)
+        full_name = f'"{safe_schema}"."{safe_mv}"'
 
         conn = connection or self._get_connection()
         if conn is None:
