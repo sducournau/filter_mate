@@ -144,13 +144,13 @@ class CleanupHandler:
                     drop_sql = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{mv_name}" CASCADE;'
                     cursor.execute(drop_sql)
                     logger.debug(f"Dropped MV: {schema}.{mv_name}")
-                except Exception as e:
+                except (RuntimeError, OSError, AttributeError) as e:
                     logger.warning(f"Failed to drop MV {mv_name}: {e}")
 
             connexion.commit()
             logger.debug(f"PostgreSQL MV cleanup completed: dropped {len(mvs_to_drop)} MV(s)")
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: MV cleanup must not crash the task
             logger.debug(f"Error during PostgreSQL MV cleanup: {e}")
 
     def cleanup_session_materialized_views(

@@ -158,7 +158,7 @@ class FeatureCollector:
                 is_numeric=self.is_pk_numeric
             )
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, KeyError) as e:
             logger.error(f"Error collecting from selection: {e}")
             return CollectionResult(
                 feature_ids=[],
@@ -204,7 +204,7 @@ class FeatureCollector:
                 is_numeric=self.is_pk_numeric
             )
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, KeyError) as e:
             logger.error(f"Error collecting from features: {e}")
             return CollectionResult(
                 feature_ids=[],
@@ -272,7 +272,7 @@ class FeatureCollector:
                 is_numeric=self.is_pk_numeric
             )
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.error(f"Error collecting from expression: {e}")
             return CollectionResult(
                 feature_ids=[],
@@ -327,7 +327,7 @@ class FeatureCollector:
                 is_numeric=self.is_pk_numeric
             )
 
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.error(f"Error collecting all features: {e}")
             return CollectionResult(
                 feature_ids=[],
@@ -379,7 +379,7 @@ class FeatureCollector:
                     ids.append(f.id())
                 elif isinstance(f, dict) and pk_field and pk_field in f:
                     ids.append(f[pk_field])
-            except Exception as e:
+            except (AttributeError, KeyError, TypeError) as e:
                 logger.debug(f"Could not extract ID from feature: {e}")
 
         return ids
@@ -491,6 +491,6 @@ class FeatureCollector:
             layer.selectByIds(feature_ids)
             logger.info(f"Restored selection: {len(feature_ids)} features")
             return True
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.warning(f"Failed to restore selection: {e}")
             return False

@@ -217,7 +217,7 @@ class SubsetStringBuilder:
                         optimization_type=result.optimization_type.name,
                         estimated_speedup=result.estimated_speedup
                     )
-            except Exception as e:
+            except (RuntimeError, AttributeError, ValueError) as e:
                 logger.warning(f"Combined query optimization failed: {e}")
 
         # Fallback: Manual combination

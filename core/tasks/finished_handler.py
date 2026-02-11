@@ -403,13 +403,13 @@ class FinishedHandler:
             # Restore source layer selection after filter/unfilter
             try:
                 restore_selection_fn()
-            except Exception as sel_err:
+            except (RuntimeError, AttributeError) as sel_err:
                 logger.debug(f"Could not restore source layer selection: {sel_err}")
 
             # Ensure canvas is refreshed after successful filter operation
             try:
                 iface.mapCanvas().refresh()
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.debug(f"Ignored in post-filter canvas refresh: {e}")
 
         elif message_category == 'ExportLayers':
@@ -483,7 +483,7 @@ class FinishedHandler:
                     if backend and hasattr(backend, '_temp_layers_keep_alive'):
                         cleanup_ogr_temp_layers(backend)
                         logger.debug(f"Cleaned up temp layers for backend: {type(backend).__name__}")
-        except Exception as cleanup_err:
+        except (ImportError, RuntimeError, AttributeError) as cleanup_err:
             logger.debug(f"OGR temp layer cleanup failed (non-critical): {cleanup_err}")
 
     def _log_task_bridge_metrics(self, task_bridge: Optional[Any]) -> None:
@@ -496,7 +496,7 @@ class FinishedHandler:
             try:
                 metrics_report = task_bridge.get_metrics_report()
                 logger.info(metrics_report)
-            except Exception as metrics_err:
+            except (RuntimeError, AttributeError) as metrics_err:
                 logger.debug(f"TaskBridge metrics logging failed: {metrics_err}")
 
     def cleanup_safe_intersect_layers(self) -> None:
@@ -536,5 +536,5 @@ class FinishedHandler:
             if layers_to_remove:
                 project.removeMapLayers(layers_to_remove)
                 logger.debug(f"Cleaned up {len(layers_to_remove)} temporary safe_intersect layers")
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.debug(f"safe_intersect cleanup failed (non-critical): {e}")

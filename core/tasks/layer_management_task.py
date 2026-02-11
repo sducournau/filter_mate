@@ -635,7 +635,7 @@ class LayersManagementEngineTask(QgsTask):
                                     detected_geom_field = result[0]
                                     logger.debug(f"Geometry column from gpkg_geometry_columns: '{detected_geom_field}'")
                                 conn.close()
-                except Exception as e:
+                except (OSError, RuntimeError, AttributeError) as e:
                     logger.debug(f"Could not query GeoPackage metadata: {e}")
 
             # Final assignment with fallback
@@ -659,7 +659,7 @@ class LayersManagementEngineTask(QgsTask):
                 else:
                     geometry_field = 'geom'  # Ultimate fallback
                     logger.info("Final fallback: using default geometry column 'geom'")
-            except Exception:
+            except (RuntimeError, AttributeError):
                 geometry_field = 'geom'
                 logger.info("Final fallback: using default geometry column 'geom' (detection failed)")
 
@@ -738,7 +738,7 @@ class LayersManagementEngineTask(QgsTask):
                             logger.info(f"PostgreSQL layer {layer.name()}: psycopg2 connection unavailable (advanced features disabled, basic filtering still works)")
                         # Cache the result for other layers from same database
                         self._postgresql_connection_cache[cache_key] = psycopg2_connection_available
-                except Exception as e:
+                except (RuntimeError, OSError, AttributeError) as e:
                     logger.info(f"PostgreSQL psycopg2 connection test failed for {layer.name()}: {e} (advanced features disabled, basic filtering still works)")
             else:
                 logger.debug(f"PostgreSQL layer {layer.name()}: psycopg2 not installed (advanced features disabled, basic filtering still works)")
@@ -860,7 +860,7 @@ class LayersManagementEngineTask(QgsTask):
                     logger.debug(f"Could not create spatial index for PostgreSQL layer {layer.id()}: {e}")
                     # Fallback to QGIS spatial index
                     self.create_spatial_index_for_layer(layer)
-                except Exception as e:
+                except Exception as e:  # catch-all safety net: includes psycopg2.Error and RuntimeError
                     if POSTGRESQL_AVAILABLE and psycopg2 and isinstance(e, psycopg2.Error):
                         logger.debug(f"PostgreSQL error creating spatial index: {e}")
                     else:
@@ -995,7 +995,7 @@ class LayersManagementEngineTask(QgsTask):
             del self.project_layers[layer_id]
             logger.debug(f"remove_project_layer: successfully removed layer '{layer_id}'")
             return True
-        except Exception as e:
+        except (RuntimeError, OSError, KeyError, AttributeError) as e:
             logger.error(f"remove_project_layer: error removing layer '{layer_id}': {e}")
             return False
 
@@ -1055,7 +1055,7 @@ class LayersManagementEngineTask(QgsTask):
             if cleaned_layer_ids:
                 logger.info(f"Cleaned up {len(cleaned_layer_ids)} PostgreSQL layers with virtual_id: {cleaned_layer_ids}")
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             logger.error(f"Error during PostgreSQL virtual_id cleanup: {e}")
 
         return cleaned_layer_ids
@@ -1244,7 +1244,7 @@ class LayersManagementEngineTask(QgsTask):
                         logger.warning(f"Cannot create spatial index for PostgreSQL layer {layer.name()}: no database connection (pooled)")
                         return False
                     return self._create_postgresql_indexes(connexion, schema, table, geometry_field, primary_key_name, layer.name())
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 logger.error(f"Pooled connection error for spatial index: {e}")
                 # Fallback to non-pooled connection
                 use_pooled = False
@@ -1323,7 +1323,7 @@ class LayersManagementEngineTask(QgsTask):
                             f'CREATE UNIQUE INDEX {pk_index_name} '
                             f'ON "{safe_schema}"."{safe_table}" ("{safe_pk}");'
                         )
-                    except Exception as e:
+                    except (RuntimeError, OSError) as e:
                         # May fail if column has duplicates - not critical
                         logger.debug(f"Could not create unique index on {safe_pk}: {e}")
                 else:
@@ -1351,7 +1351,7 @@ class LayersManagementEngineTask(QgsTask):
 
             connexion.commit()
             logger.info(f"PostgreSQL layer {layer_name}: spatial index setup completed")
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError) as e:
             logger.warning(f"Error creating spatial index for PostgreSQL layer {layer_name}: {e}")
             return False
 
@@ -1399,7 +1399,7 @@ class LayersManagementEngineTask(QgsTask):
             if self.isCanceled():
                 return False
 
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             safe_log(logger, logging.WARNING,
                     f"Failed to create spatial index for layer {layer.name()}: {str(e)}")
 
@@ -1726,8 +1726,7 @@ class LayersManagementEngineTask(QgsTask):
         # Use Python logger only (file-based, safe during shutdown).
         try:
             logger.info(f'"{self.description()}" task was canceled')
-        except Exception:
-            # Even Python logging might fail during shutdown, ignore silently
+        except Exception:  # catch-all safety net: logger may be destroyed during QGIS shutdown
             pass
 
         # Call parent cancel without any QGIS API calls
@@ -1803,7 +1802,7 @@ class LayersManagementEngineTask(QgsTask):
                                 # Set individual variable using safe wrapper
                                 if not safe_set_layer_variable(layer_id, variable_key, value):
                                     logger.debug(f"Could not set layer variable {variable_key} for {layer_id} (layer may be deleted)")
-                    except Exception as e:
+                    except (RuntimeError, AttributeError, TypeError) as e:
                         logger.warning(f"Error in deferred layer variable callback: {e}")
 
                 # Schedule for next event loop iteration (0ms timeout)

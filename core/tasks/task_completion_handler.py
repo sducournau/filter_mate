@@ -48,7 +48,7 @@ def display_warning_messages(warning_messages: List[str]) -> None:
     for warning_msg in warning_messages:
         try:
             iface.messageBar().pushWarning("FilterMate", warning_msg)
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logger.warning(f"Could not display warning: {e}")
 
 
@@ -160,7 +160,7 @@ def apply_pending_subset_requests(
                 if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                     try:
                         layer.updateExtents()
-                    except Exception:
+                    except (RuntimeError, AttributeError):
                         pass
 
                 layer.triggerRepaint()
@@ -170,7 +170,7 @@ def apply_pending_subset_requests(
                     try:
                         layer.removeSelection()
                         logger.debug("Cleared selection after Spatialite filter (already applied)")
-                    except Exception as sel_err:
+                    except (RuntimeError, AttributeError) as sel_err:
                         logger.debug(f"Could not clear selection: {sel_err}")
 
                 count_str = f"{feature_count} features" if feature_count >= 0 else "(count pending)"
@@ -201,7 +201,7 @@ def apply_pending_subset_requests(
                     if feature_count is not None and feature_count >= 0 and feature_count < MAX_FEATURES_FOR_UPDATE_EXTENTS:
                         try:
                             layer.updateExtents()
-                        except Exception:
+                        except (RuntimeError, AttributeError):
                             pass
 
                     layer.triggerRepaint()
@@ -211,7 +211,7 @@ def apply_pending_subset_requests(
                         try:
                             layer.removeSelection()
                             logger.debug("Cleared selection after Spatialite filter (new filter)")
-                        except Exception as sel_err:
+                        except (RuntimeError, AttributeError) as sel_err:
                             logger.debug(f"Could not clear selection: {sel_err}")
 
                     logger.debug(f"  ✓ Applied filter to {layer.name()}: {len(expression_str)} chars")
@@ -252,7 +252,7 @@ def apply_pending_subset_requests(
                         "FilterMate", Qgis.Critical
                     )
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: subset application must not crash finished()
             import traceback
             logger.error(f"  ✗ Error applying subset string: {e}")
             logger.error(f"    → Traceback: {traceback.format_exc()}")
@@ -296,13 +296,13 @@ def _schedule_deferred_filter_application(
                         )
                     else:
                         logger.error(f"Failed to apply deferred filter to {lyr.name()}")
-            except Exception as e:
+            except (RuntimeError, AttributeError, ValueError) as e:
                 logger.error(f"Error applying deferred filter: {e}")
 
         # Final canvas refresh
         try:
             iface.mapCanvas().refresh()
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
 
     # Defer to allow UI to breathe
@@ -328,7 +328,7 @@ def schedule_canvas_refresh(
         canvas.stopRendering()
         canvas.refresh()
         logger.debug("Immediate canvas refresh triggered after filter application (with stopRendering)")
-    except Exception as refresh_err:
+    except (RuntimeError, AttributeError) as refresh_err:
         logger.debug(f"Could not trigger immediate canvas refresh: {refresh_err}")
 
     try:
@@ -351,12 +351,12 @@ def schedule_canvas_refresh(
         QTimer.singleShot(refresh_delay, single_refresh_fn)
         logger.debug(f"Scheduled single canvas refresh in {refresh_delay}ms (complex={has_complex_filter})")
 
-    except Exception as canvas_err:
+    except (RuntimeError, AttributeError) as canvas_err:
         logger.warning(f"Failed to schedule canvas refresh: {canvas_err}")
         # Fallback: immediate refresh
         try:
             iface.mapCanvas().refresh()
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
 
 
@@ -378,5 +378,5 @@ def cleanup_memory_layer(ogr_source_geom: Optional[Any]) -> None:  # Optional[Qg
             if project.map_layer(ogr_source_geom.id()):
                 logger.debug("finished(): Removing OGR source memory layer from project")
                 project.remove_map_layer(ogr_source_geom.id())
-    except Exception as e:
+    except (RuntimeError, AttributeError) as e:
         logger.debug(f"Could not cleanup memory layer: {e}")

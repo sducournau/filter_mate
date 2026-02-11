@@ -124,7 +124,7 @@ class BackendConnector:
         if self.backend_registry:
             try:
                 return self.backend_registry.get_executor(layer_info)
-            except Exception as e:
+            except (RuntimeError, AttributeError, KeyError) as e:
                 logger.warning(
                     f"BackendRegistry.get_executor failed: {e}, "
                     "using legacy imports"
@@ -196,7 +196,7 @@ class BackendConnector:
                 cursor.close()
                 logger.debug("Reusing cached PostgreSQL connection")
                 return self._postgresql_connection
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 # Connection invalid, will create new one
                 logger.debug(f"Cached PostgreSQL connection invalid, creating new: {e}")
                 self._postgresql_connection = None
@@ -213,7 +213,7 @@ class BackendConnector:
                 logger.warning("Failed to get PostgreSQL connection from layer")
                 return None
 
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError) as e:
             logger.error(f"Error getting PostgreSQL connection: {e}")
             raise
 
@@ -252,7 +252,7 @@ class BackendConnector:
                 logger.warning(f"Failed to create Spatialite connection to {db_path}")
                 return None
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"Error getting Spatialite connection: {e}")
             raise
 
@@ -269,7 +269,7 @@ class BackendConnector:
             try:
                 self._postgresql_connection.close()
                 logger.debug("Closed PostgreSQL connection")
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 logger.debug(f"Error closing PostgreSQL connection: {e}")
             finally:
                 self._postgresql_connection = None
@@ -279,7 +279,7 @@ class BackendConnector:
             try:
                 self._spatialite_connection.close()
                 logger.debug("Closed Spatialite connection")
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 logger.debug(f"Error closing Spatialite connection: {e}")
             finally:
                 self._spatialite_connection = None
@@ -289,7 +289,7 @@ class BackendConnector:
             try:
                 self.backend_registry.cleanup_all()
                 logger.debug("Backend resources cleaned up via registry")
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.debug(f"Registry cleanup failed: {e}")
 
     def detect_provider_type(self, layer: Optional[Any] = None) -> str:  # layer: Optional[QgsVectorLayer]

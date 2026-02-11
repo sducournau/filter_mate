@@ -180,7 +180,7 @@ class SpatialFilterExecutor:
                 logger.debug(f"TaskBridge spatial: status={bridge_result.status}")
                 return None
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: bridge failure falls back to legacy
             logger.warning(f"TaskBridge spatial delegation failed: {e}")
             return None
 
@@ -309,7 +309,7 @@ class SpatialFilterExecutor:
 
             return result, None
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.debug(f"Executor.prepare_source_geometry failed: {e}, using legacy")
             return None, f"Executor failed: {str(e)}"
 
@@ -453,7 +453,7 @@ class SpatialFilterExecutor:
                     logger.warning(f"⚠️ Legacy spatial filter returned False for {layer.name()}")
                     return False, []
 
-            except Exception as e:
+            except Exception as e:  # catch-all safety net: spatial filter must return tuple
                 logger.error(f"Legacy spatial filter failed: {e}")
                 return False, []
         else:

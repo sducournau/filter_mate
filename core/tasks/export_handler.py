@@ -350,14 +350,14 @@ class ExportHandler:
                 try:
                     os.makedirs(gpkg_dir)
                     logger.info(f"Created output directory: {gpkg_dir}")
-                except Exception as e:
+                except OSError as e:
                     logger.error(f"Failed to create output directory: {e}")
                     return False, f'Failed to create output directory: {gpkg_dir}', None
         else:
             if not os.path.exists(output_folder):
                 try:
                     os.makedirs(output_folder)
-                except Exception as e:
+                except OSError as e:
                     logger.debug(f"Ignored in makedirs for export output: {e}")
                     return False, f'Failed to create output directory: {output_folder}', None
 
@@ -507,7 +507,7 @@ class ExportHandler:
             )
             return True, message
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: streaming export must return error tuple
             error_msg = f"Streaming export error: {e}"
             logger.error(error_msg)
             return False, error_msg

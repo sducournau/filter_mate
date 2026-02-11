@@ -163,7 +163,7 @@ class ExpressionEvaluationTask(QgsTask):
                 if provider:
                     self._feature_source = provider.featureSource()
                     self._total_count = provider.featureCount()
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.warning(f"Could not prepare feature source for {self.layer_name}: {e}")
                 self._feature_source = None
 
@@ -202,7 +202,7 @@ class ExpressionEvaluationTask(QgsTask):
 
             return success
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: QgsTask.run() must not propagate exceptions
             self.exception = e
             logger.error(f"Expression evaluation failed for '{self.layer_name}': {e}")
             return False
@@ -221,7 +221,7 @@ class ExpressionEvaluationTask(QgsTask):
                     self._feature_source = provider.featureSource()
                     self._total_count = provider.featureCount()
                     logger.debug(f"Refreshed feature source for {self.layer_name}: {self._total_count} features")
-            except Exception as e:
+            except (RuntimeError, AttributeError) as e:
                 logger.warning(f"Could not refresh feature source for {self.layer_name}: {e}")
                 # Keep the existing feature source if refresh fails
 
@@ -271,7 +271,7 @@ class ExpressionEvaluationTask(QgsTask):
 
             return request
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             self.exception = e
             logger.error(f"Failed to build feature request: {e}")
             return None
@@ -302,7 +302,7 @@ class ExpressionEvaluationTask(QgsTask):
             # Get feature iterator - this can fail for invalid expressions
             try:
                 feature_iterator = self._feature_source.getFeatures(request)
-            except Exception as e:
+            except (RuntimeError, AttributeError, ValueError) as e:
                 self.exception = ValueError(f"Failed to create feature iterator: {e}")
                 logger.error(f"Failed to create feature iterator for '{self.layer_name}': {e}")
                 return False
@@ -330,7 +330,7 @@ class ExpressionEvaluationTask(QgsTask):
             self.setProgress(100)
             return True
 
-        except Exception as e:
+        except (RuntimeError, AttributeError, StopIteration) as e:
             self.exception = e
             logger.error(f"Feature iteration failed: {e}")
             return False
@@ -362,8 +362,7 @@ class ExpressionEvaluationTask(QgsTask):
                 error_msg = str(self.exception) if self.exception else "Unknown error"
                 self.signals.error.emit(error_msg, self.layer_id)
                 logger.error(f"Expression evaluation error: {error_msg}")
-        except Exception as e:
-            # ROBUSTNESS: Catch any exception in finished() to prevent crashes
+        except Exception as e:  # catch-all safety net: finished() must not crash QGIS
             logger.error(f"Error in finished() callback for '{self.layer_name}': {e}")
 
     def cancel(self):

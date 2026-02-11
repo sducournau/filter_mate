@@ -141,7 +141,7 @@ class BaseActionHandler(ABC):
         try:
             if not context.source_layer.isValid():
                 return False, f"Source layer '{context.source_layer.name()}' is not valid"
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             return False, f"Error validating source layer: {e}"
 
         return True, ""
@@ -301,7 +301,7 @@ class ActionDispatcher:
                         action=action,
                         message="Action aborted by pre-dispatch hook"
                     )
-            except Exception as e:
+            except (RuntimeError, TypeError, ValueError) as e:
                 logger.warning(f"Pre-dispatch hook failed: {e}")
 
         # Find handler
@@ -326,7 +326,7 @@ class ActionDispatcher:
                     message=error_msg,
                     errors=[error_msg]
                 )
-        except Exception as e:
+        except (RuntimeError, AttributeError, TypeError) as e:
             logger.error(f"Validation exception for {action}: {e}")
             return ActionResult(
                 success=False,
@@ -341,7 +341,7 @@ class ActionDispatcher:
             result = handler.execute(context)
             result.elapsed_time = time.time() - start_time
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: action execution must return ActionResult
             logger.error(f"Action {action} failed with exception: {e}", exc_info=True)
             result = ActionResult(
                 success=False,
@@ -355,7 +355,7 @@ class ActionDispatcher:
         for hook in self._post_dispatch_hooks:
             try:
                 hook(task_action, result)
-            except Exception as e:
+            except (RuntimeError, TypeError, ValueError) as e:
                 logger.warning(f"Post-dispatch hook failed: {e}")
 
         logger.debug(f"Action {action} completed: success={result.success}, time={result.elapsed_time:.2f}s")
@@ -426,7 +426,7 @@ class CallbackActionHandler(BaseActionHandler):
                 message="Action completed" if success else "Action failed",
                 layers_processed=context.layers_count
             )
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: callback must return ActionResult
             logger.error(f"Callback execution failed: {e}", exc_info=True)
             return ActionResult(
                 success=False,
@@ -488,7 +488,7 @@ class ExportActionHandler(BaseActionHandler):
                 message="Export completed" if success else "Export failed",
                 layers_processed=context.layers_count
             )
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: export must return ActionResult
             logger.error(f"Export failed: {e}", exc_info=True)
             return ActionResult(
                 success=False,

@@ -188,7 +188,7 @@ class AttributeFilterExecutor:
                 logger.warning(f"   Error: {bridge_result.error_message}")
                 return None  # Fallback to legacy
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: bridge failure falls back to legacy
             logger.warning(f"TaskBridge delegation failed: {e}")
             return None  # Fallback to legacy
 
@@ -394,7 +394,7 @@ class AttributeFilterExecutor:
         except ImportError:
             logger.debug("expression_builder not available, returning expression unchanged")
             return expression
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.warning(f"qualify_field_names failed: {e}")
             return expression
 
@@ -418,7 +418,7 @@ class AttributeFilterExecutor:
         except ImportError:
             logger.debug("ExpressionService not available, returning expression unchanged")
             return expression
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.warning(f"convert_to_postgis failed: {e}")
             return expression
 
@@ -442,6 +442,6 @@ class AttributeFilterExecutor:
         except ImportError:
             logger.debug("ExpressionService not available, returning expression unchanged")
             return expression
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.warning(f"convert_to_spatialite failed: {e}")
             return expression
