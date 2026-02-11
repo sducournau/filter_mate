@@ -927,10 +927,12 @@ class LayersManagementEngineTask(QgsTask):
                 from qgis.core import Qgis
                 from qgis.utils import iface
                 iface.messageBar().pushMessage(
-                    "FilterMate - PostgreSQL sans clé primaire",
-                    f"La couche '{layer.name()}' n'a pas de PRIMARY KEY. "
-                    "Fonctionnalités limitées : vues matérialisées désactivées. "
-                    "Recommandation : ajoutez une PRIMARY KEY pour performances optimales.",
+                    "FilterMate",
+                    self.tr(
+                        "La couche '{0}' n'a pas de PRIMARY KEY. "
+                        "Fonctionnalités limitées : vues matérialisées désactivées. "
+                        "Recommandation : ajoutez une PRIMARY KEY pour performances optimales."
+                    ).format(layer.name()),
                     Qgis.Warning,
                     duration=10
                 )
@@ -1848,7 +1850,7 @@ class LayersManagementEngineTask(QgsTask):
 
             iface.messageBar().pushMessage(
                 message_category,
-                f"Exception: {self.exception}",
+                self.tr("Exception: {0}").format(self.exception),
                 Qgis.Critical
             )
             raise self.exception
