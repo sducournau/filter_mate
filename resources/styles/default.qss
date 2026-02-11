@@ -898,7 +898,7 @@ QWidget#widget_exporting_keys {
     background-color: {color_1};
     border: 1px solid {color_2};
     border-radius: 6px;
-    padding: 0px;
+    padding: 4px 0px;
     margin: 0px;
 }
 

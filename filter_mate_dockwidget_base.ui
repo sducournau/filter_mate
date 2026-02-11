@@ -15,8 +15,8 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>314</width>
-    <height>316</height>
+    <width>356</width>
+    <height>317</height>
    </size>
   </property>
   <property name="baseSize">
@@ -25,9 +25,6 @@
     <height>0</height>
    </size>
   </property>
-  <!-- FIX 2026-01-21: Removed custom palette with transparent colors (alpha=0)
-       that caused display issues in child dialogs like QgsExpressionBuilderDialog.
-       Now inherits QGIS default palette for proper color handling. -->
   <property name="font">
    <font>
     <family>Segoe UI</family>
@@ -50,7 +47,6 @@
   <property name="windowOpacity">
    <double>1.000000000000000</double>
   </property>
-  <!-- FIX 2026-01-21: Removed stylesheet property to prevent inheritance to child dialogs -->
   <property name="floating">
    <bool>true</bool>
   </property>
@@ -1304,7 +1300,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>376</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -1375,7 +1371,7 @@
                       <number>0</number>
                      </property>
                      <item>
-                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0,0">
+                      <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                        <property name="spacing">
                         <number>2</number>
                        </property>
@@ -2050,22 +2046,6 @@
                          </property>
                         </widget>
                        </item>
-                       <item>
-                        <spacer name="verticalSpacer_filtering_keys_field_end">
-                         <property name="orientation">
-                          <enum>Qt::Vertical</enum>
-                         </property>
-                         <property name="sizeType">
-                          <enum>QSizePolicy::Expanding</enum>
-                         </property>
-                         <property name="sizeHint" stdset="0">
-                          <size>
-                           <width>20</width>
-                           <height>0</height>
-                          </size>
-                         </property>
-                        </spacer>
-                       </item>
                       </layout>
                      </item>
                     </layout>
@@ -2593,7 +2573,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>376</height>
                 </rect>
                </property>
                <attribute name="icon">
@@ -3425,7 +3405,7 @@
                  <x>0</x>
                  <y>0</y>
                  <width>429</width>
-                 <height>380</height>
+                 <height>376</height>
                 </rect>
                </property>
                <attribute name="icon">

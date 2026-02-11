@@ -786,12 +786,14 @@ class DimensionsManager(LayoutManagerBase):
                     max_width = widget_keys_config.get('max_width', 40) if widget_keys_config else 40
                     widget.setMinimumWidth(min_width)
                     widget.setMaximumWidth(max_width)
+                    # Don't expand vertically beyond content — eliminates bottom gray gap
+                    widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
                     parent_layout = widget.layout()
                     if parent_layout:
                         parent_layout.setContentsMargins(widget_keys_padding, widget_keys_padding,
                                                         widget_keys_padding, widget_keys_padding)
-                        parent_layout.setAlignment(Qt.AlignCenter)
+                        parent_layout.setAlignment(Qt.AlignTop)
 
             # Apply consistent spacing to content layouts
             content_layouts = [

@@ -85,7 +85,7 @@ class UIConfig:
                 'min_width': 56,
                 'max_width': 72,
                 'base_width': 64,
-                'padding': 10,
+                'padding': 0,
                 'border_radius': 8,
             },
             'groupbox': {
@@ -262,7 +262,7 @@ class UIConfig:
                 'min_width': 32,
                 'max_width': 38,
                 'base_width': 34,
-                'padding': 1,
+                'padding': 0,
                 'border_radius': 5,
             }, 'groupbox': {
                 'min_width': 200,  # Prevent overlap when splitter is resized (compact mode)
@@ -434,7 +434,7 @@ class UIConfig:
                 'min_width': 72,
                 'max_width': 88,
                 'base_width': 80,
-                'padding': 14,
+                'padding': 0,
                 'border_radius': 10,
             },
             'combobox': {
@@ -610,7 +610,7 @@ class UIConfig:
                 'min_width': 88,
                 'max_width': 104,
                 'base_width': 96,
-                'padding': 18,
+                'padding': 0,
                 'border_radius': 12,
             },
             'combobox': {
