@@ -602,20 +602,17 @@ class BackendController(BaseController):
         self._indicator_label.setText(text)
 
         # Build stylesheet - v4.0: Soft "mousse" style with smoother appearance
-        stylesheet = """
-            QLabel#label_backend_indicator {{
-                color: {style['color']};
-                background-color: {style['background']};
-                font-size: 8pt;
-                font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
-                border: none;
-            }}
-            QLabel#label_backend_indicator:hover {{
-                filter: brightness(1.1);
-            }}
-        """
+        stylesheet = (
+            f"QLabel#label_backend_indicator {{"
+            f"  color: {style['color']};"
+            f"  background-color: {style['background']};"
+            f"  font-size: 8pt; font-weight: 500;"
+            f"  padding: 2px 8px; border-radius: 10px; border: none;"
+            f"}}"
+            f"QLabel#label_backend_indicator:hover {{"
+            f"  background-color: {style['background']};"
+            f"}}"
+        )
         self._indicator_label.setStyleSheet(stylesheet)
 
         # Build tooltip with context

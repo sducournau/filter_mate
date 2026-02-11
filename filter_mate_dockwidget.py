@@ -6722,20 +6722,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self.backend_indicator_label.setText(style['text'])
 
         # v4.0: Soft "mousse" style with smoother colors
-        base_style = """
-            QLabel#label_backend_indicator {{
-                color: {style['color']};
-                background-color: {style['background']};
-                font-size: 8pt;
-                font-weight: 500;
-                padding: 2px 8px;
-                border-radius: 10px;
-                border: none;
-            }}
-            QLabel#label_backend_indicator:hover {{
-                filter: brightness(1.1);
-            }}
-        """
+        base_style = (
+            f"QLabel#label_backend_indicator {{"
+            f"  color: {style['color']};"
+            f"  background-color: {style['background']};"
+            f"  font-size: 8pt; font-weight: 500;"
+            f"  padding: 2px 8px; border-radius: 10px; border: none;"
+            f"}}"
+            f"QLabel#label_backend_indicator:hover {{"
+            f"  background-color: {style['background']};"
+            f"}}"
+        )
         self.backend_indicator_label.setStyleSheet(base_style)
         self.backend_indicator_label.adjustSize()
 
