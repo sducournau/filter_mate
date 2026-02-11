@@ -23,8 +23,11 @@ logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
 # v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
-# v5.0 P2-2: Add OptimizationManager for optimization settings extraction
-from .ui.managers import ConfigurationManager, DockwidgetSignalManager, OptimizationManager
+# v5.0 P2-2: Add OptimizationManager, ConfigModelManager for God Class decomposition
+from .ui.managers import (
+    ConfigurationManager, DockwidgetSignalManager,
+    OptimizationManager, ConfigModelManager,
+)
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
     Qt,
@@ -264,6 +267,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._signal_manager = DockwidgetSignalManager(self)
         # v5.0 P2-2 E1: Initialize optimization manager
         self._optimization_manager = OptimizationManager(self)
+        # v5.0 P2-2 E2: Initialize config model manager
+        self._config_model_manager = ConfigModelManager(self)
         # FIX 2026-02-11: Register as active dockwidget for FeaturePickerWidget crash prevention
         global _active_dockwidget
         _active_dockwidget = self
@@ -2138,182 +2143,54 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             import traceback
             logger.debug(f"Traceback:\n{traceback.format_exc()}")
 
+    # v5.0 P2-2 E2: Config model methods delegated to ConfigModelManager
     def data_changed_configuration_model(self, input_data=None):
-        """
-        WRAPPER: Delegates to ConfigController.
-
-        Track configuration changes without applying immediately.
-        v4.0 Sprint 11: Migrated to ConfigController.
-        """
-        if self._controller_integration:
-            self._controller_integration.delegate_config_data_changed(input_data)
-            # Enable OK/Cancel buttons when changes are pending
-            if hasattr(self, 'buttonBox') and self._controller_integration.delegate_config_has_pending_changes():
-                self.buttonBox.setEnabled(True)
-
-    # v4.0 Sprint 11: Config change helper methods removed - logic migrated to ConfigController
-    # Removed: _apply_theme_change, _apply_ui_profile_change, _apply_action_bar_position_change,
-    # _apply_export_style_change, _apply_export_format_change (~110 lines)
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.data_changed_configuration_model(input_data)
 
     def apply_pending_config_changes(self):
-        """
-        WRAPPER: Delegates to ConfigController.
-
-        Apply all pending configuration changes when OK button is clicked.
-        v4.0 Sprint 11: Migrated to ConfigController.
-        """
-        if self._controller_integration:
-            if self._controller_integration.delegate_config_apply_pending_changes():
-                # Disable OK/Cancel buttons after changes applied
-                if hasattr(self, 'buttonBox'):
-                    self.buttonBox.setEnabled(False)
-                return
-
-        # Clear local state as fallback
-        self.pending_config_changes = []
-        self.config_changes_pending = False
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.apply_pending_config_changes()
 
     def cancel_pending_config_changes(self):
-        """Cancel pending configuration changes.
-
-        v4.0.7 FIX: Refactored to disconnect signal before recreating model
-        to prevent multiple signal connections.
-        """
-        if not self.config_changes_pending or not self.pending_config_changes: return
-        try:
-            # FIX #3: Disconnect signal before replacing model to prevent multiple connections
-            self._disconnect_config_model_signal()
-
-            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'r') as f:
-                self.CONFIG_DATA = json.load(f)
-            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-            if hasattr(self, 'config_view') and self.config_view:
-                self.config_view.setModel(self.config_model)
-                self.config_view.model = self.config_model
-
-            # Reconnect signal to new model
-            self._connect_config_model_signal()
-
-            self.pending_config_changes, self.config_changes_pending = [], False
-            if hasattr(self, 'buttonBox'): self.buttonBox.setEnabled(False)
-        except Exception as e: show_error("FilterMate", self.tr("Error cancelling changes: {0}").format(str(e)))
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.cancel_pending_config_changes()
 
     def on_config_buttonbox_accepted(self):
-        """v4.0 S18: → ConfigController."""
-        logger.info("Configuration OK button clicked")
-        if self._controller_integration and self._controller_integration.delegate_config_apply_pending_changes(): return
-        self.apply_pending_config_changes()
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.on_config_buttonbox_accepted()
 
     def on_config_buttonbox_rejected(self):
-        """v4.0 S18: → ConfigController."""
-        logger.info("Configuration Cancel button clicked")
-        if self._controller_integration and self._controller_integration.delegate_config_cancel_pending_changes(): return
-        self.cancel_pending_config_changes()
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.on_config_buttonbox_rejected()
 
     def reload_configuration_model(self):
-        """v4.0 S18: Reload config model and save."""
-        if not self.widgets_initialized: return
-        try:
-            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-            if hasattr(self, 'config_view') and self.config_view: self.config_view.setModel(self.config_model); self.config_view.model = self.config_model
-            with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
-        except Exception as e: logger.error(f"Error reloading configuration model: {e}")
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.reload_configuration_model()
 
     def save_configuration_model(self):
-        """v4.0 S18: Save config to file."""
-        if not self.widgets_initialized: return
-        self.CONFIG_DATA = self.config_model.serialize()
-        with open(ENV_VARS.get('CONFIG_JSON_PATH', self.plugin_dir + '/config/config.json'), 'w') as f: f.write(json.dumps(self.CONFIG_DATA, indent=4))
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.save_configuration_model()
 
     def _disconnect_config_model_signal(self):
-        """Disconnect itemChanged signal from config_model to prevent multiple connections.
-
-        v4.0.7 FIX: Prevents signal accumulation when model is recreated.
-        """
-        try:
-            if hasattr(self, 'config_model') and self.config_model is not None:
-                try:
-                    self.config_model.itemChanged.disconnect(self.data_changed_configuration_model)
-                    logger.debug("Config model itemChanged signal disconnected")
-                except (TypeError, RuntimeError):
-                    # Signal was not connected or already disconnected
-                    pass
-        except Exception as e:
-            logger.debug(f"Could not disconnect config_model signal: {e}")
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.disconnect_config_model_signal()
 
     def _connect_config_model_signal(self):
-        """Connect itemChanged signal to config_model.
-
-        v4.0.7 FIX: Centralized connection method for consistency.
-        """
-        try:
-            if hasattr(self, 'config_model') and self.config_model is not None:
-                self.config_model.itemChanged.connect(self.data_changed_configuration_model)
-                logger.debug("Config model itemChanged signal connected")
-        except Exception as e:
-            logger.error(f"Could not connect config_model signal: {e}")
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.connect_config_model_signal()
 
     def manage_configuration_model(self):
-        """Setup config model, view, and signals.
-
-        v4.0.7 FIX: Uses centralized signal connection methods.
-        v4.0.7 NEW: Uses SearchableJsonView with integrated search bar.
-        """
-        try:
-            # Disconnect any existing signal first
-            self._disconnect_config_model_signal()
-
-            self.config_model = JsonModel(data=self.CONFIG_DATA, editable_keys=False, editable_values=True, plugin_dir=self.plugin_dir)
-
-            # v4.0.7: Use SearchableJsonView with integrated search bar
-            try:
-                from ui.widgets.json_view import SearchableJsonView
-                self.config_view_container = SearchableJsonView(self.config_model, self.plugin_dir)
-                self.config_view = self.config_view_container.json_view  # For backward compatibility
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view_container)
-                self.config_view_container.setAnimated(True)
-                self.config_view_container.setEnabled(True)
-                self.config_view_container.show()
-                logger.debug("Using SearchableJsonView with search bar")
-            except ImportError:
-                # Fallback to standard JsonView
-                self.config_view = JsonView(self.config_model, self.plugin_dir)
-                self.config_view_container = None
-                self.CONFIGURATION.layout().insertWidget(0, self.config_view)
-                self.config_view.setAnimated(True)
-                self.config_view.setEnabled(True)
-                self.config_view.show()
-                logger.debug("Using standard JsonView (SearchableJsonView not available)")
-
-            # Connect signal using centralized method
-            self._connect_config_model_signal()
-            self._setup_reload_button()
-
-            if hasattr(self, 'buttonBox'):
-                self.buttonBox.setEnabled(False)
-                self.buttonBox.accepted.connect(self.on_config_buttonbox_accepted)
-                self.buttonBox.rejected.connect(self.on_config_buttonbox_rejected)
-        except Exception as e: logger.error(f"Error creating configuration model: {e}")
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.manage_configuration_model()
 
     def _setup_reload_button(self):
-        """Setup Reload Plugin button in config panel."""
-        try:
-            self.pushButton_reload_plugin = QtWidgets.QPushButton("🔄 Reload Plugin"); self.pushButton_reload_plugin.setObjectName("pushButton_reload_plugin")
-            self.pushButton_reload_plugin.setToolTip(QCoreApplication.translate("FilterMate", "Reload the plugin to apply layout changes (action bar position)"))
-            self.pushButton_reload_plugin.setCursor(QtGui.QCursor(Qt.PointingHandCursor))
-            # Height managed by QSS
-            self.pushButton_reload_plugin.clicked.connect(self._on_reload_button_clicked)
-            if self.CONFIGURATION.layout(): self.CONFIGURATION.layout().insertWidget(self.CONFIGURATION.layout().count() - 1, self.pushButton_reload_plugin)
-        except Exception as e: logger.error(f"Error setting up reload button: {e}")
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.setup_reload_button()
 
     def _on_reload_button_clicked(self):
-        """v4.0 S18: Reload plugin after saving config."""
-        from qgis.PyQt.QtWidgets import QMessageBox
-        if self.config_changes_pending and self.pending_config_changes: self.apply_pending_config_changes()
-        self.save_configuration_model()
-        if QMessageBox.question(self, self.tr("Reload Plugin"), self.tr("Do you want to reload FilterMate to apply all configuration changes?"),
-                                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes:
-            self.reload_plugin()
+        """v5.0 P2-2: Delegated to ConfigModelManager."""
+        self._config_model_manager.on_reload_button_clicked()
 
     def manage_output_name(self):
         """v4.0 S18: Set export output name."""

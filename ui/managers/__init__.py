@@ -13,10 +13,12 @@ v5.0 P2-2: Added OptimizationManager, ConfigModelManager, ComboboxPopulationMana
 from .configuration_manager import ConfigurationManager  # noqa: F401
 from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChangeError  # noqa: F401
 from .optimization_manager import OptimizationManager  # noqa: F401
+from .config_model_manager import ConfigModelManager  # noqa: F401
 
 __all__ = [
     'ConfigurationManager',
     'DockwidgetSignalManager',
     'SignalStateChangeError',
     'OptimizationManager',
+    'ConfigModelManager',
 ]
