@@ -680,9 +680,9 @@ class DimensionsManager(LayoutManagerBase):
                 widget.setMaximumHeight(combobox_height)
                 widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-            # QgsPropertyOverrideButton - FORCE to exact 22px
+            # QgsPropertyOverrideButton - size from UIConfig
             for widget in self.dockwidget.findChildren(QgsPropertyOverrideButton):
-                button_size = 22
+                button_size = UIConfig.get_config('property_override_button', 'size') or 22
                 widget.setMinimumHeight(button_size)
                 widget.setMaximumHeight(button_size)
                 widget.setMinimumWidth(button_size)

@@ -1071,20 +1071,18 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         [PARTIALLY DEPRECATED v4.0.3] QGIS widget dimensions now managed by QSS.
 
-        Only QgsPropertyOverrideButton still needs Python sizing (22px fixed).
+        Only QgsPropertyOverrideButton still needs Python sizing via UIConfig.
         All other QGIS widgets inherit 20px height from QSS rules.
-
-        TODO v5.0: Extract QgsPropertyOverrideButton sizing to separate function.
         """
         try:
             from qgis.PyQt.QtWidgets import QSizePolicy
             from qgis.gui import QgsPropertyOverrideButton
-            # QGIS widgets heights managed by QSS (20px standard)
-            # Only PropertyOverrideButton needs manual sizing
+            from .ui.config import UIConfig
+            button_size = UIConfig.get_config('property_override_button', 'size') or 22
             for w in self.findChildren(QgsPropertyOverrideButton):
-                w.setFixedSize(22, 22)
+                w.setFixedSize(button_size, button_size)
                 w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            logger.debug("QGIS widget dimensions managed by QSS (20px), PropertyOverrideButton=22px")
+            logger.debug(f"PropertyOverrideButton sized to {button_size}px from UIConfig")
         except Exception as e:
             logger.debug(f"Could not apply dimensions to PropertyOverrideButton: {e}")
 

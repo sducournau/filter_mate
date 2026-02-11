@@ -136,6 +136,9 @@ class UIConfig:
                 'icon_size': 18,
                 'spacing': 4,
             },
+            'property_override_button': {
+                'size': 22,
+            },
             'header': {
                 'height': 36,
                 'min_height': 32,
@@ -308,6 +311,9 @@ class UIConfig:
                 'icon_size': 18,
                 'spacing': 1,
             },
+            'property_override_button': {
+                'size': 18,
+            },
             'header': {
                 'height': 28,
                 'min_height': 24,
@@ -474,6 +480,9 @@ class UIConfig:
                 'max_size': 44,
                 'icon_size': 22,
                 'spacing': 2,
+            },
+            'property_override_button': {
+                'size': 26,
             },
             'header': {
                 'height': 44,
@@ -647,6 +656,9 @@ class UIConfig:
                 'max_size': 52,
                 'icon_size': 28,
                 'spacing': 2,
+            },
+            'property_override_button': {
+                'size': 28,
             },
             'header': {
                 'height': 52,
