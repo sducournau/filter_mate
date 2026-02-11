@@ -70,8 +70,10 @@ _exc_spec.loader.exec_module(_exc_module)
 
 # Mock modules that ConfigurationManager would import
 sys.modules.setdefault("filter_mate.ui.managers.configuration_manager", MagicMock())
-sys.modules.setdefault("filter_mate.infrastructure", MagicMock())
+_infra_mock = MagicMock()
+sys.modules.setdefault("filter_mate.infrastructure", _infra_mock)
 sys.modules.setdefault("filter_mate.infrastructure.logging", MagicMock())
+sys.modules.setdefault("filter_mate.infrastructure.signal_utils", MagicMock())
 
 # Also register short-name aliases since conftest uses them
 # (core.domain.exceptions is already importable from conftest setup)
@@ -91,9 +93,8 @@ _spec.loader.exec_module(_module)
 DockwidgetSignalManager = _module.DockwidgetSignalManager
 
 # Import SignalStateChangeError from the SAME module instance that
-# dockwidget_signal_manager uses (filter_mate.core.domain.exceptions),
-# not from the conftest-registered core.domain.exceptions.
-SignalStateChangeError = _exc_module.SignalStateChangeError
+# dockwidget_signal_manager uses, ensuring isinstance() checks match.
+SignalStateChangeError = _module.SignalStateChangeError
 
 
 # =========================================================================
