@@ -43,7 +43,6 @@ SPACERS: Dict[str, List[str]] = {
     "filtering_values": [
         "verticalSpacer_filtering_values_top",
         "verticalSpacer_filtering_values_search_top",
-        "verticalSpacer_filtering_values_search_bottom",
         "verticalSpacer_filtering_values_buttons_top",
         "verticalSpacer_filtering_values_buttons_middle",
         "verticalSpacer_filtering_values_buttons_bottom1",

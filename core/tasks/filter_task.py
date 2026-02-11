@@ -135,6 +135,7 @@ from .initialization_handler import InitializationHandler
 from .source_geometry_preparer import SourceGeometryPreparer
 from .subset_management_handler import SubsetManagementHandler
 from .filtering_orchestrator import FilteringOrchestrator
+from .finished_handler import FinishedHandler
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -433,6 +434,9 @@ class FilterEngineTask(QgsTask):
 
         # Phase 3 C1 US-C1.3.2: Filtering orchestration handler
         self._filtering_orchestrator = FilteringOrchestrator()
+
+        # Phase 3 C1 US-C1.3.3: Task completion handler
+        self._finished_handler = FinishedHandler()
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization

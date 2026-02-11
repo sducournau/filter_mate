@@ -2092,8 +2092,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             scroll_raster_content_layout = QtWidgets.QVBoxLayout(
                 scroll_raster_content
             )
-            scroll_raster_content_layout.setContentsMargins(0, 0, 0, 0)
-            scroll_raster_content_layout.setSpacing(2)
+            scroll_raster_content_layout.setContentsMargins(2, 4, 2, 2)
+            scroll_raster_content_layout.setSpacing(6)
 
             # Helper to create QgsCollapsibleGroupBox with standard properties
             def _make_raster_groupbox(title, object_name):
@@ -2105,6 +2105,10 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 else:
                     gb = QtWidgets.QGroupBox(title)
                 gb.setObjectName(object_name)
+                gb.setSizePolicy(
+                    QtWidgets.QSizePolicy.Expanding,
+                    QtWidgets.QSizePolicy.Preferred
+                )
                 font = QtGui.QFont("Segoe UI Semibold", 10)
                 font.setBold(True)
                 gb.setFont(font)
@@ -2128,8 +2132,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             info_layout = QtWidgets.QFormLayout(
                 self.mGroupBox_raster_layer_info
             )
-            info_layout.setContentsMargins(8, 8, 8, 8)
+            info_layout.setContentsMargins(8, 12, 8, 8)
             info_layout.setSpacing(4)
+            info_layout.setSizeConstraint(
+                QtWidgets.QLayout.SetMinimumSize
+            )
 
             self._lbl_raster_name = QtWidgets.QLabel("-")
             self._lbl_raster_name.setWordWrap(True)
@@ -2163,8 +2170,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             sampling_layout = QtWidgets.QFormLayout(
                 self.mGroupBox_raster_value_sampling
             )
-            sampling_layout.setContentsMargins(8, 8, 8, 8)
+            sampling_layout.setContentsMargins(8, 12, 8, 8)
             sampling_layout.setSpacing(4)
+            sampling_layout.setSizeConstraint(
+                QtWidgets.QLayout.SetMinimumSize
+            )
 
             # Raster layer combo (raster only)
             try:
@@ -2346,8 +2356,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             histogram_layout = QtWidgets.QVBoxLayout(
                 self.mGroupBox_raster_histogram
             )
-            histogram_layout.setContentsMargins(8, 8, 8, 8)
+            histogram_layout.setContentsMargins(8, 12, 8, 8)
             histogram_layout.setSpacing(4)
+            histogram_layout.setSizeConstraint(
+                QtWidgets.QLayout.SetMinimumSize
+            )
 
             # Row: Band + Bins combos
             hist_params_widget = QtWidgets.QWidget()
@@ -2460,8 +2473,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             band_viewer_layout = QtWidgets.QVBoxLayout(
                 self.mGroupBox_raster_band_viewer
             )
-            band_viewer_layout.setContentsMargins(8, 8, 8, 8)
+            band_viewer_layout.setContentsMargins(8, 12, 8, 8)
             band_viewer_layout.setSpacing(4)
+            band_viewer_layout.setSizeConstraint(
+                QtWidgets.QLayout.SetMinimumSize
+            )
 
             # Band table (readonly)
             self._table_band_info = QtWidgets.QTableWidget()
