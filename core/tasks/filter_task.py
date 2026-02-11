@@ -135,6 +135,7 @@ from .finished_handler import FinishedHandler
 from .materialized_view_handler import MaterializedViewHandler
 from .expression_facade_handler import ExpressionFacadeHandler
 from .spatial_query_handler import SpatialQueryHandler
+from .v3_bridge_handler import V3BridgeHandler
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -445,6 +446,9 @@ class FilterEngineTask(QgsTask):
 
         # Pass 3: Spatial query handler
         self._spatial_query = SpatialQueryHandler(self)
+
+        # Pass 3: V3 bridge handler (Strangler Fig pattern)
+        self._v3_bridge = V3BridgeHandler(self)
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
@@ -1204,238 +1208,20 @@ class FilterEngineTask(QgsTask):
     # ========================================================================
 
     def _try_v3_attribute_filter(self, task_expression, task_features):
-        """
-        Try v3 TaskBridge attribute filter.
-
-        Phase E13: Delegates to AttributeFilterExecutor.
-
-        Returns:
-            True/False/None (fallback to legacy)
-        """
-        executor = self._get_attribute_executor()
-
-        result = executor.try_v3_attribute_filter(
-            task_expression=task_expression,
-            task_features=task_features,
-            task_bridge=self._task_bridge,
-            source_layer=self.source_layer,
-            primary_key_name=self.primary_key_name,
-            task_parameters=self.task_parameters
-        )
-
-        # Update task state from executor result
-        if result is True and hasattr(executor, '_last_expression'):
-            self.expression = executor._last_expression
-
-        return result
+        """Try v3 attribute filter. Delegates to V3BridgeHandler."""
+        return self._v3_bridge.try_v3_attribute_filter(task_expression, task_features)
 
     def _try_v3_spatial_filter(self, layer, layer_props, predicates):
-        """
-        Try v3 TaskBridge spatial filter.
-
-        Phase E13: Delegates to SpatialFilterExecutor.
-
-        Returns:
-            True/False/None (fallback to legacy)
-        """
-        executor = self._get_spatial_executor()
-
-        result = executor.try_v3_spatial_filter(
-            layer=layer,
-            layer_props=layer_props,
-            predicates=predicates,
-            task_bridge=self._task_bridge,
-            source_layer=self.source_layer,
-            task_parameters=self.task_parameters,
-            combine_operator=self._get_combine_operator() or 'AND'
-        )
-
-        return result
+        """Try v3 spatial filter. Delegates to V3BridgeHandler."""
+        return self._v3_bridge.try_v3_spatial_filter(layer, layer_props, predicates)
 
     def _try_v3_multi_step_filter(self, layers_dict, progress_callback=None):
-        """Try v3 TaskBridge multi-step filter. Returns True/None (fallback to legacy)."""
-        if not self._task_bridge:
-            return None
-
-        # Check if TaskBridge supports multi-step
-        if not self._task_bridge.supports_multi_step():
-            logger.debug("TaskBridge: multi-step not supported - using legacy code")
-            return None
-
-        # CRITICAL v4.1.1 (2026-01-17): Disable V3 for PostgreSQL spatial filtering
-        # The V3 PostgreSQLBackend does not generate proper EXISTS subqueries.
-        # It sends raw SQL placeholders like "SPATIAL_FILTER(intersects)" which fail.
-        # Use legacy PostgreSQLGeometricFilter which properly generates EXISTS clauses.
-        if 'postgresql' in layers_dict and len(layers_dict.get('postgresql', [])) > 0:
-            logger.debug("TaskBridge: PostgreSQL spatial filtering - using legacy code (V3 not ready)")
-            return None
-
-        # CRITICAL v4.1.2 (2026-01-19): Disable V3 for OGR spatial filtering
-        # Same issue as PostgreSQL: V3 sends "SPATIAL_FILTER(intersects)" placeholder
-        # which is not a valid QGIS expression function, causing:
-        # "La fonction SPATIAL_FILTER est inconnue" error
-        # Use legacy OGRExpressionBuilder.apply_filter() which uses QGIS processing
-        if 'ogr' in layers_dict and len(layers_dict.get('ogr', [])) > 0:
-            logger.debug("TaskBridge: OGR spatial filtering - using legacy code (V3 not ready)")
-            return None
-
-        # Skip multi-step for complex scenarios
-        # Check for buffers which require special handling (both positive and negative)
-        # Handle negative buffers (erosion) as well as positive buffers
-        buffer_value = self.task_parameters.get("task", {}).get("buffer_value", 0)
-        if buffer_value and buffer_value != 0:
-            buffer_type = "expansion" if buffer_value > 0 else "erosion"
-            logger.debug(f"TaskBridge: buffer active ({buffer_value}m {buffer_type}) - using legacy multi-step code")
-            return None
-
-        # Count total layers
-        total_layers = sum(len(layer_list) for layer_list in layers_dict.values())
-        if total_layers == 0:
-            return True  # Nothing to filter
-
-        try:
-            logger.info("=" * 70)
-            logger.info("🚀 V3 TASKBRIDGE: Attempting multi-step filter")
-            logger.info("=" * 70)
-            logger.info(f"   Total distant layers: {total_layers}")
-
-            # Build step configurations for each layer
-            steps = []
-            for provider_type, layer_list in layers_dict.items():
-                for layer, layer_props in layer_list:
-                    # Get predicates from layer_props or default to intersects
-                    predicates = layer_props.get('predicates', ['intersects'])
-
-                    # Build spatial expression from predicates
-                    # Format: SPATIAL_FILTER(predicate1, predicate2, ...)
-                    predicate_str = ', '.join(predicates) if predicates else 'intersects'
-                    spatial_expression = f"SPATIAL_FILTER({predicate_str})"
-
-                    step_config = {
-                        'expression': spatial_expression,  # Required by TaskBridge
-                        'target_layer_ids': [layer.id()],
-                        'predicates': predicates,
-                        'step_name': f"Filter {layer.name()}",
-                        'use_previous_result': False  # Each layer filtered independently
-                    }
-                    steps.append(step_config)
-                    logger.debug(f"   Step for {layer.name()}: predicates={predicates}, expression={spatial_expression}")
-
-            # FIX 2026-01-16: Log source geometry diagnostic
-            logger.info("=" * 70)
-            logger.info("🔍 MULTI-STEP SOURCE GEOMETRY DIAGNOSTIC")
-            logger.debug(f"   Source layer: {self.source_layer.name()} (provider: {self.param_source_provider_type})")
-            logger.info(f"   Source feature count: {self.source_layer.featureCount()}")
-            logger.info(f"   Source CRS: {self.source_layer.crs().authid() if self.source_layer.crs() else 'UNKNOWN'}")
-            logger.info(f"   Target layers: {len(steps)}")
-            for idx, (provider_type, layer_list) in enumerate(layers_dict.items(), 1):
-                for layer, layer_props in layer_list:
-                    logger.info(f"   {idx}. {layer.name()}:")
-                    logger.info(f"      - Provider: {layer.providerType()}")
-                    logger.info(f"      - CRS: {layer.crs().authid() if layer.crs() else 'UNKNOWN'}")
-                    logger.info(f"      - Geometry column: {layer_props.get('layer_geometry_field', 'UNKNOWN')}")
-                    logger.info(f"      - Primary key: {layer_props.get('layer_key_column_name', 'UNKNOWN')}")
-            logger.info("=" * 70)
-
-            # Define progress callback adapter
-            def bridge_progress(step_num, total_steps, step_name):
-                if progress_callback:
-                    progress_callback(step_num, total_steps, step_name)
-                self.setDescription(f"V3 Multi-step: {step_name}")
-                self.setProgress(int((step_num / total_steps) * 100))
-
-            # Execute via TaskBridge
-            bridge_result = self._task_bridge.execute_multi_step_filter(
-                source_layer=self.source_layer,
-                steps=steps,
-                progress_callback=bridge_progress
-            )
-
-            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
-                logger.info("=" * 70)
-                logger.info("✅ V3 TaskBridge MULTI-STEP SUCCESS")
-                logger.info(f"   Backend used: {bridge_result.backend_used}")
-                logger.info(f"   Final feature count: {bridge_result.feature_count}")
-                logger.debug(f"   Total execution time: {bridge_result.execution_time_ms:.1f}ms")
-                logger.info("=" * 70)
-
-                # Store metrics
-                if 'actual_backends' not in self.task_parameters:
-                    self.task_parameters['actual_backends'] = {}
-                self.task_parameters['actual_backends']['_multi_step'] = f"v3_{bridge_result.backend_used}"
-
-                return True
-
-            elif bridge_result.status == BridgeStatus.FALLBACK:
-                logger.info("⚠️ V3 TaskBridge MULTI-STEP: FALLBACK requested")
-                logger.info(f"   Reason: {bridge_result.error_message}")
-                return None
-
-            else:
-                logger.debug(f"TaskBridge multi-step: status={bridge_result.status}, falling back")
-                return None
-
-        except Exception as e:  # catch-all safety net: v3 bridge failure falls back to legacy
-            logger.warning(f"TaskBridge multi-step delegation failed: {e}")
-            import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
-            return None
+        """Try v3 multi-step filter. Delegates to V3BridgeHandler."""
+        return self._v3_bridge.try_v3_multi_step_filter(layers_dict, progress_callback)
 
     def _try_v3_export(self, layer, output_path, format_type, progress_callback=None):
-        """Try v3 TaskBridge streaming export. Returns True/None (fallback to legacy)."""
-        if not self._task_bridge:
-            return None
-            return None
-
-        # Check if TaskBridge supports export
-        if not self._task_bridge.supports_export():
-            logger.debug("TaskBridge: export not supported - using legacy code")
-            return None
-
-        try:
-            logger.info("=" * 60)
-            logger.info("🚀 V3 TASKBRIDGE: Attempting streaming export")
-            logger.info("=" * 60)
-            logger.info(f"   Layer: '{layer.name()}'")
-            logger.info(f"   Format: {format_type}")
-            logger.info(f"   Output: {output_path}")
-
-            # Define cancel check
-            def cancel_check():
-                return self.isCanceled()
-
-            bridge_result = self._task_bridge.execute_export(
-                source_layer=layer,
-                output_path=output_path,
-                format=format_type,
-                progress_callback=progress_callback,
-                cancel_check=cancel_check
-            )
-
-            if bridge_result.status == BridgeStatus.SUCCESS and bridge_result.success:
-                logger.info("✅ V3 TaskBridge EXPORT SUCCESS")
-                logger.info(f"   Features exported: {bridge_result.feature_count}")
-                logger.debug(f"   Execution time: {bridge_result.execution_time_ms:.1f}ms")
-
-                # Store in task_parameters for metrics
-                if 'actual_backends' not in self.task_parameters:
-                    self.task_parameters['actual_backends'] = {}
-                self.task_parameters['actual_backends'][f'export_{layer.id()}'] = 'v3_streaming'
-
-                return True
-
-            elif bridge_result.status == BridgeStatus.FALLBACK:
-                logger.info("⚠️ V3 TaskBridge EXPORT: FALLBACK requested")
-                logger.info(f"   Reason: {bridge_result.error_message}")
-                return None
-
-            else:
-                logger.debug(f"TaskBridge export: status={bridge_result.status}")
-                return None
-
-        except Exception as e:  # catch-all safety net: v3 bridge failure falls back to legacy
-            logger.warning(f"TaskBridge export delegation failed: {e}")
-            return None
+        """Try v3 streaming export. Delegates to V3BridgeHandler."""
+        return self._v3_bridge.try_v3_export(layer, output_path, format_type, progress_callback)
 
     def _initialize_source_filtering_parameters(self):
         """Extract and initialize all parameters. Delegates to InitializationHandler."""
@@ -1626,53 +1412,12 @@ class FilterEngineTask(QgsTask):
         )
 
     def qgis_expression_to_postgis(self, expression: str) -> str:
-        """Convert a QGIS expression to PostGIS-compatible SQL.
-
-        Transforms QGIS expression syntax to PostgreSQL/PostGIS SQL, handling:
-        - Function name mapping (e.g., $area → ST_Area)
-        - Operator conversions
-        - Geometry column references
-
-        Args:
-            expression: QGIS expression string to convert.
-
-        Returns:
-            PostGIS-compatible SQL expression, or original if empty.
-
-        Example:
-            >>> task.qgis_expression_to_postgis('$area > 1000')
-            'ST_Area("geometry") > 1000'
-        """
-        if not expression:
-            return expression
-        geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
-        from ..services.expression_service import ExpressionService
-        from ..domain.filter_expression import ProviderType
-        return ExpressionService().to_sql(expression, ProviderType.POSTGRESQL, geom_col)
+        """Convert QGIS expression to PostGIS SQL. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.qgis_expression_to_postgis(expression)
 
     def qgis_expression_to_spatialite(self, expression: str) -> str:
-        """Convert a QGIS expression to Spatialite-compatible SQL.
-
-        Transforms QGIS expression syntax to Spatialite SQL, handling:
-        - Function name mapping (e.g., $area → ST_Area)
-        - Operator conversions
-        - Geometry column references
-
-        Args:
-            expression: QGIS expression string to convert.
-
-        Returns:
-            Spatialite-compatible SQL expression, or original if empty.
-
-        Note:
-            Spatialite spatial functions are ~90% compatible with PostGIS.
-        """
-        if not expression:
-            return expression
-        geom_col = getattr(self, 'param_source_geom', None) or 'geometry'
-        from ..services.expression_service import ExpressionService
-        from ..domain.filter_expression import ProviderType
-        return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
+        """Convert QGIS expression to Spatialite SQL. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.qgis_expression_to_spatialite(expression)
 
     def prepare_postgresql_source_geom(self) -> str:
         """Prepare PostgreSQL source geometry. Delegates to SourceGeometryPreparer."""
@@ -2027,17 +1772,8 @@ class FilterEngineTask(QgsTask):
         return self._build_backend_expression_v2(backend, layer_props, source_geom)
 
     def _combine_with_old_filter(self, expression, layer):
-        """Delegates to core.filter.expression_combiner.combine_with_old_filter()."""
-        from ..filter.expression_combiner import combine_with_old_filter
-
-        old_subset = layer.subsetString() if layer.subsetString() != '' else None
-
-        return combine_with_old_filter(
-            new_expression=expression,
-            old_subset=old_subset,
-            combine_operator=self._get_combine_operator(),
-            sanitize_fn=self._sanitize_subset_string
-        )
+        """Combine with old filter. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.combine_with_old_filter(expression, layer)
 
     def execute_geometric_filtering(self, layer_provider_type: str, layer: QgsVectorLayer, layer_props: Dict[str, Any]) -> bool:
         """Execute geometric filtering on a single layer using spatial predicates.
@@ -2137,99 +1873,16 @@ class FilterEngineTask(QgsTask):
             raise  # Re-raise pour que finished() puisse le capturer
 
     def _get_source_combine_operator(self):
-        """
-        Get logical operator for combining with source layer's existing filter.
-
-        Returns logical operators (AND, AND NOT, OR) directly from UI.
-        These are used in simple SQL WHERE clause combinations.
-
-        Returns:
-            str: 'AND', 'AND NOT', 'OR', or None
-        """
-        if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
-            return None
-
-        # Return source layer operator, normalized to English SQL keyword
-        source_op = getattr(self, 'param_source_layer_combine_operator', None)
-        return self._normalize_sql_operator(source_op)
+        """Get source combine operator. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.get_source_combine_operator()
 
     def _normalize_sql_operator(self, operator):
-        """
-        Normalize translated SQL operators to English SQL keywords.
-
-        FIX v2.5.12: Handle cases where translated operator values (ET, OU, NON)
-        are stored in layer properties or project files from older versions.
-
-        Args:
-            operator: The operator string (possibly translated)
-
-        Returns:
-            str: Normalized SQL operator ('AND', 'OR', 'AND NOT', 'NOT') or None
-        """
-        if not operator:
-            return None
-
-        op_upper = operator.upper().strip()
-
-        # Mapping of translated operators to SQL keywords
-        translations = {
-            # French
-            'ET': 'AND',
-            'OU': 'OR',
-            'ET NON': 'AND NOT',
-            'NON': 'NOT',
-            # German
-            'UND': 'AND',
-            'ODER': 'OR',
-            'UND NICHT': 'AND NOT',
-            'NICHT': 'NOT',
-            # Spanish
-            'Y': 'AND',
-            'O': 'OR',
-            'Y NO': 'AND NOT',
-            'NO': 'NOT',
-            # Italian
-            'E': 'AND',
-            'E NON': 'AND NOT',
-            # Portuguese
-            'E NÃO': 'AND NOT',
-            'NÃO': 'NOT',
-            # Already English - just return as-is
-            'AND': 'AND',
-            'OR': 'OR',
-            'AND NOT': 'AND NOT',
-            'NOT': 'NOT',
-        }
-
-        normalized = translations.get(op_upper, operator)
-
-        if normalized != operator:
-            logger.debug(f"Normalized operator '{operator}' to '{normalized}'")
-
-        return normalized
+        """Normalize SQL operator. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.normalize_sql_operator(operator)
 
     def _get_combine_operator(self):
-        """
-        Get operator for combining with distant layers' existing filters.
-
-        Returns the operator directly from UI for use in WHERE clauses:
-        - 'AND': Logical AND (intersection)
-        - 'AND NOT': Logical AND NOT (exclusion)
-        - 'OR': Logical OR (union)
-
-        Note: These operators are used directly in SQL WHERE clauses for all backends
-        (PostgreSQL, Spatialite, OGR). For PostgreSQL set operations (UNION, INTERSECT, EXCEPT),
-        use a different method when combining subqueries.
-
-        Returns:
-            str: 'AND', 'OR', 'AND NOT', or None
-        """
-        if not hasattr(self, 'has_combine_operator') or not self.has_combine_operator:
-            return None
-
-        # Get operator and normalize to English SQL keyword
-        other_op = getattr(self, 'param_other_layers_combine_operator', None)
-        return self._normalize_sql_operator(other_op)
+        """Get combine operator. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.get_combine_operator()
 
     def _simplify_source_for_ogr_fallback(self, source_layer):
         """
@@ -3100,22 +2753,12 @@ class FilterEngineTask(QgsTask):
         return result
 
     def _has_expensive_spatial_expression(self, sql_string: str) -> bool:
-        """
-        Detect if a SQL expression contains expensive spatial predicates.
-
-        EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.optimization.query_analyzer.
-        """
-        from ..optimization.query_analyzer import has_expensive_spatial_expression
-        return has_expensive_spatial_expression(sql_string)
+        """Detect expensive spatial predicates. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.has_expensive_spatial_expression(sql_string)
 
     def _is_complex_filter(self, subset: str, provider_type: str) -> bool:
-        """
-        Check if a filter expression is complex (requires longer refresh delay).
-
-        EPIC-1 Phase E7.5: Legacy code removed - fully delegates to core.optimization.query_analyzer.
-        """
-        from ..optimization.query_analyzer import is_complex_filter
-        return is_complex_filter(subset, provider_type)
+        """Check if filter is complex. Delegates to ExpressionFacadeHandler."""
+        return self._expr_facade.is_complex_filter(subset, provider_type)
 
     def _single_canvas_refresh(self):
         """

@@ -399,3 +399,189 @@ class ExpressionFacadeHandler:
 
         # Return True to indicate expression was queued successfully
         return True
+
+    # =========================================================================
+    # QGIS expression to SQL conversion
+    # =========================================================================
+
+    def qgis_expression_to_postgis(self, expression: str) -> str:
+        """Convert a QGIS expression to PostGIS-compatible SQL.
+
+        Transforms QGIS expression syntax to PostgreSQL/PostGIS SQL, handling
+        function name mapping, operator conversions, and geometry column references.
+
+        Args:
+            expression: QGIS expression string to convert.
+
+        Returns:
+            PostGIS-compatible SQL expression, or original if empty.
+        """
+        if not expression:
+            return expression
+        geom_col = getattr(self.task, 'param_source_geom', None) or 'geometry'
+        from ..services.expression_service import ExpressionService
+        from ..domain.filter_expression import ProviderType
+        return ExpressionService().to_sql(expression, ProviderType.POSTGRESQL, geom_col)
+
+    def qgis_expression_to_spatialite(self, expression: str) -> str:
+        """Convert a QGIS expression to Spatialite-compatible SQL.
+
+        Transforms QGIS expression syntax to Spatialite SQL, handling
+        function name mapping, operator conversions, and geometry column references.
+
+        Args:
+            expression: QGIS expression string to convert.
+
+        Returns:
+            Spatialite-compatible SQL expression, or original if empty.
+        """
+        if not expression:
+            return expression
+        geom_col = getattr(self.task, 'param_source_geom', None) or 'geometry'
+        from ..services.expression_service import ExpressionService
+        from ..domain.filter_expression import ProviderType
+        return ExpressionService().to_sql(expression, ProviderType.SPATIALITE, geom_col)
+
+    # =========================================================================
+    # SQL operator normalization and combine operators
+    # =========================================================================
+
+    def normalize_sql_operator(self, operator):
+        """Normalize translated SQL operators to English SQL keywords.
+
+        FIX v2.5.12: Handle cases where translated operator values (ET, OU, NON)
+        are stored in layer properties or project files from older versions.
+
+        Args:
+            operator: The operator string (possibly translated: ET, OU, UND, Y, etc.)
+
+        Returns:
+            str: Normalized SQL operator ('AND', 'OR', 'AND NOT', 'NOT') or None.
+        """
+        if not operator:
+            return None
+
+        op_upper = operator.upper().strip()
+
+        # Mapping of translated operators to SQL keywords
+        translations = {
+            # French
+            'ET': 'AND',
+            'OU': 'OR',
+            'ET NON': 'AND NOT',
+            'NON': 'NOT',
+            # German
+            'UND': 'AND',
+            'ODER': 'OR',
+            'UND NICHT': 'AND NOT',
+            'NICHT': 'NOT',
+            # Spanish
+            'Y': 'AND',
+            'O': 'OR',
+            'Y NO': 'AND NOT',
+            'NO': 'NOT',
+            # Italian
+            'E': 'AND',
+            'E NON': 'AND NOT',
+            # Portuguese
+            'E NÃO': 'AND NOT',
+            'NÃO': 'NOT',
+            # Already English - just return as-is
+            'AND': 'AND',
+            'OR': 'OR',
+            'AND NOT': 'AND NOT',
+            'NOT': 'NOT',
+        }
+
+        normalized = translations.get(op_upper, operator)
+
+        if normalized != operator:
+            logger.debug(f"Normalized operator '{operator}' to '{normalized}'")
+
+        return normalized
+
+    def get_source_combine_operator(self):
+        """Get logical operator for combining with source layer's existing filter.
+
+        Returns logical operators (AND, AND NOT, OR) from task parameters,
+        normalized to English SQL keywords.
+
+        Returns:
+            str: 'AND', 'AND NOT', 'OR', or None.
+        """
+        if not hasattr(self.task, 'has_combine_operator') or not self.task.has_combine_operator:
+            return None
+
+        source_op = getattr(self.task, 'param_source_layer_combine_operator', None)
+        return self.normalize_sql_operator(source_op)
+
+    def get_combine_operator(self):
+        """Get operator for combining with distant layers' existing filters.
+
+        Returns the operator from task parameters, normalized to English SQL keywords,
+        for use in SQL WHERE clauses across all backends.
+
+        Returns:
+            str: 'AND', 'OR', 'AND NOT', or None.
+        """
+        if not hasattr(self.task, 'has_combine_operator') or not self.task.has_combine_operator:
+            return None
+
+        other_op = getattr(self.task, 'param_other_layers_combine_operator', None)
+        return self.normalize_sql_operator(other_op)
+
+    def combine_with_old_filter(self, expression, layer):
+        """Combine expression with layer's existing filter.
+
+        Delegates to core.filter.expression_combiner.combine_with_old_filter().
+
+        Args:
+            expression: New filter expression.
+            layer: QgsVectorLayer with potential existing subsetString.
+
+        Returns:
+            str: Combined filter expression.
+        """
+        from ..filter.expression_combiner import combine_with_old_filter
+
+        old_subset = layer.subsetString() if layer.subsetString() != '' else None
+
+        return combine_with_old_filter(
+            new_expression=expression,
+            old_subset=old_subset,
+            combine_operator=self.get_combine_operator(),
+            sanitize_fn=self.sanitize_subset_string
+        )
+
+    # =========================================================================
+    # Query complexity analysis
+    # =========================================================================
+
+    def has_expensive_spatial_expression(self, sql_string: str) -> bool:
+        """Detect if a SQL expression contains expensive spatial predicates.
+
+        Delegates to core.optimization.query_analyzer.
+
+        Args:
+            sql_string: SQL expression to analyze.
+
+        Returns:
+            bool: True if expression contains expensive spatial predicates.
+        """
+        from ..optimization.query_analyzer import has_expensive_spatial_expression
+        return has_expensive_spatial_expression(sql_string)
+
+    def is_complex_filter(self, subset: str, provider_type: str) -> bool:
+        """Check if a filter expression is complex (requires longer refresh delay).
+
+        Delegates to core.optimization.query_analyzer.
+
+        Args:
+            subset: Filter expression to check.
+            provider_type: Backend type ('postgresql', 'spatialite', 'ogr').
+
+        Returns:
+            bool: True if filter is considered complex.
+        """
+        from ..optimization.query_analyzer import is_complex_filter
+        return is_complex_filter(subset, provider_type)
