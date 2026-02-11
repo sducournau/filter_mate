@@ -261,19 +261,19 @@
                   </property>
                   <layout class="QVBoxLayout" name="verticalLayout_exploring_container">
                    <property name="spacing">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="leftMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="topMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="rightMargin">
-                    <number>1</number>
+                    <number>0</number>
                    </property>
                    <property name="bottomMargin">
-                    <number>2</number>
+                    <number>0</number>
                    </property>
                    <item>
                     <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
@@ -1363,16 +1363,16 @@
                       <number>0</number>
                      </property>
                      <property name="leftMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="topMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="rightMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>4</number>
+                      <number>0</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_filtering_keys" stretch="0,0,0,0,0,0,0,0,0,0,0,0">
@@ -2649,26 +2649,26 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_exporting_keys_container">
                      <property name="spacing">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="leftMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="topMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="rightMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <property name="bottomMargin">
-                      <number>1</number>
+                      <number>0</number>
                      </property>
                      <item>
                       <layout class="QVBoxLayout" name="verticalLayout_exporting_keys" stretch="0,0,0,0,0,0,0,0,0,0,0">
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_layers">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2681,8 +2681,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -2746,7 +2746,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_projection">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2759,14 +2759,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
-                          </size>
-                         </property>
-                         <property name="baseSize">
-                          <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -2836,7 +2830,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_styles">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2849,14 +2843,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
-                          </size>
-                         </property>
-                         <property name="baseSize">
-                          <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -2923,7 +2911,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_datatype">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -2936,14 +2924,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
-                          </size>
-                         </property>
-                         <property name="baseSize">
-                          <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -3010,7 +2992,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_output_folder">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3023,14 +3005,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
-                          </size>
-                         </property>
-                         <property name="baseSize">
-                          <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
@@ -3097,7 +3073,7 @@
                        <item alignment="Qt::AlignHCenter">
                         <widget class="QPushButton" name="pushButton_checkable_exporting_zip">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3110,14 +3086,8 @@
                          </property>
                          <property name="maximumSize">
                           <size>
-                           <width>36</width>
-                           <height>25</height>
-                          </size>
-                         </property>
-                         <property name="baseSize">
-                          <size>
-                           <width>0</width>
-                           <height>25</height>
+                           <width>32</width>
+                           <height>32</height>
                           </size>
                          </property>
                          <property name="font">
