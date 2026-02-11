@@ -283,16 +283,31 @@ def init_env_vars():
             # Update config_json_path if directory changed
             config_json_path = os.path.join(PLUGIN_CONFIG_DIRECTORY, 'config.json')
 
+    # Auto-migrate sducournau → imagodata URLs (v4.5.1 org migration)
+    options = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {})
+    config_dirty = False
+    for key in ("GITHUB_PAGE", "GITHUB_REPOSITORY", "DISCORD_INVITE", "QGIS_PLUGIN_REPOSITORY"):
+        val = options.get(key, "")
+        if "sducournau" in val:
+            options[key] = val.replace("sducournau", "imagodata")
+            config_dirty = True
+    if not options.get("GITHUB_PAGE", "").endswith("index.html"):
+        options["GITHUB_PAGE"] = "https://imagodata.github.io/filter_mate/index.html"
+        config_dirty = True
+
     # Update APP_SQLITE_PATH in config if needed
     current_sqlite_path = CONFIG_DATA.get(app_key, {}).get("OPTIONS", {}).get("APP_SQLITE_PATH", "")
     if current_sqlite_path != PLUGIN_CONFIG_DIRECTORY:
         CONFIG_DATA[app_key]["OPTIONS"]["APP_SQLITE_PATH"] = PLUGIN_CONFIG_DIRECTORY
+        config_dirty = True
+
+    if config_dirty:
         try:
             with open(config_json_path, 'w') as outfile:
                 outfile.write(json.dumps(CONFIG_DATA, indent=4))
         except Exception as e:
             QgsMessageLog.logMessage(
-                f"Could not update config.json with path: {e}",
+                f"Could not update config.json: {e}",
                 "FilterMate",
                 Qgis.Warning
             )
