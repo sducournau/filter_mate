@@ -19,6 +19,7 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsVectorLayer, QgsProject
 
 from .base_controller import BaseController
+from ...infrastructure.signal_utils import SignalBlocker
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -494,9 +495,8 @@ class LayerSyncController(BaseController):
         # Update combobox
         if hasattr(self.dockwidget, 'comboBox_filtering_current_layer'):
             combo = self.dockwidget.comboBox_filtering_current_layer
-            combo.blockSignals(True)
-            combo.setLayer(layer)
-            combo.blockSignals(False)
+            with SignalBlocker(combo):
+                combo.setLayer(layer)
 
         self._current_layer_id = layer.id()
 
@@ -833,9 +833,8 @@ class LayerSyncController(BaseController):
             dw.manageSignal(["FILTERING", "CURRENT_LAYER"], 'disconnect')
 
         # Force update even if same layer (ensures refresh)
-        current_layer_widget.blockSignals(True)
-        current_layer_widget.setLayer(layer)
-        current_layer_widget.blockSignals(False)
+        with SignalBlocker(current_layer_widget):
+            current_layer_widget.setLayer(layer)
 
         # ALWAYS reconnect signal
         if hasattr(dw, 'manageSignal'):
@@ -989,9 +988,8 @@ class LayerSyncController(BaseController):
                         dw.switch_widget_icon(property_tuple, stored_value)
 
                 if widget.isCheckable():
-                    widget.blockSignals(True)
-                    widget.setChecked(stored_value)
-                    widget.blockSignals(False)
+                    with SignalBlocker(widget):
+                        widget.setChecked(stored_value)
 
             elif widget_type == 'CheckableComboBox':
                 widget.setCheckedItems(stored_value if stored_value else [])
@@ -1009,18 +1007,16 @@ class LayerSyncController(BaseController):
                 widget.setCurrentIndex(index)
 
             elif widget_type == 'QgsFieldExpressionWidget':
-                widget.blockSignals(True)
-                widget.setLayer(layer)
-                widget.setExpression(str(stored_value) if stored_value else '')
-                widget.blockSignals(False)
+                with SignalBlocker(widget):
+                    widget.setLayer(layer)
+                    widget.setExpression(str(stored_value) if stored_value else '')
 
             elif widget_type in ('QgsDoubleSpinBox', 'QgsSpinBox'):
                 widget.setValue(stored_value if stored_value is not None else 0)
 
             elif widget_type == 'CheckBox':
-                widget.blockSignals(True)
-                widget.setChecked(stored_value if stored_value else False)
-                widget.blockSignals(False)
+                with SignalBlocker(widget):
+                    widget.setChecked(stored_value if stored_value else False)
 
             elif widget_type == 'LineEdit':
                 widget.setText(str(stored_value) if stored_value else '')

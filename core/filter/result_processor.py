@@ -27,6 +27,7 @@ from qgis.core import (
 from qgis.utils import iface
 
 from ...infrastructure.database.sql_utils import safe_set_subset_string
+from ...infrastructure.signal_utils import SignalBlocker
 from ..ports import get_backend_services
 
 _backend_services = get_backend_services()
@@ -318,11 +319,8 @@ class ResultProcessor:
         if provider_type in ('postgres', 'spatialite', 'ogr'):
             # CRITICAL: Block signals during reload to prevent
             # currentLayerChanged emissions that reset UI combobox
-            try:
-                layer.blockSignals(True)
+            with SignalBlocker(layer):
                 layer.reload()
-            finally:
-                layer.blockSignals(False)
 
         # Update extents for small layers
         feature_count = layer.featureCount()

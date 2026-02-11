@@ -13,6 +13,7 @@ from qgis.utils import iface
 from qgis.PyQt.QtCore import QTimer
 
 from ...core.ports.qgis_port import get_qgis_factory
+from ...infrastructure.signal_utils import SignalBlocker
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +152,8 @@ def apply_pending_subset_requests(
                                 (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
 
                 if should_reload:
-                    try:
-                        layer.blockSignals(True)
+                    with SignalBlocker(layer):
                         layer.reload()
-                    finally:
-                        layer.blockSignals(False)
 
                 # Update extents for smaller layers
                 feature_count = layer.featureCount()
@@ -195,11 +193,8 @@ def apply_pending_subset_requests(
                                     (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
 
                     if should_reload:
-                        try:
-                            layer.blockSignals(True)
+                        with SignalBlocker(layer):
                             layer.reload()
-                        finally:
-                            layer.blockSignals(False)
 
                     # Update extents for smaller layers
                     feature_count = layer.featureCount()

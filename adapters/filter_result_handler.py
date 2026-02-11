@@ -24,6 +24,7 @@ from qgis.core import QgsVectorLayer, QgsProject, QgsMessageLog, Qgis
 from qgis.utils import iface
 
 from ..infrastructure.logging import get_app_logger
+from ..infrastructure.signal_utils import SignalBlocker
 from ..config.feedback_config import should_show_message
 from ..infrastructure.feedback import show_success_with_backend, show_info
 
@@ -696,9 +697,8 @@ class FilterResultHandler:
             current_combo = dockwidget.comboBox_filtering_current_layer.currentLayer()
             if not current_combo or current_combo.id() != final_layer.id():
                 # Block and restore combobox to correct layer
-                dockwidget.comboBox_filtering_current_layer.blockSignals(True)
-                dockwidget.comboBox_filtering_current_layer.setLayer(final_layer)
-                dockwidget.comboBox_filtering_current_layer.blockSignals(False)
+                with SignalBlocker(dockwidget.comboBox_filtering_current_layer):
+                    dockwidget.comboBox_filtering_current_layer.setLayer(final_layer)
                 # Also update current_layer reference in dockwidget
                 dockwidget.current_layer = final_layer
                 logger.info(f"v3.0.12: ✅ FINAL - Restored combobox to '{final_layer.name()}' BEFORE signal unlock")

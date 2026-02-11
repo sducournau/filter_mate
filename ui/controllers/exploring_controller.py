@@ -28,6 +28,7 @@ except ImportError:
     QColor = None
 
 from .base_controller import BaseController
+from ...infrastructure.signal_utils import SignalBlocker
 from .mixins.layer_selection_mixin import LayerSelectionMixin
 
 try:
@@ -2191,14 +2192,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
             single_widget = dw.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
             multiple_widget = dw.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"]
 
-            single_widget.blockSignals(True)
-            multiple_widget.blockSignals(True)
-
-            try:
+            with SignalBlocker(single_widget, multiple_widget):
                 self.exploring_link_widgets()
-            finally:
-                single_widget.blockSignals(False)
-                multiple_widget.blockSignals(False)
 
         # Store expression for filter task
         if expression is not None and expression != '':
@@ -2225,17 +2220,13 @@ class ExploringController(BaseController, LayerSelectionMixin):
                 # which then resets the checkboxes via _sync_widgets_from_qgis_selection
                 try:
                     # Block the selectionChanged signal temporarily
-                    dw.current_layer.blockSignals(True)
-                    logger.debug("🔒 handle_exploring_features_result: Blocked layer signals")
-                    dw.current_layer.removeSelection()
-                    dw.current_layer.select([f.id() for f in features])
-                    logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
+                    with SignalBlocker(dw.current_layer):
+                        logger.debug("handle_exploring_features_result: Blocked layer signals")
+                        dw.current_layer.removeSelection()
+                        dw.current_layer.select([f.id() for f in features])
+                        logger.debug(f"handle_exploring_features_result: Synced QGIS selection ({len(features)} features)")
                 except Exception as e:
                     logger.warning(f"handle_exploring_features_result: Error syncing selection: {e}")
-                finally:
-                    # Always unblock signals
-                    dw.current_layer.blockSignals(False)
-                    logger.debug("🔓 handle_exploring_features_result: Unblocked layer signals")
 
         # FIX v4: Zoom if is_tracking is active - trust BUTTON state over PROJECT_LAYERS
         is_tracking_from_props = layer_props.get("exploring", {}).get("is_tracking", False)
@@ -2329,11 +2320,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                 logger.info(f"🔗 SYNC: single -> multiple | '{single_display_expression}'")
                                 self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["multiple_selection_expression"] = single_display_expression
                                 # Block signals to prevent recursion
-                                self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(True)
-                                try:
+                                with SignalBlocker(self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"]):
                                     self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(single_display_expression)
-                                finally:
-                                    self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(False)
                                 # FIX 2026-01-19 v4: ALWAYS preserve_checked to prevent auto-uncheck
                                 # The user's checkbox selections should NEVER be lost due to expression sync
                                 self._dockwidget.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"]["WIDGET"].setDisplayExpression(single_display_expression, preserve_checked=True)
@@ -2344,11 +2332,8 @@ class ExploringController(BaseController, LayerSelectionMixin):
                                 logger.info(f"🔗 SYNC: multiple -> single | '{multiple_display_expression}'")
                                 self._dockwidget.PROJECT_LAYERS[self._dockwidget.current_layer.id()]["exploring"]["single_selection_expression"] = multiple_display_expression
                                 # Block signals to prevent recursion
-                                self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(True)
-                                try:
+                                with SignalBlocker(self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"]):
                                     self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].setExpression(multiple_display_expression)
-                                finally:
-                                    self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_EXPRESSION"]["WIDGET"].blockSignals(False)
                                 # FIX 2026-01-18: Also update the single picker's display expression
                                 single_picker = self._dockwidget.widgets["EXPLORING"]["SINGLE_SELECTION_FEATURES"]["WIDGET"]
                                 single_picker.setDisplayExpression(multiple_display_expression)
@@ -3156,10 +3141,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             # FIX 2026-01-18 v9: Block signals during sync to prevent feedback loops
             # The updatingCheckedItemList signal can be emitted by various widget operations
             # and trigger exploring_features_changed which resets the selection
-            old_block_state = multi_widget.signalsBlocked()
-            multi_widget.blockSignals(True)
-
-            try:
+            with SignalBlocker(multi_widget):
                 # Get primary key field for proper ID extraction
                 layer_props = self._dockwidget.PROJECT_LAYERS.get(self._dockwidget.current_layer.id(), {})
                 pk_name = layer_props.get("infos", {}).get("primary_key_name")
@@ -3248,11 +3230,6 @@ class ExploringController(BaseController, LayerSelectionMixin):
 
                 # Update button states after sync
                 self._dockwidget._update_exploring_buttons_state()
-
-            finally:
-                # FIX 2026-01-18 v9: Always restore signal blocking state
-                multi_widget.blockSignals(old_block_state)
-                logger.debug(f"  🔓 Restored signal blocking state: {old_block_state}")
 
         except Exception as e:
             logger.warning(f"_sync_multiple_selection_from_qgis error: {type(e).__name__}: {e}")

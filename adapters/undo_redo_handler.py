@@ -27,8 +27,10 @@ except ImportError:
 
 try:
     from ..infrastructure.logging import get_logger
+    from ..infrastructure.signal_utils import SignalBlocker
 except ImportError:
     import logging
+    SignalBlocker = None
 
     def get_logger(name):
         return logging.getLogger(name)
@@ -626,9 +628,8 @@ class UndoRedoHandler:
                 if not current_combo or current_combo.id() != saved_layer.id():
                     current_name = current_combo.name() if current_combo else "(None)"
                     logger.debug(f"DELAYED CHECK - Restoring from '{current_name}' to '{saved_layer.name()}'")
-                    dw.comboBox_filtering_current_layer.blockSignals(True)
-                    dw.comboBox_filtering_current_layer.setLayer(saved_layer)
-                    dw.comboBox_filtering_current_layer.blockSignals(False)
+                    with SignalBlocker(dw.comboBox_filtering_current_layer):
+                        dw.comboBox_filtering_current_layer.setLayer(saved_layer)
                     dw.current_layer = saved_layer
             except Exception as e:
                 logger.debug(f"Error in delayed {operation} combobox check: {e}")

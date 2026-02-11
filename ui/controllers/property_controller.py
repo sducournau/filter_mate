@@ -20,6 +20,7 @@ except ImportError:
     from PyQt5.QtCore import pyqtSignal
 
 from .base_controller import BaseController
+from ...infrastructure.signal_utils import SignalBlocker
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -1242,9 +1243,8 @@ class PropertyController(BaseController):
                             # Update the button widget state
                             has_layers_widget = widgets.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT', {}).get('WIDGET')
                             if has_layers_widget and hasattr(has_layers_widget, 'setChecked'):
-                                has_layers_widget.blockSignals(True)
-                                has_layers_widget.setChecked(has_layers)
-                                has_layers_widget.blockSignals(False)
+                                with SignalBlocker(has_layers_widget):
+                                    has_layers_widget.setChecked(has_layers)
 
                     if new_value and "ON_TRUE" in custom_functions:
                         custom_functions["ON_TRUE"](0)

@@ -24,6 +24,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from qgis.PyQt.QtCore import QObject
 
+from ...infrastructure.signal_utils import SignalBlocker
+
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
 
@@ -661,16 +663,13 @@ class DockwidgetSignalManager:
         try:
             # Disconnect existing signals first
             for gb, _ in gbs:
-                try:
-                    gb.blockSignals(True)
+                with SignalBlocker(gb):
                     try:
                         gb.toggled.disconnect()
                         gb.collapsedStateChanged.disconnect()
                     except TypeError:
                         # Signals not connected yet - expected on first setup
                         pass
-                finally:
-                    gb.blockSignals(False)
 
             # Connect new signals
             for gb, name in gbs:
@@ -683,12 +682,6 @@ class DockwidgetSignalManager:
 
         except Exception as e:
             logger.warning(f"connect_groupbox_signals_directly error: {e}")
-            # Ensure all groupboxes have signals unblocked
-            for gb, _ in gbs:
-                try:
-                    gb.blockSignals(False)
-                except (RuntimeError, AttributeError):
-                    pass
 
     def connect_initial_widget_signals(self) -> None:
         """
