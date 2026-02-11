@@ -27,7 +27,10 @@ from qgis.core import (
 )
 
 from ..ports import get_backend_services
-from ...infrastructure.constants import PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+from ...infrastructure.constants import (
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
+    QGIS_PROVIDER_POSTGRES,
+)
 
 _backend_services = get_backend_services()
 BackendFactory = _backend_services.get_backend_factory()
@@ -255,7 +258,7 @@ class FilterOrchestrator:
             logger.info(f"   Combine operator: {combine_operator}")
 
             # Log full expression for PostgreSQL debugging
-            if backend_name == 'postgresql':
+            if backend_name == PROVIDER_POSTGRES:
                 logger.info("   📝 Full PostgreSQL expression:")
                 logger.info(f"   {expression}")
 
@@ -382,19 +385,19 @@ class FilterOrchestrator:
         self.task_parameters['actual_backends'][layer.id()] = backend_name
 
         # Determine geometry provider based on backend type
-        if backend_name == 'spatialite':
+        if backend_name == PROVIDER_SPATIALITE:
             geometry_provider = PROVIDER_SPATIALITE
             logger.info("  → Backend is Spatialite - using WKT geometry format")
-        elif backend_name == 'ogr':
+        elif backend_name == PROVIDER_OGR:
             geometry_provider = PROVIDER_OGR
             if effective_provider_type == PROVIDER_POSTGRES:
                 logger.info("  → Backend is OGR but provider is PostgreSQL - using OGR geometry format (fallback)")
             else:
                 logger.info("  → Backend is OGR - using QgsVectorLayer geometry format")
-        elif backend_name == 'postgresql':
+        elif backend_name == PROVIDER_POSTGRES:
             geometry_provider = PROVIDER_POSTGRES
             logger.info("  → Backend is PostgreSQL - using SQL expression geometry format")
-        elif backend_name == 'memory':
+        elif backend_name == PROVIDER_MEMORY:
             geometry_provider = PROVIDER_OGR
             logger.debug("  → Backend is Memory - using OGR geometry format (QgsVectorLayer)")
         else:
@@ -652,8 +655,8 @@ class FilterOrchestrator:
             feature_count = 0
 
         is_large_pg_table = (
-            backend_name == 'postgresql' and
-            layer.providerType() == 'postgres' and
+            backend_name == PROVIDER_POSTGRES and
+            layer.providerType() == QGIS_PROVIDER_POSTGRES and
             feature_count > 100000
         )
 
@@ -670,7 +673,7 @@ class FilterOrchestrator:
         # Log reason for fallback
         if was_forced:
             logger.warning(f"⚠️ {backend_name.upper()} backend FAILED for forced layer {layer.name()}")
-        elif backend_name == 'postgresql':
+        elif backend_name == PROVIDER_POSTGRES:
             logger.warning(f"⚠️ PostgreSQL backend FAILED for {layer.name()}")
             logger.warning("  → Query may have timed out or connection failed")
         else:

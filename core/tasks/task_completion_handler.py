@@ -14,6 +14,10 @@ from qgis.PyQt.QtCore import QTimer
 
 from ...core.ports.qgis_port import get_qgis_factory
 from ...infrastructure.signal_utils import SignalBlocker
+from ...infrastructure.constants import (
+    QGIS_PROVIDER_POSTGRES, QGIS_PROVIDER_SPATIALITE, QGIS_PROVIDER_OGR,
+    QGIS_PROVIDER_MEMORY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +152,8 @@ def apply_pending_subset_requests(
                 # FIX 2026-01-24: Skip reload for Spatialite with empty subset (unfilter operation)
                 # layer.reload() on Spatialite with empty subset causes freeze because it tries
                 # to reload from temporary tables that don't exist for unfilter operations.
-                should_reload = (layer.providerType() in ('postgres', 'ogr') or
-                                (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
+                should_reload = (layer.providerType() in (QGIS_PROVIDER_POSTGRES, QGIS_PROVIDER_OGR) or
+                                (layer.providerType() == QGIS_PROVIDER_SPATIALITE and expression_str.strip() != ''))
 
                 if should_reload:
                     with SignalBlocker(layer):
@@ -166,7 +170,7 @@ def apply_pending_subset_requests(
                 layer.triggerRepaint()
 
                 # FIX v2.9.24: Clear selection for Spatialite layers after reload
-                if layer.providerType() == 'spatialite':
+                if layer.providerType() == QGIS_PROVIDER_SPATIALITE:
                     try:
                         layer.removeSelection()
                         logger.debug("Cleared selection after Spatialite filter (already applied)")
@@ -189,8 +193,8 @@ def apply_pending_subset_requests(
                     # FIX 2026-01-24: Skip reload for Spatialite with empty subset (unfilter operation)
                     # layer.reload() on Spatialite with empty subset causes freeze because it tries
                     # to reload from temporary tables that don't exist for unfilter operations.
-                    should_reload = (layer.providerType() in ('postgres', 'ogr') or
-                                    (layer.providerType() == 'spatialite' and expression_str.strip() != ''))
+                    should_reload = (layer.providerType() in (QGIS_PROVIDER_POSTGRES, QGIS_PROVIDER_OGR) or
+                                    (layer.providerType() == QGIS_PROVIDER_SPATIALITE and expression_str.strip() != ''))
 
                     if should_reload:
                         with SignalBlocker(layer):
@@ -207,7 +211,7 @@ def apply_pending_subset_requests(
                     layer.triggerRepaint()
 
                     # FIX v2.9.24: Clear selection for Spatialite layers
-                    if layer.providerType() == 'spatialite':
+                    if layer.providerType() == QGIS_PROVIDER_SPATIALITE:
                         try:
                             layer.removeSelection()
                             logger.debug("Cleared selection after Spatialite filter (new filter)")
@@ -371,7 +375,7 @@ def cleanup_memory_layer(ogr_source_geom: Optional[Any]) -> None:  # Optional[Qg
         return
 
     try:
-        if ogr_source_geom.isValid() and ogr_source_geom.providerType() == 'memory':
+        if ogr_source_geom.isValid() and ogr_source_geom.providerType() == QGIS_PROVIDER_MEMORY:
             # Check if layer is in project
             factory = get_qgis_factory()
             project = factory.get_project()

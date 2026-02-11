@@ -540,20 +540,20 @@ class FilteringOrchestrator:
         # CRITICAL - Only call MV creation if feature count exceeds threshold
         from ...adapters.backends.postgresql.filter_executor import BUFFER_EXPR_MV_THRESHOLD
         if (current_buffer_expression and
-            param_source_provider_type == 'postgresql' and
+            param_source_provider_type == PROVIDER_POSTGRES and
             cached_feature_count is not None and
                 cached_feature_count > BUFFER_EXPR_MV_THRESHOLD):
             logger.info(f"  Feature count ({cached_feature_count}) > threshold ({BUFFER_EXPR_MV_THRESHOLD})")
             logger.info("  -> Calling _ensure_buffer_expression_mv_exists()...")
             ensure_buffer_expression_mv_exists_callback()
-        elif current_buffer_expression and param_source_provider_type == 'postgresql':
+        elif current_buffer_expression and param_source_provider_type == PROVIDER_POSTGRES:
             logger.info(f"  SKIP MV creation: {cached_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold")
             logger.info("  -> Buffer expression will be applied INLINE by prepare_postgresql_source_geom()")
 
         # Try to create optimized filter chain MV for PostgreSQL
         # When multiple spatial filters are chained (zone_pop AND demand_points etc.),
         # creating a single MV reduces N*M EXISTS queries to 1 EXISTS per distant layer
-        if param_source_provider_type == 'postgresql':
+        if param_source_provider_type == PROVIDER_POSTGRES:
             try_create_filter_chain_mv_callback()
 
         # Build unique provider list including source layer provider AND forced backends

@@ -10,9 +10,9 @@ v4.0 Regression Fix: Restored missing constants from before_migration/modules/co
 """
 
 # =============================================================================
-# Provider Types
+# Provider Types - FilterMate backend identifiers
 # =============================================================================
-PROVIDER_POSTGRES = 'postgresql'  # v4.0 Fix: Was 'postgres', must match QGIS internal mapping
+PROVIDER_POSTGRES = 'postgresql'  # FilterMate backend name for PostgreSQL
 PROVIDER_SPATIALITE = 'spatialite'
 PROVIDER_OGR = 'ogr'
 PROVIDER_MEMORY = 'memory'
@@ -24,6 +24,15 @@ PROVIDER_GPKG = 'gpkg'
 PROVIDER_MSSQL = 'mssql'
 PROVIDER_HANA = 'hana'
 PROVIDER_ORACLE = 'oracle'
+
+# =============================================================================
+# QGIS Internal Provider Names - returned by layer.providerType()
+# Use these when comparing against QgsVectorLayer.providerType()
+# =============================================================================
+QGIS_PROVIDER_POSTGRES = 'postgres'      # layer.providerType() for PostgreSQL layers
+QGIS_PROVIDER_SPATIALITE = 'spatialite'   # layer.providerType() for SpatiaLite layers
+QGIS_PROVIDER_OGR = 'ogr'                # layer.providerType() for OGR/file layers
+QGIS_PROVIDER_MEMORY = 'memory'           # layer.providerType() for memory layers
 
 # Remote/distant providers that should be treated as available if layer is valid
 REMOTE_PROVIDERS = {
@@ -38,10 +47,10 @@ REMOTE_PROVIDERS = {
 
 # Provider type mapping from QGIS internal names (v4.0 Regression Fix)
 PROVIDER_TYPE_MAPPING = {
-    'postgres': PROVIDER_POSTGRES,
-    'spatialite': PROVIDER_SPATIALITE,
-    'ogr': PROVIDER_OGR,
-    'memory': PROVIDER_MEMORY,
+    QGIS_PROVIDER_POSTGRES: PROVIDER_POSTGRES,
+    QGIS_PROVIDER_SPATIALITE: PROVIDER_SPATIALITE,
+    QGIS_PROVIDER_OGR: PROVIDER_OGR,
+    QGIS_PROVIDER_MEMORY: PROVIDER_MEMORY,
     'virtual': PROVIDER_OGR,  # Virtual layers use OGR backend (fallback)
     'WFS': PROVIDER_OGR,      # WFS uses OGR backend for filtering
     'wfs': PROVIDER_OGR,      # Lowercase variant
@@ -453,7 +462,7 @@ def should_warn_performance(feature_count: int, has_postgresql: bool = False) ->
 # Exports (v4.0 Regression Fix: Complete export list)
 # =============================================================================
 __all__ = [
-    # Provider types
+    # Provider types (FilterMate backend names)
     'PROVIDER_POSTGRES',
     'PROVIDER_SPATIALITE',
     'PROVIDER_OGR',
@@ -466,6 +475,11 @@ __all__ = [
     'PROVIDER_MSSQL',
     'PROVIDER_HANA',
     'PROVIDER_ORACLE',
+    # QGIS internal provider names (from layer.providerType())
+    'QGIS_PROVIDER_POSTGRES',
+    'QGIS_PROVIDER_SPATIALITE',
+    'QGIS_PROVIDER_OGR',
+    'QGIS_PROVIDER_MEMORY',
     'REMOTE_PROVIDERS',
     'PROVIDER_TYPE_MAPPING',
     # Spatial predicates

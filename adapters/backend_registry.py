@@ -15,6 +15,9 @@ from ..core.ports.filter_executor_port import (
     FilterExecutorPort,
     BackendRegistryPort,
 )
+from ..infrastructure.constants import (
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY,
+)
 
 if TYPE_CHECKING:
     pass
@@ -67,11 +70,11 @@ class BackendRegistry(BackendRegistryPort):
         provider_type = layer_info.get('layer_provider_type', 'unknown')
 
         # Map provider types to backends
-        if provider_type == 'postgresql' and self._postgresql_available:
+        if provider_type == PROVIDER_POSTGRES and self._postgresql_available:
             return self._get_postgresql_executor()
-        elif provider_type == 'spatialite':
+        elif provider_type == PROVIDER_SPATIALITE:
             return self._get_spatialite_executor()
-        elif provider_type == 'ogr':
+        elif provider_type == PROVIDER_OGR:
             return self._get_ogr_executor()
         else:
             # Default to OGR (universal fallback)
@@ -79,23 +82,23 @@ class BackendRegistry(BackendRegistryPort):
 
     def get_executor_by_name(self, backend_name: str) -> Optional[FilterExecutorPort]:
         """Get a specific backend by name."""
-        if backend_name == 'postgresql':
+        if backend_name == PROVIDER_POSTGRES:
             if self._postgresql_available:
                 return self._get_postgresql_executor()
             return None
-        elif backend_name == 'spatialite':
+        elif backend_name == PROVIDER_SPATIALITE:
             return self._get_spatialite_executor()
-        elif backend_name == 'ogr':
+        elif backend_name == PROVIDER_OGR:
             return self._get_ogr_executor()
-        elif backend_name == 'memory':
+        elif backend_name == PROVIDER_MEMORY:
             return self._get_memory_executor()
         return None
 
     def is_available(self, backend_name: str) -> bool:
         """Check if a specific backend is available."""
-        if backend_name == 'postgresql':
+        if backend_name == PROVIDER_POSTGRES:
             return self._postgresql_available
-        elif backend_name in ('spatialite', 'ogr', 'memory'):
+        elif backend_name in (PROVIDER_SPATIALITE, PROVIDER_OGR, PROVIDER_MEMORY):
             return True
         return False
 
