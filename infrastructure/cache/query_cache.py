@@ -221,7 +221,7 @@ class QueryExpressionCache:
             # Unknown type - use string representation
             hash_input = f"unknown:{str(source_geometry)[:500]}"
 
-        return hashlib.md5(hash_input.encode('utf-8', usedforsecurity=False)).hexdigest()[:16]
+        return hashlib.md5(hash_input.encode('utf-8'), usedforsecurity=False).hexdigest()[:16]  # nosec B324
 
     def get(self, key: Tuple) -> Optional[str]:
         """

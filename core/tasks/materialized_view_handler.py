@@ -227,8 +227,8 @@ class MaterializedViewHandler:
 
             # Create main MV with buffered geometries
             # DDL: mv_name is sanitized via sanitize_sql_identifier, other identifiers from QGIS layer metadata
-            sql_create_main = (  # nosec B608
-                f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}" AS '
+            sql_create_main = (
+                f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}" AS '  # nosec B608
                 f'SELECT "{self.task.param_source_table}"."{self.task.primary_key_name}", '
                 f'ST_Buffer({source_geom_ref}, {buffer_expr}, \'{style_params}\') as {geom_field} '
                 f'FROM "{self.task.param_source_schema}"."{self.task.param_source_table}" '
@@ -236,8 +236,8 @@ class MaterializedViewHandler:
             )
 
             # Create dump MV (union of all buffered geometries)
-            sql_create_dump = (  # nosec B608
-                f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" AS '
+            sql_create_dump = (
+                f'CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" AS '  # nosec B608
                 f'SELECT ST_Union("{geom_field}") as {geom_field} '
                 f'FROM "{schema}"."fm_temp_mv_{mv_name}" WITH DATA;'
             )
