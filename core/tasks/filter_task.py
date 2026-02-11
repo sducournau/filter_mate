@@ -3930,7 +3930,7 @@ class FilterEngineTask(QgsTask):
                 feature_fids = result.feature_ids
 
         if feature_fids:
-            collector.restore_layer_selection(feature_fids)
+            collector.restore_layer_selection(self.source_layer, feature_fids)
             logger.info(f"Restored source layer selection via FeatureCollector: {len(feature_fids)} feature(s)")
 
     @main_thread_only
