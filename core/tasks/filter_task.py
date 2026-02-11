@@ -76,7 +76,8 @@ POSTGRESQL_AVAILABLE = _pg_availability.postgresql_available
 
 # Import constants (migrated to infrastructure)
 from ...infrastructure.constants import (
-    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
+    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR,
+    QGIS_PROVIDER_POSTGRES,
 )
 
 # Backend architecture (migrated to adapters.backends)
@@ -131,6 +132,7 @@ from .source_geometry_preparer import SourceGeometryPreparer
 from .subset_management_handler import SubsetManagementHandler
 from .filtering_orchestrator import FilteringOrchestrator
 from .finished_handler import FinishedHandler
+from .materialized_view_handler import MaterializedViewHandler
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -432,6 +434,9 @@ class FilterEngineTask(QgsTask):
 
         # Phase 3 C1 US-C1.3.3: Task completion handler
         self._finished_handler = FinishedHandler()
+
+        # Pass 3: Materialized view handler
+        self._mv_handler = MaterializedViewHandler(self)
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
@@ -855,7 +860,7 @@ class FilterEngineTask(QgsTask):
             layer_id = self.task_parameters.get("infos", {}).get("layer_id")
             if layer_id:
                 layer = self.PROJECT.mapLayer(layer_id)
-                if layer and layer.providerType() == 'postgres':
+                if layer and layer.providerType() == QGIS_PROVIDER_POSTGRES:
                     connexion, source_uri = get_datasource_connexion_from_layer(layer)
                     if connexion is not None:
                         self.active_connections.append(connexion)
@@ -2203,398 +2208,16 @@ class FilterEngineTask(QgsTask):
         return result.expression
 
     def _create_source_mv_if_needed(self, source_mv_info):
-        """Create source materialized view with pre-computed buffer (v2.9.0 optimization)."""
-        if not source_mv_info or not source_mv_info.create_sql:
-            return False
-
-        try:
-            import time
-            start_time = time.time()
-
-            connexion = self._get_valid_postgresql_connection()
-            if not connexion:
-                logger.warning("No PostgreSQL connection available for source MV creation")
-                return False
-
-            # Build commands: drop if exists, create, add spatial index
-            schema = source_mv_info.schema
-            view_name = source_mv_info.view_name
-
-            commands = [
-                f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."{view_name}" CASCADE;',
-                source_mv_info.create_sql,
-                f'CREATE INDEX IF NOT EXISTS idx_{view_name}_geom ON "{schema}"."{view_name}" USING GIST (geom);',
-                f'CREATE INDEX IF NOT EXISTS idx_{view_name}_buff ON "{schema}"."{view_name}" USING GIST (geom_buffered);',
-                f'ANALYZE "{schema}"."{view_name}";'
-            ]
-
-            self._execute_postgresql_commands(connexion, commands)
-
-            # Register MV references to prevent premature cleanup
-            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
-            tracker = get_mv_reference_tracker()
-
-            # Register references for source layer and all distant layers
-            if hasattr(self, 'source_layer') and self.source_layer:
-                tracker.add_reference(view_name, self.source_layer.id())
-
-            # Register for all distant layers that will use this source MV
-            if hasattr(self, 'param_all_layers'):
-                for layer in self.param_all_layers:
-                    if layer and hasattr(layer, 'id'):
-                        if not self.source_layer or layer.id() != self.source_layer.id():
-                            tracker.add_reference(view_name, layer.id())
-
-            elapsed = time.time() - start_time
-            fid_count = len(source_mv_info.fid_list)
-            logger.info(
-                f"✓ v2.9.0: Source MV '{view_name}' created in {elapsed:.2f}s "
-                f"({fid_count} FIDs with pre-computed buffer)"
-            )
-            logger.info("   FIX v4.2.8: Registered references for multiple layers")
-            return True
-
-        except (RuntimeError, OSError, AttributeError, ImportError) as e:
-            logger.warning(f"Failed to create source MV '{source_mv_info.view_name}': {e}")
-            # Don't raise - the optimization can still work with inline subquery
-            return False
+        """Create source materialized view with pre-computed buffer. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.create_source_mv_if_needed(source_mv_info)
 
     def _ensure_buffer_expression_mv_exists(self):
-        """
-        FIX v4.2.1 (2026-01-21): Ensure buffer expression MVs exist BEFORE distant layer filtering.
-        FIX v4.2.7 (2026-01-22): Only create MVs if feature count exceeds threshold.
-
-        When using custom buffer expression (set to field), this function creates the
-        materialized views (mv_<session>_<table>_buffer_expr and mv_<session>_<table>_buffer_expr_dump)
-        BEFORE prepare_postgresql_source_geom() generates references to them.
-
-        The problem was:
-        - prepare_postgresql_source_geom() generates postgresql_source_geom pointing to MV _dump
-        - But the MV was only created when filtering the source layer itself
-        - If the source layer was already filtered (re-filtering), the MV didn't exist
-        - Distant layers failed with "relation does not exist" error
-
-        The fix:
-        - Create the MVs upfront in manage_distant_layers_geometric_filtering()
-        - This ensures the MV exists before any reference to it is generated
-
-        FIX v4.2.7: Only create MVs if feature count > BUFFER_EXPR_MV_THRESHOLD (100).
-        For small datasets, prepare_postgresql_source_geom() uses inline ST_Buffer() instead
-        of referencing MVs, so creating MVs is unnecessary overhead.
-        """
-        import time
-        from ...infrastructure.database.sql_utils import sanitize_sql_identifier
-        from ...adapters.backends.postgresql.filter_executor import BUFFER_EXPR_MV_THRESHOLD
-
-        logger.info("=" * 60)
-        logger.info("🔧 FIX v4.2.1/v4.2.7: Checking buffer expression MV requirements...")
-        logger.info(f"   param_buffer_expression: {self.param_buffer_expression}")
-        logger.info(f"   session_id: {self.session_id}")
-        logger.info(f"   source_table: {self.param_source_table}")
-
-        # Use cached feature count for consistent threshold decisions
-        source_feature_count = getattr(self, '_cached_source_feature_count', None)
-        if source_feature_count is None:
-            # Fallback if not cached (should not happen in normal flow)
-            source_feature_count = self.source_layer.featureCount() if self.source_layer else 0
-            logger.warning(f"   ⚠️ Using fresh featureCount (not cached): {source_feature_count}")
-        logger.info(f"   source_feature_count: {source_feature_count}")
-        logger.info(f"   BUFFER_EXPR_MV_THRESHOLD: {BUFFER_EXPR_MV_THRESHOLD}")
-
-        if source_feature_count is not None and source_feature_count <= BUFFER_EXPR_MV_THRESHOLD:
-            logger.info(f"   ✓ SKIP MV creation: {source_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold")
-            logger.info("   → prepare_postgresql_source_geom() will use INLINE ST_Buffer() instead")
-            logger.info("=" * 60)
-            return True  # Success - no MV needed
-
-        logger.info(f"   → Creating MV: {source_feature_count} features > {BUFFER_EXPR_MV_THRESHOLD} threshold")
-        logger.info("=" * 60)
-
-        start_time = time.time()
-
-        try:
-            # Get PostgreSQL connection
-            connexion = self._get_valid_postgresql_connection()
-            if not connexion:
-                logger.warning("No PostgreSQL connection available for buffer expression MV creation")
-                return False
-
-            # Generate MV name (must match prepare_postgresql_source_geom logic)
-            base_mv_name = sanitize_sql_identifier(self.param_source_table + '_buffer_expr')
-            if self.session_id:
-                mv_name = f"{self.session_id}_{base_mv_name}"
-            else:
-                mv_name = base_mv_name
-                logger.warning("No session_id - using base MV name (may conflict with other sessions)")
-
-            schema = self.current_materialized_view_schema
-            geom_field = self.param_source_geom
-
-            # Get source layer's current subset (the features to include in MV)
-            source_subset = self.source_layer.subsetString() if self.source_layer else ""
-
-            # Build the buffer expression for PostGIS
-            buffer_expr = self.param_buffer_expression
-            if buffer_expr:
-                # Convert QGIS expression to PostGIS
-                buffer_expr = self.qgis_expression_to_postgis(buffer_expr)
-                # Adjust field references to include table name
-                if buffer_expr.find('"') == 0 and self.param_source_table not in buffer_expr[:50]:
-                    buffer_expr = f'"{self.param_source_table}".' + buffer_expr
-
-            # Build ST_Buffer style parameters
-            buffer_type_mapping = {"Round": "round", "Flat": "flat", "Square": "square"}
-            buffer_type_str = self.task_parameters.get("filtering", {}).get("buffer_type", "Round")
-            endcap_style = buffer_type_mapping.get(buffer_type_str, "round")
-            quad_segs = getattr(self, 'param_buffer_segments', 5)
-            style_params = f"quad_segs={quad_segs}"
-            if endcap_style != 'round':
-                style_params += f" endcap={endcap_style}"
-
-            # Build source geometry reference
-            f'"{self.param_source_schema}"."{self.param_source_table}"."{geom_field}"'
-
-            # Build WHERE clause for source features
-            if source_subset:
-                f" WHERE {source_subset}"
-
-            # SQL commands (fm_temp_mv_ prefix)
-            sql_drop = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" CASCADE;'
-            sql_drop_main = f'DROP MATERIALIZED VIEW IF EXISTS "{schema}"."fm_temp_mv_{mv_name}" CASCADE;'
-
-            # Create main MV with buffered geometries
-            sql_create_main = '''
-                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}" AS
-                SELECT
-                    "{self.param_source_table}"."{self.primary_key_name}",
-                    ST_Buffer({source_geom_ref}, {buffer_expr}, '{style_params}') as {geom_field}
-                FROM "{self.param_source_schema}"."{self.param_source_table}"
-                {where_clause}
-                WITH DATA;
-            '''
-
-            # Create dump MV (union of all buffered geometries)
-            sql_create_dump = '''
-                CREATE MATERIALIZED VIEW IF NOT EXISTS "{schema}"."fm_temp_mv_{mv_name}_dump" AS
-                SELECT ST_Union("{geom_field}") as {geom_field}
-                FROM "{schema}"."fm_temp_mv_{mv_name}"
-                WITH DATA;
-            '''
-
-            # Index for main MV
-            sql_index = f'CREATE INDEX IF NOT EXISTS idx_{mv_name}_geom ON "{schema}"."fm_temp_mv_{mv_name}" USING GIST ({geom_field});'
-
-            # Ensure temp schema exists
-            schema = self._ensure_temp_schema_exists(connexion, schema)
-
-            # Execute commands
-            commands = [sql_drop, sql_drop_main, sql_create_main, sql_index, sql_create_dump]
-            self._execute_postgresql_commands(connexion, commands)
-
-            # Register MV references to prevent premature cleanup
-            from ...adapters.backends.postgresql.mv_reference_tracker import get_mv_reference_tracker
-            tracker = get_mv_reference_tracker()
-
-            # Register references for source layer and all distant layers (fm_temp_mv_ prefix)
-            if self.source_layer:
-                tracker.add_reference(f"fm_temp_mv_{mv_name}", self.source_layer.id())
-                tracker.add_reference(f"fm_temp_mv_{mv_name}_dump", self.source_layer.id())
-
-            # Register for all distant layers that will use this MV
-            if hasattr(self, 'param_all_layers'):
-                for layer in self.param_all_layers:
-                    if layer and hasattr(layer, 'id') and layer.id() != (self.source_layer.id() if self.source_layer else None):
-                        tracker.add_reference(f"fm_temp_mv_{mv_name}", layer.id())
-                        tracker.add_reference(f"fm_temp_mv_{mv_name}_dump", layer.id())
-
-            elapsed = time.time() - start_time
-            logger.info(f"✓ FIX v4.2.1: Buffer expression MVs created in {elapsed:.2f}s")
-            logger.info(f"   fm_temp_mv_{mv_name} and fm_temp_mv_{mv_name}_dump ready for distant layer filtering")
-            logger.info(f"   FIX v4.2.8: Registered references for {len(self.param_all_layers) if hasattr(self, 'param_all_layers') else 1} layer(s)")
-
-            return True
-
-        except (RuntimeError, OSError, AttributeError, ImportError, ValueError) as e:
-            logger.error(f"❌ Failed to create buffer expression MV: {e}")
-            import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
-            # Don't raise - let the original code path try
-            return False
+        """Ensure buffer expression MVs exist. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.ensure_buffer_expression_mv_exists()
 
     def _try_create_filter_chain_mv(self):
-        """
-        v4.2.10: Try to create optimized MV for filter chaining.
-
-        When multiple spatial filters are chained (e.g., zone_pop AND demand_points with buffer),
-        this creates a single MV containing pre-filtered source features. This reduces
-        N×M EXISTS queries to a single EXISTS per distant layer.
-
-        Optimization triggers when:
-        - Source layer has an existing subsetString containing EXISTS clause(s)
-        - Current filter adds another spatial constraint (buffer or additional EXISTS)
-        - At least 2 spatial filters are being combined
-
-        The MV is stored in self._filter_chain_mv_name and used by expression builders.
-
-        v4.2.10b: DISABLED - Feature causes blocking on large datasets.
-        Will be re-enabled after adding:
-        - Query timeout protection
-        - Feature count threshold for spatial_filters tables
-        - Configuration option to enable/disable
-        """
-        # DISABLED - Causes task blocking at 14%
-        # The MV creation with complex EXISTS subqueries can take very long on large tables
-        # without proper indexes. Need to add timeout and better threshold checks.
-        logger.info("=" * 60)
-        logger.info("🚀 v4.2.10b: Filter chain MV optimization DISABLED")
-        logger.info("   → Feature temporarily disabled to prevent blocking")
-        logger.info("   → Will be re-enabled with timeout protection")
-        logger.info("=" * 60)
-        return False
-
-        # Original code below - keep for reference
-        """
-        import time
-
-        logger.info("=" * 60)
-        logger.info("🚀 v4.2.10: Checking filter chain MV optimization...")
-
-        # Check prerequisites
-        source_subset = self.source_layer.subsetString() if self.source_layer else ""
-        if not source_subset:
-            logger.info("   ✗ No source subset - skipping filter chain optimization")
-            logger.info("=" * 60)
-            return False
-
-        # Check if source_subset contains EXISTS clauses
-        if 'EXISTS' not in source_subset.upper():
-            logger.info("   ✗ No EXISTS in source subset - skipping filter chain optimization")
-            logger.info("=" * 60)
-            return False
-
-        # Check if we're adding another spatial filter
-        has_buffer = bool(self.param_buffer_expression or self.param_buffer_value)
-        if not has_buffer:
-            logger.info("   ✗ No buffer expression - filter chain MV not needed")
-            logger.info("=" * 60)
-            return False
-
-        logger.info("   ✓ Prerequisites met for filter chain optimization:")
-        logger.info("      - source_subset contains EXISTS")
-        logger.info(f"      - buffer_expression/value: {self.param_buffer_expression or self.param_buffer_value}")
-
-        start_time = time.time()
-
-        try:
-            # Import filter chain optimizer
-            from ...adapters.backends.postgresql.filter_chain_optimizer import (
-                FilterChainOptimizer,
-                FilterChainContext,
-                OptimizationStrategy
-            )
-            from ..filter.expression_combiner import extract_exists_clauses
-
-            # Extract spatial filters from source_subset
-            exists_clauses = extract_exists_clauses(source_subset)
-            if len(exists_clauses) < 1:
-                logger.info("   ✗ Could not extract EXISTS clauses from source subset")
-                logger.info("=" * 60)
-                return False
-
-            # Build spatial_filters list from extracted EXISTS
-            spatial_filters = []
-            for clause in exists_clauses:
-                spatial_filters.append({
-                    'table': clause.get('table', 'unknown'),
-                    'schema': clause.get('schema', 'public'),
-                    'geom_column': 'geom',  # Default
-                    'predicate': 'ST_Intersects',
-                    'sql': clause.get('sql')  # Original SQL for reference
-                })
-
-            # Add current source layer as another filter (with buffer)
-            buffer_val = self.param_buffer_value
-            if self.param_buffer_expression:
-                # For expression buffers, use average estimate
-                buffer_val = 10.0  # Placeholder, actual value from expression
-
-            spatial_filters.append({
-                'table': self.param_source_table,
-                'schema': self.param_source_schema,
-                'geom_column': self.param_source_geom,
-                'predicate': 'ST_Intersects',
-                'buffer': buffer_val
-            })
-
-            logger.info(f"   → Detected {len(spatial_filters)} spatial filters to chain:")
-            for i, f in enumerate(spatial_filters):
-                buf_str = f" (buffer={f.get('buffer')})" if f.get('buffer') else ""
-                logger.info(f"      {i+1}. {f.get('schema')}.{f.get('table')}{buf_str}")
-
-            # Get PostgreSQL connection
-            connexion = self._get_valid_postgresql_connection()
-            if not connexion:
-                logger.warning("   ✗ No PostgreSQL connection for filter chain MV")
-                logger.info("=" * 60)
-                return False
-
-            # Create filter chain context
-            context = FilterChainContext(
-                source_schema=self.param_source_schema,
-                source_table=self.param_source_table,
-                source_geom_column=self.param_source_geom,
-                spatial_filters=spatial_filters,
-                buffer_value=self.param_buffer_value,
-                buffer_expression=self.param_buffer_expression,  # Include dynamic expression
-                feature_count_estimate=getattr(self, '_cached_source_feature_count', 0),
-                session_id=self.session_id
-            )
-
-            # Create optimizer and analyze
-            optimizer = FilterChainOptimizer(connexion, self.session_id)
-            strategy = optimizer.analyze_chain(context)
-
-            if strategy == OptimizationStrategy.NONE:
-                logger.info("   ✗ Optimizer recommends no MV (strategy=NONE)")
-                logger.info("=" * 60)
-                return False
-
-            # Create chain MV
-            mv_name = optimizer.create_chain_mv(context, strategy)
-
-            if mv_name:
-                elapsed = time.time() - start_time
-                logger.info(f"   ✓ Filter chain MV created: {mv_name}")
-                logger.info(f"   ✓ Strategy: {strategy.value}")
-                logger.info(f"   ✓ Time: {elapsed:.2f}s")
-
-                # Store for use by expression builders
-                self._filter_chain_mv_name = mv_name
-                self._filter_chain_optimizer = optimizer
-                self._filter_chain_context = context
-
-                # Inject MV name into task_parameters for ExpressionBuilder access
-                self.task_parameters['_filter_chain_mv_name'] = mv_name
-                logger.info("   ✓ Injected _filter_chain_mv_name into task_parameters")
-
-                logger.info("=" * 60)
-                return True
-            else:
-                logger.warning("   ✗ MV creation failed")
-                logger.info("=" * 60)
-                return False
-
-        except ImportError as e:
-            logger.debug(f"   ✗ Filter chain optimizer not available: {e}")
-            logger.info("=" * 60)
-            return False
-        except Exception as e:
-            logger.warning(f"   ✗ Filter chain optimization failed: {e}")
-            import traceback
-            logger.debug(f"Traceback: {traceback.format_exc()}")
-            logger.info("=" * 60)
-            return False
-        """  # End of disabled code block
+        """Try to create filter chain MV optimization. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.try_create_filter_chain_mv()
 
     def _validate_layer_properties(self, layer_props, layer_name):
         """Validate required fields in layer properties. Returns tuple or (None,)*4 on error."""
@@ -3260,68 +2883,42 @@ class FilterEngineTask(QgsTask):
             )
 
     def _create_simple_materialized_view_sql(self, schema: str, name: str, sql_subset_string: str) -> str:
-        """Create simple MV SQL. Delegates to CleanupHandler."""
-        return self._cleanup_handler.create_simple_materialized_view_sql(schema, name, sql_subset_string)
+        """Create simple MV SQL. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.create_simple_materialized_view_sql(schema, name, sql_subset_string)
 
     def _parse_where_clauses(self) -> Any:
-        """Parse WHERE clauses. Delegates to CleanupHandler."""
-        return self._cleanup_handler.parse_where_clauses(self.where_clause)
+        """Parse WHERE clauses. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.parse_where_clauses()
 
     def _create_custom_buffer_view_sql(self, schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string):
-        """Create SQL for custom buffer MV. Delegates to CleanupHandler."""
-        return self._cleanup_handler.create_custom_buffer_view_sql(
-            schema=schema, name=name, geom_key_name=geom_key_name,
-            where_clause_fields_arr=where_clause_fields_arr,
-            last_subset_id=last_subset_id, sql_subset_string=sql_subset_string,
-            postgresql_source_geom=self.postgresql_source_geom,
-            has_to_reproject_source_layer=self.has_to_reproject_source_layer,
-            source_layer_crs_authid=self.source_layer_crs_authid,
-            task_parameters=self.task_parameters,
-            param_buffer_segments=self.param_buffer_segments,
-            param_source_schema=self.param_source_schema,
-            param_source_table=self.param_source_table,
-            primary_key_name=self.primary_key_name,
-            source_layer=self.source_layer,
-            param_buffer=self.param_buffer,
-            where_clause=self.where_clause,
+        """Create SQL for custom buffer MV. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.create_custom_buffer_view_sql(
+            schema, name, geom_key_name, where_clause_fields_arr, last_subset_id, sql_subset_string
         )
 
     def _ensure_temp_schema_exists(self, connexion, schema_name):
-        """Ensure temp schema exists in PostgreSQL. Delegates to CleanupHandler."""
-        result = self._cleanup_handler.ensure_temp_schema_exists(connexion, schema_name)
-        if result == 'public' and schema_name != 'public':
-            self._last_schema_error = f"Using 'public' schema as fallback (could not create '{schema_name}')"
-        return result
+        """Ensure temp schema exists. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.ensure_temp_schema_exists(connexion, schema_name)
 
     def _get_session_prefixed_name(self, base_name: str) -> str:
-        """Generate a session-unique MV name. Delegates to CleanupHandler."""
-        return self._cleanup_handler.get_session_prefixed_name(base_name, self.session_id)
+        """Generate session-unique MV name. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.get_session_prefixed_name(base_name)
 
     def _cleanup_session_materialized_views(self, connexion: Any, schema_name: str) -> Any:
-        """Clean up session MVs. Delegates to CleanupHandler."""
-        return self._cleanup_handler.cleanup_session_materialized_views(
-            connexion, schema_name, self.session_id,
-            pg_executor=pg_executor, pg_executor_available=PG_EXECUTOR_AVAILABLE,
-        )
+        """Clean up session MVs. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.cleanup_session_materialized_views(connexion, schema_name)
 
     def _cleanup_orphaned_materialized_views(self, connexion: Any, schema_name: str, max_age_hours: int = 24) -> Any:
-        """Clean up orphaned MVs. Delegates to CleanupHandler."""
-        return self._cleanup_handler.cleanup_orphaned_materialized_views(
-            connexion, schema_name, self.session_id, max_age_hours
-        )
+        """Clean up orphaned MVs. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.cleanup_orphaned_materialized_views(connexion, schema_name, max_age_hours)
 
     def _execute_postgresql_commands(self, connexion: Any, commands: List[str]) -> bool:
-        """Execute PostgreSQL commands with reconnection. Delegates to CleanupHandler."""
-        return self._cleanup_handler.execute_postgresql_commands(
-            connexion, commands,
-            source_layer=self.source_layer,
-            psycopg2_module=psycopg2,
-            get_datasource_connexion_fn=get_datasource_connexion_from_layer,
-        )
+        """Execute PostgreSQL commands. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.execute_postgresql_commands(connexion, commands)
 
     def _ensure_source_table_stats(self, connexion: Any, schema: str, table: str, geom_field: str) -> bool:
-        """Ensure PostgreSQL statistics exist. Delegates to CleanupHandler."""
-        return self._cleanup_handler.ensure_source_table_stats(connexion, schema, table, geom_field)
+        """Ensure PostgreSQL statistics exist. Delegates to MaterializedViewHandler."""
+        return self._mv_handler.ensure_source_table_stats(connexion, schema, table, geom_field)
 
     def _insert_subset_history(self, cur, conn, layer, sql_subset_string, seq_order):
         """
@@ -3865,16 +3462,8 @@ class FilterEngineTask(QgsTask):
             logger.debug(f"Final canvas refresh skipped: {e}")
 
     def _cleanup_postgresql_materialized_views(self):
-        """Cleanup PostgreSQL materialized views. Delegates to CleanupHandler."""
-        self._cleanup_handler.cleanup_postgresql_materialized_views(
-            postgresql_available=POSTGRESQL_AVAILABLE,
-            source_provider_type=self.param_source_provider_type,
-            source_layer=getattr(self, 'source_layer', None),
-            task_parameters=self.task_parameters,
-            param_all_layers=getattr(self, 'param_all_layers', None),
-            get_connection_fn=self._get_valid_postgresql_connection,
-            current_mv_schema=getattr(self, 'current_materialized_view_schema', 'filtermate_temp'),
-        )
+        """Cleanup PostgreSQL materialized views. Delegates to MaterializedViewHandler."""
+        self._mv_handler.cleanup_postgresql_materialized_views()
 
     def cancel(self) -> None:
         """Cancel the task and cleanup all resources.
