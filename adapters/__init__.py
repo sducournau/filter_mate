@@ -10,7 +10,7 @@ Submodules:
     - repositories: Data persistence adapters
     - app_bridge: Bridge for legacy FilterMateApp integration
 
-For backward compatibility imports, see adapters.compat module.
+Follows hexagonal architecture pattern.
 """
 
 # Re-export key components for convenience
