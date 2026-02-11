@@ -338,12 +338,12 @@ class GeometryHandler:
             return geometry
 
         try:
-            adapter = self._backend_services.get_geometry_preparation_adapter()
-            if adapter is None:
+            AdapterClass = self._backend_services.get_geometry_preparation_adapter()
+            if AdapterClass is None:
                 logger.warning("GeometryPreparationAdapter not available, returning original geometry")
                 return geometry
 
-            result = adapter.simplify_geometry_adaptive(
+            result = AdapterClass().simplify_geometry_adaptive(
                 geometry=geometry,
                 max_wkt_length=max_wkt_length,
                 crs_authid=crs_authid,
