@@ -58,6 +58,13 @@ BUFFER_SEGMENTS_DEFAULT = 5
 HIGH_COMPLEXITY_VERTICES = 50
 VERY_HIGH_COMPLEXITY_VERTICES = 200
 
+# Large WKT thresholds (chars)
+LARGE_WKT_THRESHOLD = 100000
+VERY_LARGE_WKT_THRESHOLD = 500000
+
+# Flag to indicate this module is available and functional
+AUTO_OPTIMIZER_AVAILABLE = True
+
 
 class OptimizationType(Enum):
     """Types of automatic optimizations that can be applied."""
@@ -232,6 +239,126 @@ class OptimizerConfig:
                 CENTROID_AUTO_THRESHOLD_LOCAL
             ),
         )
+
+
+class LayerAnalyzer:
+    """
+    Analyzes layers to determine optimal filtering strategies.
+
+    Accepts both QgsVectorLayer (QGIS) and LayerInfo (domain) objects.
+    Provides caching to avoid redundant analysis.
+    """
+
+    _analysis_cache: Dict[str, Tuple[float, LayerAnalysis]] = {}
+    _cache_ttl: float = 300.0  # 5 minutes
+
+    def analyze_layer(
+        self,
+        layer,
+        force_refresh: bool = False
+    ) -> Optional[LayerAnalysis]:
+        """
+        Analyze a layer for optimization opportunities.
+
+        Args:
+            layer: QgsVectorLayer or LayerInfo
+            force_refresh: Bypass cache
+
+        Returns:
+            LayerAnalysis or None on error
+        """
+        if isinstance(layer, LayerInfo):
+            return LayerAnalysis.from_layer_info(layer)
+
+        # QgsVectorLayer path
+        try:
+            layer_id = layer.id()
+            current_time = time.time()
+
+            if not force_refresh and layer_id in self._analysis_cache:
+                cached_time, cached = self._analysis_cache[layer_id]
+                if current_time - cached_time < self._cache_ttl:
+                    return cached
+
+            layer_info = self._qgs_layer_to_info(layer)
+            analysis = LayerAnalysis.from_layer_info(layer_info)
+
+            # Estimate complexity via sampling if possible
+            avg_vertices, complexity = self._estimate_complexity(layer)
+            analysis.avg_vertices_per_feature = avg_vertices
+            analysis.estimated_complexity = complexity
+            analysis.is_complex = avg_vertices > HIGH_COMPLEXITY_VERTICES
+
+            self._analysis_cache[layer_id] = (current_time, analysis)
+            return analysis
+        except Exception as e:
+            logger.debug(f"Layer analysis failed: {e}")
+            return None
+
+    @staticmethod
+    def _qgs_layer_to_info(layer) -> LayerInfo:
+        """Convert QgsVectorLayer to LayerInfo domain object."""
+        provider = layer.providerType()
+        provider_map = {
+            'postgres': ProviderType.POSTGRESQL,
+            'spatialite': ProviderType.SPATIALITE,
+            'ogr': ProviderType.OGR,
+            'memory': ProviderType.MEMORY,
+        }
+        provider_type = provider_map.get(provider, ProviderType.OGR)
+
+        geom_type_map = {0: GeometryType.POINT, 1: GeometryType.LINE, 2: GeometryType.POLYGON}
+        geometry_type = geom_type_map.get(layer.geometryType(), GeometryType.UNKNOWN)
+
+        feature_count = max(0, layer.featureCount())
+
+        has_spatial_index = False
+        try:
+            from qgis.core import QgsFeatureSource
+            has_spatial_index = layer.hasSpatialIndex() == QgsFeatureSource.SpatialIndexPresent
+        except (RuntimeError, AttributeError, ImportError):
+            pass
+
+        return LayerInfo.create(
+            layer_id=layer.id(),
+            name=layer.name(),
+            provider_type=provider_type,
+            geometry_type=geometry_type,
+            feature_count=feature_count,
+            has_spatial_index=has_spatial_index,
+        )
+
+    @staticmethod
+    def _estimate_complexity(layer, sample_size: int = 50) -> Tuple[float, float]:
+        """Estimate geometry complexity by sampling features."""
+        feature_count = layer.featureCount()
+        if feature_count == 0:
+            return (0.0, 1.0)
+        try:
+            from qgis.core import QgsFeatureRequest
+            request = QgsFeatureRequest()
+            request.setLimit(min(sample_size, feature_count))
+            total_vertices = 0
+            sampled = 0
+            for feat in layer.getFeatures(request):
+                geom = feat.geometry()
+                if geom and not geom.isEmpty():
+                    total_vertices += geom.asWkt().count(',') + 1
+                    sampled += 1
+            if sampled > 0:
+                avg = total_vertices / sampled
+                return (avg, max(1.0, avg / 10.0))
+        except Exception as e:
+            logger.debug(f"Complexity estimation failed: {e}")
+        return (10.0, 1.0)
+
+    @classmethod
+    def clear_cache(cls, layer_id: Optional[str] = None):
+        """Clear analysis cache."""
+        if layer_id:
+            cls._analysis_cache.pop(layer_id, None)
+        else:
+            cls._analysis_cache.clear()
 
 
 class AutoOptimizer:
@@ -676,3 +803,45 @@ def recommend_optimizations(
         attribute_filter=attribute_filter
     )
     return plan.recommendations
+
+
+def get_auto_optimization_config() -> Dict[str, Any]:
+    """
+    Load auto-optimization configuration from ENV_VARS.
+
+    Returns:
+        Dictionary with configuration values
+    """
+    defaults = {
+        'enabled': True,
+        'auto_centroid_for_distant': True,
+        'centroid_threshold_distant': 5000,
+        'centroid_threshold_local': 50000,
+        'auto_simplify_geometry': False,
+        'auto_strategy_selection': True,
+        'show_optimization_hints': True,
+        'auto_simplify_before_buffer': True,
+        'auto_simplify_after_buffer': True,
+        'buffer_simplify_after_tolerance': 0.5,
+    }
+    try:
+        from ...config.config import ENV_VARS
+        config_data = ENV_VARS.get('CONFIG_DATA', {})
+        auto_opt = config_data.get('APP', {}).get('OPTIONS', {}).get('AUTO_OPTIMIZATION', {})
+        if not auto_opt:
+            return defaults
+
+        def get_value(config_entry, default):
+            if isinstance(config_entry, dict):
+                return config_entry.get('value', default)
+            return config_entry
+
+        return {k: get_value(auto_opt.get(k, v), v) for k, v in defaults.items()}
+    except Exception as e:
+        logger.debug(f"Could not load auto-optimization config: {e}")
+        return defaults
+
+
+def analyze_layer(layer, force_refresh: bool = False) -> Optional[LayerAnalysis]:
+    """Convenience function to analyze a layer."""
+    return LayerAnalyzer().analyze_layer(layer, force_refresh)

@@ -70,8 +70,8 @@ from .multi_step_filter import (  # noqa: F401
     get_multi_step_optimizer
 )
 
-# Auto Optimizer (v4.1.0 migrated from before_migration)
-from .auto_optimizer import (  # noqa: F401
+# Auto Optimizer (unified in core.services.auto_optimizer)
+from ..services.auto_optimizer import (  # noqa: F401
     AUTO_OPTIMIZER_AVAILABLE,
     AutoOptimizer,
     LayerAnalyzer,
