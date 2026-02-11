@@ -27,6 +27,7 @@ logger = get_app_logger()
 from .ui.managers import (
     ConfigurationManager, DockwidgetSignalManager,
     OptimizationManager, ConfigModelManager, ComboboxPopulationManager,
+    ExportDialogManager,
 )
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
@@ -271,6 +272,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._config_model_manager = ConfigModelManager(self)
         # v5.0 P2-2 E3: Initialize combobox population manager
         self._combobox_population_manager = ComboboxPopulationManager(self)
+        # v5.0 P2-2 E4: Initialize export dialog manager
+        self._export_dialog_manager = ExportDialogManager(self)
         # FIX 2026-02-11: Register as active dockwidget for FeaturePickerWidget crash prevention
         global _active_dockwidget
         _active_dockwidget = self
@@ -5520,47 +5523,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             except Exception as e: logger.debug(f"Buffer validation delegation failed (using fallback): {e}")
         logger.warning("_update_buffer_validation: Controller delegation failed")
 
+    # v5.0 P2-2 E4: Export properties and widget value methods delegated to ExportDialogManager
     def set_exporting_properties(self):
-        """v3.1 Sprint 16: Set exporting widgets from project properties."""
-        if not self._is_ui_ready(): return
-
-        widgets_to_stop = [["EXPORTING", w] for w in ["HAS_LAYERS_TO_EXPORT", "HAS_PROJECTION_TO_EXPORT", "HAS_STYLES_TO_EXPORT",
-            "HAS_DATATYPE_TO_EXPORT", "LAYERS_TO_EXPORT", "PROJECTION_TO_EXPORT", "STYLES_TO_EXPORT", "DATATYPE_TO_EXPORT"]]
-
-        for wp in widgets_to_stop: self.manageSignal(wp, 'disconnect')
-
-        for group_key, properties_tuples in self.export_properties_tuples_dict.items():
-            group_state = self.widgets[properties_tuples[0][0].upper()][properties_tuples[0][1].upper()]["WIDGET"].isChecked()
-
-            if not group_state:
-                self.properties_group_state_reset_to_default(properties_tuples, group_key, group_state)
-            else:
-                self.properties_group_state_enabler(properties_tuples)
-                for prop_path in properties_tuples:
-                    key0, key1 = prop_path[0].upper(), prop_path[1].upper()
-                    if key0 not in self.widgets or key1 not in self.widgets.get(key0, {}):
-                        continue
-                    w = self.widgets[key0][key1]
-                    val = self.project_props.get(key0, {}).get(key1)
-                    self._set_widget_value(w, val, prop_path[1])
-
-        for wp in widgets_to_stop: self.manageSignal(wp, 'connect')
-        self.CONFIG_DATA["CURRENT_PROJECT"]['EXPORTING'] = self.project_props['EXPORTING']
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.set_exporting_properties()
 
     def _set_widget_value(self, widget_data, value, prop_name=None):
-        """v3.1 Sprint 16: Set widget value by type."""
-        w, wt = widget_data["WIDGET"], widget_data["TYPE"]
-        if wt in ('PushButton', 'CheckBox'): w.setChecked(value)
-        elif wt == 'CheckableComboBox': w.setCheckedItems(value)
-        elif wt == 'ComboBox': w.setCurrentIndex(w.findText(value))
-        elif wt == 'QgsDoubleSpinBox': w.setValue(value)
-        elif wt == 'LineEdit':
-            if not value and prop_name == 'output_folder_to_export': self.reset_export_output_path()
-            elif not value and prop_name == 'zip_to_export': self.reset_export_output_pathzip()
-            else: w.setText(value)
-        elif wt == 'QgsProjectionSelectionWidget':
-            crs = QgsCoordinateReferenceSystem(value)
-            if crs.isValid(): w.setCrs(crs)
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager._set_widget_value(widget_data, value, prop_name)
 
     def properties_group_state_enabler(self, tuple_group):
         """v4.0 S18: Enable widgets in a property group."""
@@ -5898,67 +5868,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 widget = item.widget()
                 widget.setEnabled(enabled)
 
+    # v5.0 P2-2 E4: Export dialog methods delegated to ExportDialogManager
     def dialog_export_output_path(self):
-        """v3.1 Sprint 12: Simplified - dialog for export output path."""
-        if not self._is_ui_ready(): return
-        path = ''
-        state = self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].isChecked()
-        datatype = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"].currentText() if self.widgets["EXPORTING"]["HAS_DATATYPE_TO_EXPORT"]["WIDGET"].isChecked() else ''
-
-        if state:
-            if self.widgets["EXPORTING"]["HAS_LAYERS_TO_EXPORT"]["WIDGET"].isChecked():
-                layers = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"].checkedItems()
-                if len(layers) == 1 and datatype:
-                    layer = layers[0]
-                    match = re.search('.* ', layer)
-                    layer = match.group() if match else layer
-                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '_' + layer.strip()), f'*.{datatype}')[0])
-                elif datatype.upper() == 'GPKG':
-                    path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your layer to a file', os.path.join(self.current_project_path, self.output_name + '.gpkg'), '*.gpkg')[0])
-                else:
-                    path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
-            else:
-                path = str(QtWidgets.QFileDialog.getExistingDirectory(self, 'Select a folder where to export your layers', self.current_project_path))
-
-            if path:
-                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setText(os.path.normcase(path))
-            else:
-                state = False
-                self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-        else:
-            self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear()
-
-        self.project_property_changed('has_output_folder_to_export', state)
-        self.project_property_changed('output_folder_to_export', path)
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.dialog_export_output_path()
 
     def reset_export_output_path(self):
-        """v4.0 S18: Reset export output path."""
-        if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].text(): return
-        self.widgets["EXPORTING"]["OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_OUTPUT_FOLDER_TO_EXPORT"]["WIDGET"].setChecked(False)
-        self.project_property_changed('has_output_folder_to_export', False); self.project_property_changed('output_folder_to_export', '')
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.reset_export_output_path()
 
     def dialog_export_output_pathzip(self):
-        """v3.1 Sprint 12: Simplified - dialog for zip export path."""
-        if not self._is_ui_ready(): return
-        path = ''
-        state = self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].isChecked()
-        if state:
-            path = str(QtWidgets.QFileDialog.getSaveFileName(self, 'Save your exported data to a zip file', os.path.join(self.current_project_path, self.output_name), '*.zip')[0])
-            if path:
-                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].setText(os.path.normcase(path))
-            else:
-                state = False
-                self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-        else:
-            self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear()
-        self.project_property_changed('has_zip_to_export', state)
-        self.project_property_changed('zip_to_export', path)
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.dialog_export_output_pathzip()
 
     def reset_export_output_pathzip(self):
-        """v4.0 S18: Reset zip export path."""
-        if not self.widgets_initialized or not self.has_loaded_layers or self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].text(): return
-        self.widgets["EXPORTING"]["ZIP_TO_EXPORT"]["WIDGET"].clear(); self.widgets["EXPORTING"]["HAS_ZIP_TO_EXPORT"]["WIDGET"].setChecked(False)
-        self.project_property_changed('has_zip_to_export', False); self.project_property_changed('zip_to_export', '')
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.reset_export_output_pathzip()
 
     def filtering_auto_current_layer_changed(self, state=None):
         """
@@ -6494,15 +6419,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             pass
 
     def _update_export_buttons_state(self):
-        """
-        v4.0 Sprint 17: Update export buttons based on layer selection.
-
-        NOTE: pushButton_checkable_exporting_output_folder and pushButton_checkable_exporting_zip
-        are ALWAYS enabled (can be checked/unchecked anytime). They are excluded from this logic.
-        Only their associated widgets (lineEdit, checkBox) should be controlled by toggle state.
-        """
-        # These buttons are always enabled - no state update needed here
-        # The toggle state controls their associated widgets, not the buttons themselves
+        """v5.0 P2-2: Delegated to ExportDialogManager."""
+        self._export_dialog_manager.update_export_buttons_state()
 
     def _update_expression_tooltip(self, expr_widget):
         """v4.0 Sprint 17: Update tooltip for expression widget."""

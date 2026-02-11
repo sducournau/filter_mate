@@ -15,6 +15,7 @@ from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChang
 from .optimization_manager import OptimizationManager  # noqa: F401
 from .config_model_manager import ConfigModelManager  # noqa: F401
 from .combobox_population_manager import ComboboxPopulationManager  # noqa: F401
+from .export_dialog_manager import ExportDialogManager  # noqa: F401
 
 __all__ = [
     'ConfigurationManager',
@@ -23,4 +24,5 @@ __all__ = [
     'OptimizationManager',
     'ConfigModelManager',
     'ComboboxPopulationManager',
+    'ExportDialogManager',
 ]
