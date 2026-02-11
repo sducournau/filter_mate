@@ -958,18 +958,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             from qgis.PyQt.QtWidgets import QPushButton, QSizePolicy
             from qgis.PyQt.QtCore import QSize
-            from .ui.config import UIConfig, DisplayProfile
+            from .ui.config import UIConfig
             key_cfg = UIConfig.get_config('key_button') or {}
-            profile = UIConfig.get_profile()
-            if profile == DisplayProfile.COMPACT:
-                min_size, max_size, icon_size = 26, 32, 16
-                mode_name = 'compact'
-            elif profile == DisplayProfile.HIDPI:
-                min_size, max_size, icon_size = 36, 44, 24
-                mode_name = 'hidpi'
-            else:
-                min_size, max_size, icon_size = key_cfg.get('min_size', 30), key_cfg.get('max_size', 36), key_cfg.get('icon_size', 18)
-                mode_name = 'normal'
+            min_size = key_cfg.get('min_size', 30)
+            max_size = key_cfg.get('max_size', 36)
+            icon_size = key_cfg.get('icon_size', 18)
+            mode_name = (UIConfig.get_active_profile() if hasattr(UIConfig, 'get_active_profile') else 'normal') or 'normal'
             buttons = ['pushButton_exploring_identify', 'pushButton_exploring_zoom', 'pushButton_checkable_exploring_selecting',
                        'pushButton_checkable_exploring_tracking', 'pushButton_checkable_exploring_linking_widgets',
                        'pushButton_exploring_reset_layer_properties', 'pushButton_checkable_filtering_auto_current_layer',

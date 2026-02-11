@@ -52,32 +52,21 @@ class ButtonStyler(StylerBase):
         styler.on_theme_changed('dark')
     """
 
-    # Button height by profile
+    # Deprecated: use UIConfig.get_button_height() / UIConfig.get_icon_size() instead
     BUTTON_HEIGHTS = {
-        'compact': {
-            'standard': 24,
-            'action': 28,
-            'tool': 22,
-        },
-        'normal': {
-            'standard': 28,
-            'action': 36,
-            'tool': 26,
-        }
+        'compact': {'standard': 24, 'action': 28, 'tool': 22},
+        'normal': {'standard': 28, 'action': 36, 'tool': 26},
+    }
+    ICON_SIZES = {
+        'compact': {'standard': 16, 'action': 20, 'tool': 14},
+        'normal': {'standard': 20, 'action': 24, 'tool': 18},
     }
 
-    # Icon sizes by profile
-    ICON_SIZES = {
-        'compact': {
-            'standard': 16,
-            'action': 20,
-            'tool': 14,
-        },
-        'normal': {
-            'standard': 20,
-            'action': 24,
-            'tool': 18,
-        }
+    # Maps local button type names to UIConfig button_type keys
+    _UICONFIG_TYPE_MAP = {
+        'standard': 'button',
+        'action': 'action_button',
+        'tool': 'tool_button',
     }
 
     def __init__(self, dockwidget: 'FilterMateDockWidget') -> None:
@@ -113,6 +102,24 @@ class ButtonStyler(StylerBase):
         if UIConfig:
             return UIConfig.get_active_profile() or 'normal'
         return self._profile
+
+    def _get_height(self, button_type: str = 'standard') -> int:
+        """Get button height from UIConfig, falling back to class dicts."""
+        UIConfig = self._get_ui_config()
+        uiconfig_type = self._UICONFIG_TYPE_MAP.get(button_type, 'button')
+        if UIConfig and hasattr(UIConfig, 'get_button_height'):
+            return UIConfig.get_button_height(uiconfig_type)
+        profile = self._get_profile()
+        return self.BUTTON_HEIGHTS.get(profile, self.BUTTON_HEIGHTS['normal']).get(button_type, 28)
+
+    def _get_icon(self, button_type: str = 'standard') -> int:
+        """Get icon size from UIConfig, falling back to class dicts."""
+        UIConfig = self._get_ui_config()
+        uiconfig_type = self._UICONFIG_TYPE_MAP.get(button_type, 'button')
+        if UIConfig and hasattr(UIConfig, 'get_icon_size'):
+            return UIConfig.get_icon_size(uiconfig_type)
+        profile = self._get_profile()
+        return self.ICON_SIZES.get(profile, self.ICON_SIZES['normal']).get(button_type, 18)
 
     def setup(self) -> None:
         """
@@ -187,9 +194,6 @@ class ButtonStyler(StylerBase):
 
         Extracted from filter_mate_dockwidget.py lines 1102-1153.
         """
-        profile = self._get_profile()
-        heights = self.BUTTON_HEIGHTS.get(profile, self.BUTTON_HEIGHTS['normal'])
-
         # Find all QPushButtons
         for button in self.dockwidget.findChildren(QPushButton):
             # Set cursor to pointing hand
@@ -203,14 +207,14 @@ class ButtonStyler(StylerBase):
 
             # Set minimum height based on button type
             if self._is_action_button(button):
-                button.setMinimumHeight(heights['action'])
+                button.setMinimumHeight(self._get_height('action'))
             else:
-                button.setMinimumHeight(heights['standard'])
+                button.setMinimumHeight(self._get_height('standard'))
 
         # Configure QToolButtons similarly
         for button in self.dockwidget.findChildren(QToolButton):
             button.setCursor(QCursor(Qt.PointingHandCursor))
-            button.setMinimumHeight(heights['tool'])
+            button.setMinimumHeight(self._get_height('tool'))
 
     def _harmonize_checkable_pushbuttons(self) -> None:
         """
@@ -223,13 +227,12 @@ class ButtonStyler(StylerBase):
 
         Extracted from filter_mate_dockwidget.py lines 1041-1100.
         """
-        profile = self._get_profile()
-        icon_sizes = self.ICON_SIZES.get(profile, self.ICON_SIZES['normal'])
+        icon_size = self._get_icon('standard')
 
         for button in self.dockwidget.findChildren(QPushButton):
             if button.isCheckable():
                 # Set icon size
-                button.setIconSize(QSize(icon_sizes['standard'], icon_sizes['standard']))
+                button.setIconSize(QSize(icon_size, icon_size))
 
                 # Ensure flat appearance when not checked
                 if not button.isChecked():
@@ -318,12 +321,9 @@ class ButtonStyler(StylerBase):
         Args:
             button: Action button to style
         """
-        profile = self._get_profile()
-        heights = self.BUTTON_HEIGHTS.get(profile, self.BUTTON_HEIGHTS['normal'])
-        icon_sizes = self.ICON_SIZES.get(profile, self.ICON_SIZES['normal'])
-
-        button.setMinimumHeight(heights['action'])
-        button.setIconSize(QSize(icon_sizes['action'], icon_sizes['action']))
+        button.setMinimumHeight(self._get_height('action'))
+        action_icon = self._get_icon('action')
+        button.setIconSize(QSize(action_icon, action_icon))
 
         # Apply theme-specific styling
         if self.is_dark_theme():
