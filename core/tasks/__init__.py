@@ -67,6 +67,9 @@ from .initialization_handler import InitializationHandler  # noqa: F401
 from .source_geometry_preparer import SourceGeometryPreparer  # noqa: F401
 from .subset_management_handler import SubsetManagementHandler  # noqa: F401
 
+# Phase 3 C1 US-C1.3.2: Filtering orchestration handler (February 2026)
+from .filtering_orchestrator import FilteringOrchestrator  # noqa: F401
+
 __all__ = [
     # Main filter task
     'FilterEngineTask',
@@ -94,4 +97,6 @@ __all__ = [
     'InitializationHandler',
     'SourceGeometryPreparer',
     'SubsetManagementHandler',
+    # Phase 3 C1 US-C1.3.2: Filtering orchestration handler
+    'FilteringOrchestrator',
 ]

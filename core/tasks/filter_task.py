@@ -134,6 +134,7 @@ from .geometry_handler import GeometryHandler
 from .initialization_handler import InitializationHandler
 from .source_geometry_preparer import SourceGeometryPreparer
 from .subset_management_handler import SubsetManagementHandler
+from .filtering_orchestrator import FilteringOrchestrator
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -429,6 +430,9 @@ class FilterEngineTask(QgsTask):
         self._init_handler = InitializationHandler()
         self._source_geom_preparer = SourceGeometryPreparer()
         self._subset_handler = SubsetManagementHandler()
+
+        # Phase 3 C1 US-C1.3.2: Filtering orchestration handler
+        self._filtering_orchestrator = FilteringOrchestrator()
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
@@ -1697,347 +1701,49 @@ class FilterEngineTask(QgsTask):
         return result['success']
 
     def _filter_all_layers_with_progress(self):
-        """
-        Iterate through all layers and apply filtering with progress tracking.
-
-        Supports parallel execution when enabled in configuration.
-        Updates task description to show current layer being processed.
-        Progress is visible in QGIS task manager panel.
-
-        Returns:
-            bool: True if all layers processed (some may fail), False if canceled
-        """
-        # Import QgsMessageLog for visible diagnostic logs
-        from qgis.core import QgsMessageLog, Qgis as QgisLevel
-
-        # DIAGNOSTIC: Log all layers that will be filtered
-        logger.info("=" * 70)
-        logger.info("📋 LISTE DES COUCHES À FILTRER GÉOMÉTRIQUEMENT")
-        logger.info("=" * 70)
-        total_layers = 0
-        layer_names_list = []
-        for provider_type in self.layers:
-            layer_list = self.layers[provider_type]
-            logger.debug(f"  Provider: {provider_type} → {len(layer_list)} couche(s)")
-            for idx, (layer, layer_props) in enumerate(layer_list, 1):
-                logger.info(f"    {idx}. {layer.name()} (id={layer.id()[:8]}...)")
-                layer_names_list.append(layer.name())
-            total_layers += len(layer_list)
-        logger.info(f"  TOTAL: {total_layers} couches à filtrer")
-        logger.info("=" * 70)
-
-        # Log to QGIS message panel for visibility
-        QgsMessageLog.logMessage(
-            f"🔍 Filtering {total_layers} distant layers: {', '.join(layer_names_list[:5])}{'...' if len(layer_names_list) > 5 else ''}",
-            "FilterMate", QgisLevel.Info
+        """Iterate through all layers with progress tracking. Delegates to FilteringOrchestrator."""
+        result = self._filtering_orchestrator.filter_all_layers_with_progress(
+            layers=self.layers,
+            layers_count=self.layers_count,
+            task_parameters=self.task_parameters,
+            execute_geometric_filtering_callback=self.execute_geometric_filtering,
+            try_v3_multi_step_filter_callback=self._try_v3_multi_step_filter,
+            is_canceled_callback=self.isCanceled,
+            set_progress_callback=self.setProgress,
+            set_description_callback=self.setDescription,
         )
-
-        # =====================================================================
-        # MIG-023: STRANGLER FIG PATTERN - Try v3 multi-step first
-        # =====================================================================
-        v3_result = self._try_v3_multi_step_filter(self.layers)
-
-        if v3_result is True:
-            logger.info("✅ V3 multi-step completed successfully - skipping legacy code")
-            return True
-        elif v3_result is False:
-            logger.error("❌ V3 multi-step failed - falling back to legacy")
-            # Continue with legacy code below
-        else:
-            logger.debug("V3 multi-step not applicable - using legacy code")
-        # =====================================================================
-
-        # Check if parallel filtering is enabled
-        parallel_config = self.task_parameters.get('config', {}).get('APP', {}).get('OPTIONS', {}).get('PARALLEL_FILTERING', {})
-        parallel_enabled = parallel_config.get('enabled', {}).get('value', True)
-        min_layers_for_parallel = parallel_config.get('min_layers', {}).get('value', 2)
-        max_workers = parallel_config.get('max_workers', {}).get('value', 0)
-
-        # Use parallel execution if enabled and enough layers
-        if parallel_enabled and total_layers >= min_layers_for_parallel:
-            result = self._filter_all_layers_parallel(max_workers)
-            return result
-        else:
-            result = self._filter_all_layers_sequential()
-            return result
-
-    def _filter_all_layers_parallel(self, max_workers: int = 0):
-        """Filter all layers using parallel execution."""
-        logger.info("🚀 Using PARALLEL filtering mode")
-
-        # Prepare flat list of (layer, layer_props) tuples with provider_type stored in layer_props
-        all_layers = []
-        for provider_type in self.layers:
-            for layer, layer_props in self.layers[provider_type]:
-                # Store provider_type in layer_props for the filter function
-                layer_props_with_provider = layer_props.copy()
-                layer_props_with_provider['_effective_provider_type'] = provider_type
-                all_layers.append((layer, layer_props_with_provider))
-
-        logger.debug(f"Prepared {len(all_layers)} layers for parallel filtering")
-
-        # Create executor with config
-        config = ParallelConfig(
-            max_workers=max_workers if max_workers > 0 else None,
-            min_layers_for_parallel=1  # Already checked threshold
-        )
-        executor = ParallelFilterExecutor(config.max_workers)
-
-        # Execute parallel filtering with required task_parameters
-        # Include filtering params for OGR detection (thread safety)
-        task_parameters = {
-            'task': self,
-            'filter_type': getattr(self, 'filter_type', 'geometric'),
-            'filtering': {
-                'filter_type': getattr(self, 'filter_type', 'geometric')
-            }
-        }
-        # Pass cancel_check callback to executor
-        # This allows parallel workers to check if task was canceled and stop immediately
-        results = executor.filter_layers_parallel(
-            all_layers,
-            self.execute_geometric_filtering,
-            task_parameters,
-            cancel_check=self.isCanceled
-        )
-
-        # Process results and update progress
-        successful_filters = 0
-        failed_filters = 0
-        failed_layer_names = []  # Track names of failed layers for error message
-
-        logger.debug(f"_filter_all_layers_parallel: all_layers count={len(all_layers)}, results count={len(results)}")
-        for idx, res in enumerate(results):
-            logger.debug(f"  Result[{idx}]: {res.layer_name} → success={res.success}, error={res.error_message}")
-
-        for i, (layer_tuple, result) in enumerate(zip(all_layers, results), 1):
-            layer, layer_props = layer_tuple
-            self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer.name()}")
-
-            if result.success:
-                successful_filters += 1
-                logger.info(f"✅ {layer.name()} has been filtered → {layer.featureCount()} features")
-            else:
-                failed_filters += 1
-                failed_layer_names.append(layer.name())
-                error_msg = result.error_message if hasattr(result, 'error_message') else getattr(result, 'error', 'Unknown error')
-                logger.error(f"❌ {layer.name()} - errors occurred during filtering: {error_msg}")
-
-            progress_percent = int((i / self.layers_count) * 100)
-            self.setProgress(progress_percent)
-
-            if self.isCanceled():
-                logger.warning(f"⚠️ Filtering canceled at layer {i}/{self.layers_count}")
-                return False
-
-        # DIAGNOSTIC: Summary of filtering results
-        self._log_filtering_summary(successful_filters, failed_filters, failed_layer_names)
-
-        # CRITICAL FIX: Return False if ANY filter failed to alert user
-        # Store failed layer names for error message in finished()
-        if failed_filters > 0:
-            self._failed_layer_names = failed_layer_names
-            # Set self.message for proper error display in finished()
-            layer_list = ', '.join(failed_layer_names[:3])
-            suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
-            self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
-            logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter (parallel mode) - returning False")
-            logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
-            return False
-        return True
-
-    def _filter_all_layers_sequential(self):
-        """
-        Filter all layers sequentially (original behavior).
-
-        Returns:
-            bool: True if all layers processed successfully
-        """
-        logger.info("🔄 Using SEQUENTIAL filtering mode")
-
-        i = 1
-        successful_filters = 0
-        failed_filters = 0
-        failed_layer_names = []  # Track names of failed layers for error message
-
-        logger.debug(f"Processing providers: {list(self.layers.keys())}")
-        for provider_type in self.layers:
-            logger.debug(f"Provider '{provider_type}' has {len(self.layers[provider_type])} layers")
-
-        for layer_provider_type in self.layers:
-            for layer, layer_props in self.layers[layer_provider_type]:
-                # Validate layer before any operations
-                # This prevents crashes when layer becomes invalid during sequential filtering
-                try:
-                    if not is_valid_layer(layer):
-                        logger.warning(f"⚠️ Layer {i}/{self.layers_count} is invalid - skipping")
-                        failed_filters += 1
-                        failed_layer_names.append(f"Layer_{i} (invalid)")
-                        i += 1
-                        continue
-
-                    layer_name = layer.name()
-                    layer_feature_count = layer.featureCount()
-                except (RuntimeError, AttributeError) as access_error:
-                    logger.error(f"❌ Layer {i}/{self.layers_count} access error (C++ object deleted): {access_error}")
-                    failed_filters += 1
-                    failed_layer_names.append(f"Layer_{i} (deleted)")
-                    i += 1
-                    continue
-
-                # Update task description with current progress
-                self.setDescription(f"Filtering layer {i}/{self.layers_count}: {layer_name}")
-
-                logger.info("")
-                logger.debug(f"🔄 FILTRAGE {i}/{self.layers_count}: {layer_name} ({layer_provider_type})")
-                logger.info(f"   Features avant filtre: {layer_feature_count}")
-
-                result = self.execute_geometric_filtering(layer_provider_type, layer, layer_props)
-
-                # Log result VISIBLY for debugging
-                logger.info(f"   → execute_geometric_filtering RESULT: {result}")
-
-                if result:
-                    successful_filters += 1
-                    try:
-                        final_count = layer.featureCount()
-                        logger.info(f"✅ {layer_name} has been filtered → {final_count} features")
-                    except (RuntimeError, AttributeError):
-                        logger.info(f"✅ {layer_name} has been filtered (count unavailable)")
-                else:
-                    failed_filters += 1
-                    failed_layer_names.append(layer_name)
-                    logger.error(f"❌ {layer_name} - errors occurred during filtering")
-
-                i += 1
-                progress_percent = int((i / self.layers_count) * 100)
-                self.setProgress(progress_percent)
-
-                if self.isCanceled():
-                    logger.warning(f"⚠️ Filtering canceled at layer {i}/{self.layers_count}")
-                    return False
-
-        # DIAGNOSTIC: Summary of filtering results
-        self._log_filtering_summary(successful_filters, failed_filters, failed_layer_names)
-
-        # CRITICAL FIX: Return False if ANY filter failed to alert user
-        # Store failed layer names for error message in finished()
-        if failed_filters > 0:
-            self._failed_layer_names = failed_layer_names
-            # Set self.message for proper error display in finished()
-            layer_list = ', '.join(failed_layer_names[:3])
-            suffix = f' (+{len(failed_layer_names) - 3} more)' if len(failed_layer_names) > 3 else ''
-            self.message = f"{failed_filters} layer(s) failed to filter: {layer_list}{suffix}"
-            logger.warning(f"⚠️ {failed_filters} layer(s) failed to filter - returning False")
-            logger.warning(f"   Failed layers: {', '.join(failed_layer_names[:5])}{'...' if len(failed_layer_names) > 5 else ''}")
-            return False
-        return True
+        if result.get('message'):
+            self.message = result['message']
+        if result.get('failed_layer_names'):
+            self._failed_layer_names = result['failed_layer_names']
+        return result.get('success', True)
 
     def _log_filtering_summary(self, successful_filters: int, failed_filters: int, failed_layer_names=None):
-        """Log summary of filtering results. Delegated to core.optimization.logging_utils."""
-        from ..optimization.logging_utils import log_filtering_summary
-        log_filtering_summary(
+        """Log summary of filtering results. Delegates to FilteringOrchestrator."""
+        self._filtering_orchestrator._log_filtering_summary(
             layers_count=self.layers_count, successful_filters=successful_filters,
-            failed_filters=failed_filters, failed_layer_names=failed_layer_names, log_to_qgis=True
+            failed_filters=failed_filters, failed_layer_names=failed_layer_names
         )
 
     def manage_distant_layers_geometric_filtering(self) -> bool:
-        """Filter distant layers using source layer geometries.
+        """Filter distant layers using source layer geometries. Delegates to FilteringOrchestrator."""
+        def _set_cached_feature_count(count):
+            self._cached_source_feature_count = count
 
-        Orchestrates the geometric filtering workflow:
-        1. Initialize buffer parameters and source subset
-        2. Create optimized filter chain MV for PostgreSQL (if applicable)
-        3. Prepare source geometries for each backend type
-        4. Execute filtering on all distant layers with progress tracking
-
-        Returns:
-            True if all distant layers were filtered successfully.
-
-        Note:
-            - Supports buffer expressions with MV optimization for large datasets
-            - Creates filter chain MV when multiple spatial filters are chained
-            - Handles provider-specific geometry preparation (PostgreSQL, Spatialite, OGR)
-        """
-        logger.info(f"🔍 manage_distant_layers_geometric_filtering: {self.source_layer.name()} (features: {self.source_layer.featureCount()})")
-        logger.info(f"  is_field_expression: {getattr(self, 'is_field_expression', None)}")
-        logger.info("=" * 60)
-
-        # DIAGNOSTIC COMPLET - ARCHITECTURE FIX 2026-01-16
-        logger.info("=" * 80)
-        logger.info("🔍 DIAGNOSTIC manage_distant_layers_geometric_filtering")
-        logger.info(f"  current_predicates available: {bool(getattr(self, 'current_predicates', None))}")
-        if hasattr(self, 'current_predicates') and self.current_predicates:
-            logger.info(f"  Active predicates: {list(self.current_predicates.keys())}")
-        else:
-            logger.warning("  ⚠️ current_predicates NOT yet initialized (may be set later)")
-        logger.info("=" * 80)
-
-        # CRITICAL: Initialize source subset and buffer parameters FIRST
-        # This sets self.param_buffer_value which is needed by prepare_*_source_geom()
-        self._initialize_source_subset_and_buffer()
-
-        # Calculate source_feature_count ONCE and store it for consistent threshold decisions
-        # This ensures _ensure_buffer_expression_mv_exists() and prepare_postgresql_source_geom()
-        # use the same value (featureCount can vary if subsetString changes between calls)
-        self._cached_source_feature_count = self.source_layer.featureCount() if self.source_layer else None
-        logger.info(f"  📊 Cached source_feature_count: {self._cached_source_feature_count}")
-
-        # Ensure buffer expression MV exists BEFORE prepare_geometries
-        # CRITICAL - Only call MV creation if feature count exceeds threshold
-        # When using custom buffer expression with PostgreSQL, the MV must be created BEFORE
-        # prepare_postgresql_source_geom() generates the reference to it. Otherwise, the
-        # MV won't exist when distant layers try to use it for filtering.
-        # HOWEVER: For small datasets (<= 10000), inline buffer is used, so MV creation is skipped.
-        # This prevents freeze on 2nd filter when source layer is already filtered.
-        from ...adapters.backends.postgresql.filter_executor import BUFFER_EXPR_MV_THRESHOLD
-        if (self.param_buffer_expression and
-            self.param_source_provider_type == 'postgresql' and
-            self._cached_source_feature_count is not None and
-                self._cached_source_feature_count > BUFFER_EXPR_MV_THRESHOLD):
-            logger.info(f"  🔧 Feature count ({self._cached_source_feature_count}) > threshold ({BUFFER_EXPR_MV_THRESHOLD})")
-            logger.info("  → Calling _ensure_buffer_expression_mv_exists()...")
-            self._ensure_buffer_expression_mv_exists()
-        elif self.param_buffer_expression and self.param_source_provider_type == 'postgresql':
-            logger.info(f"  ✓ SKIP MV creation: {self._cached_source_feature_count} features <= {BUFFER_EXPR_MV_THRESHOLD} threshold")
-            logger.info("  → Buffer expression will be applied INLINE by prepare_postgresql_source_geom()")
-
-        # Try to create optimized filter chain MV for PostgreSQL
-        # When multiple spatial filters are chained (zone_pop AND demand_points etc.),
-        # creating a single MV reduces N×M EXISTS queries to 1 EXISTS per distant layer
-        if self.param_source_provider_type == 'postgresql':
-            self._try_create_filter_chain_mv()
-
-        # Build unique provider list including source layer provider AND forced backends
-        # Include forced backends in provider_list
-        # Without this, forced backends won't have their source geometry prepared
-        provider_list = self.provider_list + [self.param_source_provider_type]
-
-        # Add any forced backends to ensure their geometry is prepared
-        forced_backends = self.task_parameters.get('forced_backends', {})
-        for layer_id, forced_backend in forced_backends.items():
-            if forced_backend and forced_backend not in provider_list:
-                logger.debug(f"  → Adding forced backend '{forced_backend}' to provider_list")
-                provider_list.append(forced_backend)
-
-        provider_list = list(dict.fromkeys(provider_list))
-        logger.info(f"  → Provider list for geometry preparation: {provider_list}")
-
-        # Prepare geometries for all provider types
-        # NOTE: This will use self.param_buffer_value set above
-        geom_prep_result = self._prepare_geometries_by_provider(provider_list)
-
-        if not geom_prep_result:
-            # If self.message wasn't set by _prepare_geometries_by_provider, set a generic one
-            if not hasattr(self, 'message') or not self.message:
-                self.message = "Failed to prepare source geometries for distant layers filtering"
-            logger.error(f"_prepare_geometries_by_provider failed: {self.message}")
-            return False
-
-        # Filter all layers with progress tracking
-        logger.info("🚀 Starting _filter_all_layers_with_progress()...")
-        result = self._filter_all_layers_with_progress()
-        logger.info(f"📊 _filter_all_layers_with_progress() returned: {result}")
-        return result
+        return self._filtering_orchestrator.manage_distant_layers_geometric_filtering(
+            source_layer=self.source_layer,
+            layers=self.layers,
+            task_parameters=self.task_parameters,
+            param_buffer_expression=self.param_buffer_expression,
+            param_source_provider_type=self.param_source_provider_type,
+            provider_list=self.provider_list,
+            initialize_source_subset_and_buffer_callback=self._initialize_source_subset_and_buffer,
+            ensure_buffer_expression_mv_exists_callback=self._ensure_buffer_expression_mv_exists,
+            try_create_filter_chain_mv_callback=self._try_create_filter_chain_mv,
+            prepare_geometries_by_provider_callback=self._prepare_geometries_by_provider,
+            filter_all_layers_with_progress_callback=self._filter_all_layers_with_progress,
+            cached_source_feature_count_setter=_set_cached_feature_count,
+        )
 
     def qgis_expression_to_postgis(self, expression: str) -> str:
         """Convert a QGIS expression to PostGIS-compatible SQL.
@@ -3285,344 +2991,46 @@ class FilterEngineTask(QgsTask):
         return None
 
     def execute_filtering(self) -> bool:
-        """Execute the complete filtering workflow.
-
-        Orchestrates filtering in two steps:
-        1. Filter the source layer using attribute/expression criteria
-        2. Filter distant layers using geometric predicates (intersects, within, etc.)
-
-        The source layer filter must succeed before distant layers are processed.
-        If no geometric predicates are configured, only the source layer is filtered.
-
-        Returns:
-            True if filtering completed successfully, False otherwise.
-
-        Raises:
-            Sets self.message with user-friendly error description on failure.
-
-        Note:
-            - Initializes current_predicates early for ExpressionBuilder
-            - Supports selection modes: single, multiple, expression, all features
-            - Progress is reported via setProgress()
-        """
-        # FIX 2026-01-16: Initialize current_predicates EARLY
-        # current_predicates must be populated BEFORE execute_source_layer_filtering()
-        # because ExpressionBuilder and FilterOrchestrator need them during lazy init.
-        # Previously, predicates were only set in STEP 2/2 (distant layers), causing
-        # EMPTY predicates warnings during source layer filtering.
-        self._initialize_current_predicates()
-
-        # STEP 1/2: Filtering SOURCE LAYER
-
-        logger.info("=" * 60)
-        logger.info("STEP 1/2: Filtering SOURCE LAYER")
-        logger.info("=" * 60)
-
-        # Déterminer le mode de sélection actif
-        features_list = self.task_parameters["task"]["features"]
-        qgis_expression = self.task_parameters["task"]["expression"]
-        skip_source_filter = self.task_parameters["task"].get("skip_source_filter", False)
-
-        # DIAGNOSTIC 2026-01-28: Log features details
-        logger.info(f"  features_list count: {len(features_list) if features_list else 0}")
-        logger.info(f"  features_list type: {type(features_list)}")
-        if features_list and len(features_list) > 0:
-            logger.info(f"  features_list[0] type: {type(features_list[0])}")
-            logger.info(f"  features_list[0]: {features_list[0]}")
-        logger.info(f"  qgis_expression: '{qgis_expression}'")
-        logger.info(f"  skip_source_filter: {skip_source_filter}")
-
-        if len(features_list) > 0 and features_list[0] != "":
-            if len(features_list) == 1:
-                logger.info("✓ Selection Mode: SINGLE SELECTION")
-                logger.info("  → 1 feature selected")
-            else:
-                logger.info("✓ Selection Mode: MULTIPLE SELECTION")
-                logger.info(f"  → {len(features_list)} features selected")
-        elif qgis_expression and qgis_expression.strip():
-            logger.info("✓ Selection Mode: CUSTOM EXPRESSION")
-            logger.info(f"  → Expression: '{qgis_expression}'")
-        elif skip_source_filter:
-            # Custom selection mode avec expression non-filtre (ex: nom de champ seul)
-            # → Utiliser toutes les features de la couche source
-            logger.info("✓ Selection Mode: ALL FEATURES (custom selection with field-only expression)")
-            logger.info("  → No source filter will be applied")
-            logger.info("  → All features from source layer will be used for geometric predicates")
-        else:
-            logger.error("✗ No valid selection mode detected!")
-            logger.error("  → features_list is empty AND expression is empty")
-            logger.error("  → Please select a feature, check multiple features, or enter a filter expression")
-            # Provide user-friendly message with guidance
-            self.message = (
-                "No valid selection: please select a feature, check features, "
-                "or enter a filter expression in the 'Exploring' tab before filtering."
-            )
-            return False
-
-        # Exécuter le filtrage de la couche source
-        result = self.execute_source_layer_filtering()
-
-        if self.isCanceled():
-            logger.warning("⚠ Task canceled by user")
-            return False
-
-        # ✅ VALIDATION: Vérifier que le filtre source a réussi
-        if not result:
-            logger.error("=" * 60)
-            logger.error("✗ FAILED: Source layer filtering FAILED")
-            logger.error("=" * 60)
-            logger.error("⛔ ABORTING: Distant layers will NOT be filtered")
-            logger.error("   Reason: Source filter must succeed before filtering distant layers")
-            # Set error message for user
-            source_name = self.source_layer.name() if self.source_layer else 'Unknown'
-            self.message = f"Failed to filter source layer '{source_name}'. Check Python console for details."
-            return False
-
-        # Vérifier le nombre de features après filtrage
-        source_feature_count = self.source_layer.featureCount()
-        logger.info("=" * 60)
-        logger.info("✓ SUCCESS: Source layer filtered")
-        logger.info(f"  → {source_feature_count} feature(s) remaining")
-        logger.info("=" * 60)
-
-        if source_feature_count == 0:
-            logger.warning("⚠ WARNING: Source layer has ZERO features after filter!")
-            logger.warning("  → Distant layers may return no results")
-            logger.warning("  → Consider adjusting filter criteria")
-
-        self.setProgress((1 / self.layers_count) * 100)
-
-        # ═══════════════════════════════════════════════════════════════
-        # ÉTAPE 2: FILTRER LES COUCHES DISTANTES (si prédicats géométriques)
-        # ═══════════════════════════════════════════════════════════════
-
-        # FIX 2026-01-17: Enhanced console diagnostic for distant layers filtering
-
-        has_geom_predicates = self.task_parameters["filtering"]["has_geometric_predicates"]
-        has_layers_to_filter = self.task_parameters["filtering"]["has_layers_to_filter"]
-        has_layers_in_params = len(self.task_parameters['task'].get('layers', [])) > 0
-        for prov_type, layer_list in (self.layers or {}).items():
-            pass  # print statements removed
-
-        # Log to QGIS message panel for visibility
-        from qgis.core import QgsMessageLog, Qgis as QgisLevel
-
-        logger.info("\n🔍 Checking if distant layers should be filtered...")
-        logger.info(f"  has_geometric_predicates: {has_geom_predicates}")
-        logger.info(f"  has_layers_to_filter: {has_layers_to_filter}")
-        logger.info(f"  has_layers_in_params: {has_layers_in_params}")
-        logger.info(f"  self.layers_count: {self.layers_count}")
-
-        # Log layer names to QGIS message panel for visibility
-        layer_names = [l.get('layer_name', 'unknown') for l in self.task_parameters['task'].get('layers', [])]
-        QgsMessageLog.logMessage(
-            f"📋 Distant layers to filter ({len(layer_names)}): {', '.join(layer_names[:5])}{'...' if len(layer_names) > 5 else ''}",
-            "FilterMate", QgisLevel.Info
+        """Execute the complete filtering workflow. Delegates to FilteringOrchestrator."""
+        result = self._filtering_orchestrator.execute_filtering(
+            task_parameters=self.task_parameters,
+            source_layer=self.source_layer,
+            layers=self.layers,
+            layers_count=self.layers_count,
+            current_predicates=self.current_predicates,
+            initialize_current_predicates_callback=self._initialize_current_predicates,
+            execute_source_layer_filtering_callback=self.execute_source_layer_filtering,
+            manage_distant_layers_callback=self.manage_distant_layers_geometric_filtering,
+            is_canceled_callback=self.isCanceled,
+            set_progress_callback=self.setProgress,
         )
-
-        logger.info(f"  task['layers'] content: {layer_names}")
-        logger.info(f"  self.layers content: {list(self.layers.keys())} with {sum(len(v) for v in self.layers.values())} total layers")
-
-        # Log conditions to QGIS message panel for debugging
-        # This helps diagnose why distant layers may not be filtered
-        if not has_geom_predicates or (not has_layers_to_filter and not has_layers_in_params) or self.layers_count == 0:
-            missing_conditions = []
-            if not has_geom_predicates:
-                missing_conditions.append("has_geometric_predicates=False")
-            if not has_layers_to_filter and not has_layers_in_params:
-                missing_conditions.append("no layers configured")
-            if self.layers_count == 0:
-                missing_conditions.append("layers_count=0")
-            QgsMessageLog.logMessage(
-                f"⚠️ Distant layers NOT filtered: {', '.join(missing_conditions)}",
-                "FilterMate", QgisLevel.Warning
-            )
-            logger.warning(f"⚠️ Distant layers NOT filtered: {', '.join(missing_conditions)}")
-
-        # Process if geometric predicates enabled AND (has_layers_to_filter OR layers in params) AND layers were organized
-        if has_geom_predicates and (has_layers_to_filter or has_layers_in_params) and self.layers_count > 0:
-            geom_predicates_list = self.task_parameters["filtering"]["geometric_predicates"]
-            logger.info(f"  geometric_predicates list: {geom_predicates_list}")
-            logger.info(f"  geometric_predicates count: {len(geom_predicates_list)}")
-
-            if len(geom_predicates_list) > 0:
-
-                logger.info("")
-                logger.info("=" * 60)
-                logger.info("STEP 2/2: Filtering DISTANT LAYERS")
-                logger.info("=" * 60)
-                logger.info(f"  → {len(self.task_parameters['task']['layers'])} layer(s) to filter")
-
-                # FIX 2026-01-16: current_predicates is already initialized at start of execute_filtering()
-                # Just log for confirmation
-                logger.info(f"  → Using pre-initialized predicates: {self.current_predicates}")
-
-                logger.info("\n🚀 Calling manage_distant_layers_geometric_filtering()...")
-
-                result = self.manage_distant_layers_geometric_filtering()
-
-                if self.isCanceled():
-                    logger.warning("⚠ Task canceled during distant layers filtering")
-                    self.message = "Filter task was canceled by user"
-                    return False
-
-                if result is False:
-                    logger.error("=" * 60)
-                    logger.error("✗ PARTIAL SUCCESS: Source OK, but distant layers FAILED")
-                    logger.error("=" * 60)
-                    logger.warning("  → Source layer remains filtered")
-                    logger.warning("  → Check logs for distant layer errors")
-                    logger.warning("  → Common causes:")
-                    logger.warning("     1. Forced Spatialite backend on non-Spatialite layers (e.g., Shapefiles)")
-                    logger.warning("     2. GDAL not compiled with Spatialite extension")
-                    logger.warning("     3. CRS mismatch between source and distant layers")
-
-                    # Build informative error message with failed layer names
-                    failed_names = getattr(self, '_failed_layer_names', [])
-                    if failed_names:
-                        if len(failed_names) <= 3:
-                            layers_str = ', '.join(failed_names)
-                        else:
-                            layers_str = f"{', '.join(failed_names[:3])} (+{len(failed_names) - 3} others)"
-                        self.message = f"Failed layers: {layers_str}. Try OGR backend or check Python console."
-                    else:
-                        self.message = "Source layer filtered, but some distant layers failed. Try using OGR backend for failing layers or check Python console."
-                    return False
-
-                logger.info("=" * 60)
-                logger.info("✓ COMPLETE SUCCESS: All layers filtered")
-                logger.info("=" * 60)
-            else:
-                logger.info("  → No geometric predicates configured")
-                logger.info("  → Only source layer filtered")
-        else:
-            # Log detailed reason why geometric filtering is skipped
-            logger.warning("=" * 60)
-            logger.warning("⚠️ DISTANT LAYERS FILTERING SKIPPED - DIAGNOSTIC")
-            logger.warning("=" * 60)
-            if not has_geom_predicates:
-                logger.warning("  ❌ has_geometric_predicates = FALSE")
-                logger.warning("     → Enable 'Geometric predicates' button in UI")
-            else:
-                logger.info("  ✓ has_geometric_predicates = True")
-
-            if not has_layers_to_filter and not has_layers_in_params:
-                logger.warning("  ❌ No layers to filter:")
-                logger.warning(f"     - has_layers_to_filter = {has_layers_to_filter}")
-                logger.warning(f"     - has_layers_in_params = {has_layers_in_params}")
-                logger.warning("     → Select layers to filter in UI")
-            else:
-                logger.info(f"  ✓ has_layers_to_filter = {has_layers_to_filter}")
-                logger.info(f"  ✓ has_layers_in_params = {has_layers_in_params}")
-
-            if self.layers_count == 0:
-                logger.warning("  ❌ layers_count = 0 (no layers organized)")
-                logger.warning("     → Check if selected layers exist in project")
-            else:
-                logger.info(f"  ✓ layers_count = {self.layers_count}")
-
-            # Log filtering parameters for debugging
-            filtering_params = self.task_parameters.get("filtering", {})
-            logger.warning("  📋 Filtering parameters:")
-            logger.warning(f"     - has_geometric_predicates: {filtering_params.get('has_geometric_predicates', 'NOT SET')}")
-            logger.warning(f"     - geometric_predicates: {filtering_params.get('geometric_predicates', 'NOT SET')}")
-            logger.warning(f"     - has_layers_to_filter: {filtering_params.get('has_layers_to_filter', 'NOT SET')}")
-            logger.warning(f"     - layers_to_filter: {filtering_params.get('layers_to_filter', 'NOT SET')}")
-
-            logger.warning("=" * 60)
-            logger.warning("  → Only source layer filtered")
-
-        return result
+        if result.get('message'):
+            self.message = result['message']
+        if result.get('failed_layer_names'):
+            self._failed_layer_names = result['failed_layer_names']
+        return result.get('success', False)
 
     def execute_unfiltering(self) -> bool:
-        """Remove all filters from source and selected remote layers.
-
-        Clears filters completely by setting subsetString to empty for:
-        - The source/current layer
-        - All selected remote layers (layers_to_filter)
-
-        Returns:
-            True if all filter clears were queued successfully.
-
-        Note:
-            - This is NOT the same as undo - it removes filters entirely
-            - Use the undo button to restore previous filter state
-            - All setSubsetString calls are queued for main thread execution
-            - Progress is reported via setProgress()
-        """
-        logger.info("=" * 60)
-        logger.info("FilterMate: UNFILTERING - Clearing all filters")
-        logger.info("=" * 60)
-
-        # Queue filter clear on source layer (will be applied in finished())
-        self._queue_subset_string(self.source_layer, '')
-        logger.info(f"  → Queued clear on source: {self.source_layer.name()}")
-
-        # Queue filter clear on all selected associated layers
-        # FIX 2026-01-15: Protect against division by zero when no layers selected
-        i = 1
-        if self.layers_count > 0:
-            self.setProgress((i / self.layers_count) * 100)
-
-        for layer_provider_type in self.layers:
-            logger.debug(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
-            for layer, layer_props in self.layers[layer_provider_type]:
-                self._queue_subset_string(layer, '')
-                logger.info(f"    → Queued clear on: {layer.name()}")
-                i += 1
-                if self.layers_count > 0:
-                    self.setProgress((i / self.layers_count) * 100)
-                if self.isCanceled():
-                    logger.warning("FilterMate: Unfilter canceled by user")
-                    return False
-
-        logger.info("=" * 60)
-        logger.info(f"✓ FilterMate: Unfilter queued for {i} layer(s)")
-        logger.info("=" * 60)
-
-        return True
+        """Remove all filters from source and selected remote layers. Delegates to FilteringOrchestrator."""
+        return self._filtering_orchestrator.execute_unfiltering(
+            source_layer=self.source_layer,
+            layers=self.layers,
+            layers_count=self.layers_count,
+            queue_subset_string_callback=self._queue_subset_string,
+            is_canceled_callback=self.isCanceled,
+            set_progress_callback=self.setProgress,
+        )
 
     def execute_reseting(self) -> bool:
-        """Reset all layers to their original/saved subset state.
-
-        Restores the initial filter state for all configured layers by:
-        - Looking up saved subset strings in the filter history database
-        - Applying the original subset to each layer via manage_layer_subset_strings()
-
-        Returns:
-            True if reset completed successfully, False if canceled.
-
-        Note:
-            - Progress is reported via setProgress()
-            - Can be canceled by user (isCanceled() check)
-        """
-        logger.info("=" * 60)
-        logger.info("FilterMate: RESETTING all layers to saved state")
-        logger.info("=" * 60)
-
-        i = 1
-
-        logger.info(f"  → Resetting source layer: {self.source_layer.name()}")
-        self.manage_layer_subset_strings(self.source_layer)
-        # FIX 2026-01-15: Protect against division by zero when no layers selected
-        if self.layers_count > 0:
-            self.setProgress((i / self.layers_count) * 100)
-
-        for layer_provider_type in self.layers:
-            logger.debug(f"  → Processing {len(self.layers[layer_provider_type])} {layer_provider_type} layer(s)")
-            for layer, layer_props in self.layers[layer_provider_type]:
-                logger.info(f"    → Resetting: {layer.name()}")
-                self.manage_layer_subset_strings(layer)
-                i += 1
-                self.setProgress((i / self.layers_count) * 100)
-                if self.isCanceled():
-                    logger.warning("FilterMate: Reset canceled by user")
-                    return False
-
-        logger.info("=" * 60)
-        logger.info(f"✓ FilterMate: Reset completed for {i} layer(s)")
-        logger.info("=" * 60)
-        return True
+        """Reset all layers to their original/saved subset state. Delegates to FilteringOrchestrator."""
+        return self._filtering_orchestrator.execute_reseting(
+            source_layer=self.source_layer,
+            layers=self.layers,
+            layers_count=self.layers_count,
+            manage_layer_subset_strings_callback=self.manage_layer_subset_strings,
+            is_canceled_callback=self.isCanceled,
+            set_progress_callback=self.setProgress,
+        )
 
     def _validate_export_parameters(self):
         """Validate export parameters. Delegates to ExportHandler."""
