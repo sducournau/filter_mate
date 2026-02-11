@@ -9,8 +9,46 @@ Migrated from modules/appUtils.py to infrastructure/database/sql_utils.py
 
 import re
 import logging
+from contextlib import contextmanager
 
 logger = logging.getLogger('FilterMate.Infrastructure.Database.SQLUtils')
+
+
+@contextmanager
+def feature_picker_guard(layer):
+    """
+    FIX 2026-02-11: Temporarily detach QgsFeaturePickerWidget to prevent crash during subset change.
+
+    QgsFeaturePickerWidget's internal model iterates features on a background thread.
+    If setSubsetString() is called while iteration is in progress, it causes an access
+    violation in sqlite3_bind_int64. Detaching the widget (setLayer(None)) stops the
+    background thread before the subset string changes.
+
+    Args:
+        layer: QgsVectorLayer whose subset string is about to change
+    """
+    picker = None
+    try:
+        from filter_mate_dockwidget import _active_dockwidget
+        if _active_dockwidget is not None:
+            widget = getattr(_active_dockwidget, 'mFeaturePickerWidget_exploring_single_selection', None)
+            if widget is not None and hasattr(widget, 'layer') and widget.layer() == layer:
+                widget.setLayer(None)
+                picker = widget
+                logger.debug("FIX-2026-02-11: FeaturePickerWidget detached before subset change")
+    except (ImportError, RuntimeError, Exception) as e:
+        logger.debug(f"FIX-2026-02-11: feature_picker_guard detach skipped: {e}")
+
+    try:
+        yield
+    finally:
+        if picker is not None:
+            try:
+                if layer and hasattr(layer, 'isValid') and layer.isValid():
+                    picker.setLayer(layer)
+                    logger.debug("FIX-2026-02-11: FeaturePickerWidget reattached after subset change")
+            except (RuntimeError, Exception) as e:
+                logger.debug(f"FIX-2026-02-11: feature_picker_guard reattach failed: {e}")
 
 
 def sanitize_sql_identifier(identifier: str) -> str:
@@ -142,7 +180,9 @@ def safe_set_subset_string(layer, subset_expression: str) -> bool:
                     preview += f"... ({len(subset_expression) - 500} more chars)"
                 logger.debug(f"[SQL]   Expression: {preview}")
 
-            result = layer.setSubsetString(subset_expression)
+            # FIX 2026-02-11: Detach FeaturePickerWidget before subset change to prevent crash
+            with feature_picker_guard(layer):
+                result = layer.setSubsetString(subset_expression)
 
             if not result:
                 logger.warning(f"setSubsetString returned False for layer {layer.name()}")

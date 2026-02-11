@@ -143,6 +143,10 @@ except ImportError: LAYOUT_MANAGERS_AVAILABLE = False; SplitterManager = Dimensi
 try: from .ui.styles import ThemeManager, IconManager, ButtonStyler; STYLE_MANAGERS_AVAILABLE = True
 except ImportError: STYLE_MANAGERS_AVAILABLE = False; ThemeManager = IconManager = ButtonStyler = None
 
+# FIX 2026-02-11: Module-level registry for FeaturePickerWidget crash prevention
+# Allows sql_utils.safe_set_subset_string() to detach the widget BEFORE subset change
+_active_dockwidget = None
+
 
 class ClickableLabel(QtWidgets.QLabel):
     """QLabel that properly handles mouse clicks for menus."""
@@ -257,6 +261,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._feature_picker_layer_connection = None  # Stores (layer, connection) tuple
         # v5.0 Phase 2: Initialize signal manager for progressive migration
         self._signal_manager = DockwidgetSignalManager(self)
+        # FIX 2026-02-11: Register as active dockwidget for FeaturePickerWidget crash prevention
+        global _active_dockwidget
+        _active_dockwidget = self
         self._initialize_layer_state()
 
     def _safe_get_layer_props(self, layer):
@@ -352,18 +359,16 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _connect_feature_picker_layer_deletion(self, layer):
         """
         FIX 2026-01-19: Connect willBeDeleted signal to clear QgsFeaturePickerWidget immediately.
+        FIX 2026-02-11: Also connect subsetStringChanged as secondary safety net.
 
         CRITICAL: QgsFeaturePickerWidget has an internal QTimer that triggers scheduledReload.
         If the layer is deleted while this timer is pending, it causes a Windows fatal exception
         (access violation) when QgsVectorLayerFeatureSource tries to access the deleted layer.
 
-        Stack trace of the crash:
-        - QgsFeaturePickerModelBase::scheduledReload
-        - QgsVectorLayerFeatureSource::QgsVectorLayerFeatureSource
-        - QgsExpressionContextUtils::layerScope
-        - QgsMapLayer::customProperty (CRASH - layer deleted)
+        The same crash occurs when setSubsetString() is called while the widget's background
+        thread is iterating features (sqlite3_bind_int64 access violation).
 
-        Solution: Connect to layer.willBeDeleted signal to clear the widget BEFORE deletion.
+        Solution: Connect to layer.willBeDeleted and layer.subsetStringChanged signals.
 
         Args:
             layer: QgsVectorLayer being set on the FeaturePickerWidget
@@ -377,15 +382,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             # Connect to willBeDeleted signal with direct connection for immediate execution
             layer.willBeDeleted.connect(self._on_feature_picker_layer_deleted)
+            # FIX 2026-02-11: Connect subsetStringChanged as secondary safety net
+            # Catches direct setSubsetString() calls not going through safe_set_subset_string()
+            layer.subsetStringChanged.connect(self._on_feature_picker_subset_changed)
             self._feature_picker_layer_connection = layer
-            logger.debug(f"FIX-2026-01-19: Connected willBeDeleted for FeaturePickerWidget layer '{layer.name()}'")
+            logger.debug(f"FIX-2026-01-19+02-11: Connected willBeDeleted+subsetStringChanged for FeaturePickerWidget layer '{layer.name()}'")
         except Exception as e:
-            logger.warning(f"Failed to connect willBeDeleted for FeaturePickerWidget: {e}")
+            logger.warning(f"Failed to connect signals for FeaturePickerWidget: {e}")
             self._feature_picker_layer_connection = None
 
     def _disconnect_feature_picker_layer_deletion(self):
         """
         FIX 2026-01-19: Disconnect willBeDeleted signal from previous layer.
+        FIX 2026-02-11: Also disconnect subsetStringChanged signal.
         """
         if self._feature_picker_layer_connection is not None:
             try:
@@ -393,7 +402,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 # Check if layer is still valid before disconnecting
                 if layer and not sip.isdeleted(layer) and layer.isValid():
                     layer.willBeDeleted.disconnect(self._on_feature_picker_layer_deleted)
-                    logger.debug("FIX-2026-01-19: Disconnected willBeDeleted for FeaturePickerWidget")
+                    # FIX 2026-02-11: Disconnect subsetStringChanged
+                    try:
+                        layer.subsetStringChanged.disconnect(self._on_feature_picker_subset_changed)
+                    except (TypeError, RuntimeError):
+                        pass  # Already disconnected
+                    logger.debug("FIX-2026-01-19+02-11: Disconnected willBeDeleted+subsetStringChanged for FeaturePickerWidget")
             except (TypeError, RuntimeError) as e:
                 # Already disconnected or layer destroyed - ignore
                 logger.debug(f"willBeDeleted already disconnected or layer gone: {e}")
@@ -418,6 +432,49 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         finally:
             # Clear the connection reference (layer is being deleted anyway)
             self._feature_picker_layer_connection = None
+
+    def _on_feature_picker_subset_changed(self):
+        """
+        FIX 2026-02-11: Secondary safety net for subset string changes.
+
+        Called AFTER subsetStringChanged fires (for direct setSubsetString() calls
+        not going through safe_set_subset_string). Reattaches the widget to the
+        layer via QTimer.singleShot(0) to let the layer stabilize first.
+
+        NOTE: The primary protection is the context manager in safe_set_subset_string()
+        which detaches BEFORE the call. If the guard already detached the picker
+        (picker.layer() is None), we skip — the guard's finally block handles reattach.
+        """
+        layer = self._feature_picker_layer_connection
+        if not layer or sip.isdeleted(layer) or not layer.isValid():
+            return
+
+        try:
+            picker = getattr(self, 'mFeaturePickerWidget_exploring_single_selection', None)
+            if not picker:
+                return
+
+            # If picker is already detached (guard is active), skip — guard will reattach
+            if picker.layer() is None:
+                logger.debug("FIX-2026-02-11: subsetStringChanged - picker already detached by guard, skipping")
+                return
+
+            # Fallback path: direct setSubsetString() call not through safe_set_subset_string()
+            picker.setLayer(None)
+            logger.debug("FIX-2026-02-11: FeaturePickerWidget detached after subsetStringChanged (fallback)")
+
+            # Reattach on next event loop iteration (layer is stable by then)
+            def _reattach():
+                try:
+                    if layer and not sip.isdeleted(layer) and layer.isValid():
+                        picker.setLayer(layer)
+                        logger.debug("FIX-2026-02-11: FeaturePickerWidget reattached after subset change")
+                except (RuntimeError, Exception) as e:
+                    logger.debug(f"FIX-2026-02-11: Reattach skipped: {e}")
+
+            QTimer.singleShot(0, _reattach)
+        except Exception as e:
+            logger.warning(f"FIX-2026-02-11: Error in subset change handler: {e}")
 
     def _initialize_layer_state(self):
         """v4.0 Sprint 15: Initialize layers, managers, controllers, and UI."""
@@ -6770,6 +6827,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try: self._controller_integration.teardown() if self._controller_integration else None
         except Exception:  # Controller may already be torn down - expected
             pass
+
+        # FIX 2026-02-11: Unregister from module-level registry
+        global _active_dockwidget
+        if _active_dockwidget is self:
+            _active_dockwidget = None
 
         self.closingPlugin.emit()
         event.accept()
