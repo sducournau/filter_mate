@@ -393,7 +393,7 @@ class FilterEngineTask(QgsTask):
                 self._task_bridge = get_task_bridge()
                 if self._task_bridge:
                     logger.debug("TaskBridge initialized - v3 backends available")
-            except Exception as e:
+            except (ImportError, RuntimeError, AttributeError) as e:
                 logger.debug(f"TaskBridge not available: {e}")
 
         # Store subset string requests to apply on main thread
@@ -723,7 +723,7 @@ class FilterEngineTask(QgsTask):
             executor = self._get_backend_executor(layer_info)
             if executor:
                 return executor.apply_subset_string(layer, expression)
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logger.debug(f"Executor.apply_subset_string failed: {e}")
 
         return False
@@ -834,7 +834,7 @@ class FilterEngineTask(QgsTask):
                         return connexion
                     else:
                         logger.warning("ACTIVE_POSTGRESQL connection is closed, will obtain new connection")
-            except Exception as e:
+            except (AttributeError, TypeError, RuntimeError) as e:
                 logger.warning(f"Error checking ACTIVE_POSTGRESQL connection: {e}")
 
         # Connection is invalid (string, None, or closed) - try to get fresh connection from source layer
@@ -847,7 +847,7 @@ class FilterEngineTask(QgsTask):
                     # Track this connection for cleanup
                     self.active_connections.append(connexion)
                     return connexion
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 logger.error(f"Failed to get connection from source layer: {e}")
 
         # Last resort: try from infos layer_id
@@ -860,7 +860,7 @@ class FilterEngineTask(QgsTask):
                     if connexion is not None:
                         self.active_connections.append(connexion)
                         return connexion
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError, KeyError) as e:
             logger.error(f"Failed to get connection from layer by ID: {e}")
 
         raise Exception(
@@ -983,8 +983,7 @@ class FilterEngineTask(QgsTask):
 
             return result.success
 
-        except Exception as e:
-            # Fallback to legacy routing if dispatcher fails
+        except Exception as e:  # catch-all safety net: fallback to legacy routing
             logger.warning(f"ActionDispatcher failed, using legacy routing: {e}")
             return self._execute_task_action_legacy()
 
@@ -1028,7 +1027,7 @@ class FilterEngineTask(QgsTask):
 
             logger.warning(f"  ⚠️ Unknown task_action: {self.task_action}")
             return False
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: captures any action failure
             logger.error(f"  ❌ _execute_task_action_legacy FAILED: {e}", exc_info=True)
             self.exception = e
             return False
@@ -1176,8 +1175,7 @@ class FilterEngineTask(QgsTask):
 
             return result.success
 
-        except Exception as e:
-            # Catch-all exception handler with full traceback
+        except Exception as e:  # catch-all safety net: QgsTask.run() must not propagate exceptions
             run_elapsed = time.time() - run_start_time
             self.exception = e
             logger.error(f"{'=' * 60}")
@@ -1364,7 +1362,7 @@ class FilterEngineTask(QgsTask):
                 logger.debug(f"TaskBridge multi-step: status={bridge_result.status}, falling back")
                 return None
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: v3 bridge failure falls back to legacy
             logger.warning(f"TaskBridge multi-step delegation failed: {e}")
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
@@ -1422,7 +1420,7 @@ class FilterEngineTask(QgsTask):
                 logger.debug(f"TaskBridge export: status={bridge_result.status}")
                 return None
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: v3 bridge failure falls back to legacy
             logger.warning(f"TaskBridge export delegation failed: {e}")
             return None
 
@@ -2199,7 +2197,7 @@ class FilterEngineTask(QgsTask):
                 )
                 if opt_result.success and hasattr(opt_result, 'source_mv_info') and opt_result.source_mv_info is not None:
                     self._create_source_mv_if_needed(opt_result.source_mv_info)
-            except Exception as e:
+            except (AttributeError, ValueError, RuntimeError) as e:
                 logger.debug(f"MV creation skipped: {e}")
 
         return result.expression
@@ -2256,7 +2254,7 @@ class FilterEngineTask(QgsTask):
             logger.info("   FIX v4.2.8: Registered references for multiple layers")
             return True
 
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError, ImportError) as e:
             logger.warning(f"Failed to create source MV '{source_mv_info.view_name}': {e}")
             # Don't raise - the optimization can still work with inline subquery
             return False
@@ -2416,7 +2414,7 @@ class FilterEngineTask(QgsTask):
 
             return True
 
-        except Exception as e:
+        except (RuntimeError, OSError, AttributeError, ImportError, ValueError) as e:
             logger.error(f"❌ Failed to create buffer expression MV: {e}")
             import traceback
             logger.debug(f"Traceback: {traceback.format_exc()}")
@@ -2769,7 +2767,7 @@ class FilterEngineTask(QgsTask):
             )
             logger.info(f"✅ orchestrate_geometric_filter returned: {result}")
             return result
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: geometric filtering must not crash the task
             logger.error("=" * 70)
             logger.error("❌ EXCEPTION in execute_geometric_filtering:")
             logger.error(f"   Layer: {layer.name()}")
@@ -2968,7 +2966,7 @@ class FilterEngineTask(QgsTask):
                             self.spatialite_source_geom = wkt.replace("'", "''")
                             logger.info(f"✓ Generated WKT from OGR layer ({len(self.spatialite_source_geom)} chars)")
                             return self.spatialite_source_geom
-                except Exception as e:
+                except (RuntimeError, AttributeError, ValueError) as e:
                     logger.error(f"Failed to generate WKT from OGR layer: {e}")
 
         # OGR backend needs QgsVectorLayer
@@ -3355,7 +3353,7 @@ class FilterEngineTask(QgsTask):
                     seq_order=seq_order,
                     subset_string=sql_subset_string
                 )
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 logger.warning(f"Prepared statement failed, falling back to repository: {e}")
 
         # EPIC-1 E4-S9: Use centralized HistoryRepository instead of direct SQL
@@ -3517,7 +3515,7 @@ class FilterEngineTask(QgsTask):
             if self._ps_manager:
                 try:
                     self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
-                except Exception as e:
+                except (RuntimeError, OSError, AttributeError) as e:
                     logger.warning(f"Prepared statement failed, falling back to repository: {e}")
                     history_repo.delete_for_layer(self.project_uuid, layer.id())
             else:
@@ -3538,7 +3536,7 @@ class FilterEngineTask(QgsTask):
             temp_conn.commit()
             temp_cur.close()
             temp_conn.close()
-        except Exception as e:
+        except sqlite3.Error as e:
             logger.error(f"Error dropping Spatialite temp table: {e}")
 
         # THREAD SAFETY: Queue subset clear for application in finished()
@@ -3568,7 +3566,7 @@ class FilterEngineTask(QgsTask):
             if self._ps_manager:
                 try:
                     self._ps_manager.delete_subset_history(self.project_uuid, layer.id())
-                except Exception as e:
+                except (RuntimeError, OSError, AttributeError) as e:
                     logger.warning(f"Prepared statement failed, falling back to repository: {e}")
                     history_repo.delete_for_layer(self.project_uuid, layer.id())
             else:
@@ -3851,7 +3849,7 @@ class FilterEngineTask(QgsTask):
                         if subset:
                             layer.triggerRepaint()
                             layers_repainted += 1
-                except Exception as e:
+                except (RuntimeError, AttributeError) as e:
                     logger.debug(f"Ignored in final canvas repaint loop: {e}")
 
             # Final canvas refresh
@@ -3863,7 +3861,7 @@ class FilterEngineTask(QgsTask):
                 logger.debug("Final canvas refresh completed (2s delay)")
             logger.debug("Final canvas refresh completed (2s delay)")
 
-        except Exception as e:
+        except Exception as e:  # catch-all safety net: canvas refresh must not crash finished()
             logger.debug(f"Final canvas refresh skipped: {e}")
 
     def _cleanup_postgresql_materialized_views(self):
@@ -3899,7 +3897,7 @@ class FilterEngineTask(QgsTask):
         for conn in self.active_connections[:]:
             try:
                 conn.close()
-            except Exception as e:
+            except (RuntimeError, OSError, AttributeError) as e:
                 # Log but don't fail - connection may already be closed
                 logger.debug(f"Connection cleanup failed (may already be closed): {e}")
         self.active_connections.clear()
@@ -3910,8 +3908,8 @@ class FilterEngineTask(QgsTask):
         # QgsMessageLog may be destroyed during QGIS shutdown, causing access violation
         try:
             logger.info(f'"{self.description()}" task was canceled')
-        except Exception:
-            pass  # Logger may be destroyed during QGIS shutdown - intentional silent catch
+        except Exception:  # catch-all safety net: logger may be destroyed during QGIS shutdown
+            pass  # Intentional silent catch
 
         super().cancel()
 
