@@ -509,9 +509,6 @@ def get_best_display_field(layer, sample_size: int = 10, use_value_relations: bo
 # CRS Utilities (Simple Constants)
 # =============================================================================
 
-# CRS utilities availability
-CRS_UTILS_AVAILABLE = True
-
 # Default metric CRS for buffer operations
 DEFAULT_METRIC_CRS = "EPSG:3857"
 
@@ -1250,6 +1247,5 @@ __all__ = [
     'escape_json_string',
 
     # CRS constants
-    'CRS_UTILS_AVAILABLE',
     'DEFAULT_METRIC_CRS',
 ]

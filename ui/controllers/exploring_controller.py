@@ -1175,9 +1175,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
             QgsCoordinateReferenceSystem, QgsProject,
             QgsExpression, QgsFeatureRequest
         )
-        from ...infrastructure.utils import CRS_UTILS_AVAILABLE, DEFAULT_METRIC_CRS
-        if CRS_UTILS_AVAILABLE:
-            from ...core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs
+        from ...core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs
 
         # DIAGNOSTIC: Log incoming features
         logger.info("🔍 zooming_to_features DIAGNOSTIC:")
@@ -1254,29 +1252,21 @@ class ExploringController(BaseController, LayerSelectionMixin):
             layer_crs = self._dockwidget.current_layer.crs()
             canvas_crs = self._dockwidget.iface.mapCanvas().mapSettings().destinationCrs()
 
-            # IMPROVED v2.5.7: Use crs_utils for better CRS detection
-            if CRS_UTILS_AVAILABLE:
-                is_geographic = is_geographic_crs(layer_crs)
-            else:
-                is_geographic = layer_crs.isGeographic()
+            # CRS detection via crs_utils
+            is_geographic = is_geographic_crs(layer_crs)
 
             # CRITICAL: For geographic coordinates, switch to a metric CRS for buffer calculations
             # This ensures accurate buffer distances in meters instead of imprecise degrees
             if is_geographic:
-                # IMPROVED v2.5.7: Use optimal metric CRS (UTM or Web Mercator)
-                if CRS_UTILS_AVAILABLE:
-                    metric_crs_authid = get_optimal_metric_crs(
-                        project=QgsProject.instance(),
-                        source_crs=layer_crs,
-                        extent=geom.boundingBox(),
-                        prefer_utm=True
-                    )
-                    work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
-                    logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
-                else:
-                    # Fallback to Web Mercator
-                    work_crs = QgsCoordinateReferenceSystem(DEFAULT_METRIC_CRS)
-                    logger.debug(f"FilterMate: Using Web Mercator ({DEFAULT_METRIC_CRS}) for zoom buffer")
+                # Use optimal metric CRS (UTM or Web Mercator)
+                metric_crs_authid = get_optimal_metric_crs(
+                    project=QgsProject.instance(),
+                    source_crs=layer_crs,
+                    extent=geom.boundingBox(),
+                    prefer_utm=True
+                )
+                work_crs = QgsCoordinateReferenceSystem(metric_crs_authid)
+                logger.debug(f"FilterMate: Using optimal metric CRS {metric_crs_authid} for zoom buffer")
 
                 to_metric = QgsCoordinateTransform(layer_crs, work_crs, QgsProject.instance())
                 geom.transform(to_metric)

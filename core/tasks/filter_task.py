@@ -106,18 +106,13 @@ from ...infrastructure.utils import (
 
 # Import geometry safety module (v2.3.9 - stability fix, migrated to core/geometry)
 
-# Import CRS utilities (v2.5.7 - improved CRS compatibility, migrated to core/geometry)
-try:
-    from ..geometry.crs_utils import (
-        is_geographic_crs,
-        is_metric_crs,
-        get_optimal_metric_crs,
-        get_layer_crs_info
-    )
-    CRS_UTILS_AVAILABLE = True
-except ImportError:
-    CRS_UTILS_AVAILABLE = False
-    logger.warning("crs_utils module not available - using legacy CRS handling")
+# Import CRS utilities (migrated to core/geometry)
+from ..geometry.crs_utils import (
+    is_geographic_crs,
+    is_metric_crs,
+    get_optimal_metric_crs,
+    get_layer_crs_info
+)
 
 # Import from infrastructure (EPIC-1 migration)
 from ...infrastructure.cache import SourceGeometryCache

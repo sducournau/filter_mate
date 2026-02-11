@@ -136,7 +136,6 @@ def _setup_handler_mocks():
             is_metric_crs=MagicMock(return_value=True),
             get_optimal_metric_crs=MagicMock(return_value='EPSG:2154'),
             get_layer_crs_info=MagicMock(return_value={}),
-            CRS_UTILS_AVAILABLE=True,
         ),
         f'{ROOT}.core.geometry.spatial_index': MagicMock(),
         f'{ROOT}.core.geometry.buffer_processor': MagicMock(),
