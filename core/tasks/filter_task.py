@@ -134,6 +134,7 @@ from .filtering_orchestrator import FilteringOrchestrator
 from .finished_handler import FinishedHandler
 from .materialized_view_handler import MaterializedViewHandler
 from .expression_facade_handler import ExpressionFacadeHandler
+from .spatial_query_handler import SpatialQueryHandler
 
 # Phase E13: Import extracted classes (January 2026)
 from .executors.attribute_filter_executor import AttributeFilterExecutor
@@ -441,6 +442,9 @@ class FilterEngineTask(QgsTask):
 
         # Pass 3: Expression facade handler
         self._expr_facade = ExpressionFacadeHandler(self)
+
+        # Pass 3: Spatial query handler
+        self._spatial_query = SpatialQueryHandler(self)
 
     # ========================================================================
     # FIX 2026-01-16: Early Predicate Initialization
@@ -1883,115 +1887,35 @@ class FilterEngineTask(QgsTask):
         return self._geometry_handler.verify_and_create_spatial_index(layer, layer_name)
 
     def _get_source_reference(self, sub_expression):
-        """Determine the source reference for spatial joins (MV or direct table)."""
-        if self.current_materialized_view_name:
-            # Fm_temp_mv_ prefix for new MVs
-            return f'"{self.current_materialized_view_schema}"."fm_temp_mv_{self.current_materialized_view_name}_dump"'
-        return sub_expression
+        """Get source reference for spatial joins. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.get_source_reference(sub_expression)
 
     def _build_spatial_join_query(self, layer_props, param_postgis_sub_expression, sub_expression):
-        """Build SELECT query with spatial JOIN for filtering. Delegates to pg_executor."""
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.build_spatial_join_query(
-                layer_props=layer_props,
-                param_postgis_sub_expression=param_postgis_sub_expression,
-                sub_expression=sub_expression,
-                current_materialized_view_name=self.current_materialized_view_name,
-                current_materialized_view_schema=self.current_materialized_view_schema,
-                source_schema=self.param_source_schema,
-                source_table=self.param_source_table,
-                expression=self.expression,
-                has_combine_operator=self.has_combine_operator
-            )
-        # Minimal fallback for non-PG environments
-        param_distant_primary_key_name = layer_props["primary_key_name"]
-        param_distant_schema = layer_props["layer_schema"]
-        param_distant_table = layer_props["layer_name"]
-        source_ref = self._get_source_reference(sub_expression)
-        return (
-            f'(SELECT "{param_distant_table}"."{param_distant_primary_key_name}" '  # nosec B608 - identifiers from QGIS layer metadata (task parameters)
-            f'FROM "{param_distant_schema}"."{param_distant_table}" '
-            f'INNER JOIN {source_ref} ON {param_postgis_sub_expression})'
+        """Build spatial JOIN query. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.build_spatial_join_query(
+            layer_props, param_postgis_sub_expression, sub_expression
         )
 
     def _apply_combine_operator(self, primary_key_name, param_expression, param_old_subset, param_combine_operator):
-        """Apply SQL set operator to combine with existing subset. Delegated to pg_executor."""
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.apply_combine_operator(
-                primary_key_name, param_expression, param_old_subset, param_combine_operator
-            )
-        # Minimal fallback
-        if param_old_subset and param_combine_operator:
-            return f'"{primary_key_name}" IN ( {param_old_subset} {param_combine_operator} {param_expression} )'
-        return f'"{primary_key_name}" IN {param_expression}'
+        """Apply SQL set operator. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.apply_combine_operator(
+            primary_key_name, param_expression, param_old_subset, param_combine_operator
+        )
 
     def _build_postgis_filter_expression(self, layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator):
-        """
-        Build complete PostGIS filter expression for subset string.
-        Delegates to pg_executor.build_postgis_filter_expression().
-
-        Args:
-            layer_props: Layer properties dict
-            param_postgis_sub_expression: PostGIS spatial predicate expression
-            sub_expression: Source layer subset expression
-            param_old_subset: Existing subset string from layer
-            param_combine_operator: SQL set operator (UNION, INTERSECT, EXCEPT)
-
-        Returns:
-            tuple: (expression, param_expression) - Complete filter and subquery
-        """
-        if PG_EXECUTOR_AVAILABLE:
-            return pg_executor.build_postgis_filter_expression(
-                layer_props=layer_props,
-                param_postgis_sub_expression=param_postgis_sub_expression,
-                sub_expression=sub_expression,
-                param_old_subset=param_old_subset,
-                param_combine_operator=param_combine_operator,
-                current_materialized_view_name=self.current_materialized_view_name,
-                current_materialized_view_schema=self.current_materialized_view_schema,
-                source_schema=self.param_source_schema,
-                source_table=self.param_source_table,
-                expression=self.expression,
-                has_combine_operator=self.has_combine_operator
-            )
-        # Minimal fallback
-        param_expression = self._build_spatial_join_query(
-            layer_props, param_postgis_sub_expression, sub_expression
+        """Build PostGIS filter expression. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.build_postgis_filter_expression(
+            layer_props, param_postgis_sub_expression, sub_expression, param_old_subset, param_combine_operator
         )
-        expression = self._apply_combine_operator(
-            layer_props["primary_key_name"], param_expression, param_old_subset, param_combine_operator
-        )
-        return expression, param_expression
 
     def _execute_ogr_spatial_selection(self, layer, current_layer, param_old_subset):
-        """Delegates to ogr_executor.execute_ogr_spatial_selection()."""
-        if not OGR_EXECUTOR_AVAILABLE:
-            raise ImportError("ogr_executor module not available - cannot execute OGR spatial selection")
-
-        if not hasattr(ogr_executor, 'OGRSpatialSelectionContext'):
-            raise ImportError("ogr_executor.OGRSpatialSelectionContext not available")
-
-        context = ogr_executor.OGRSpatialSelectionContext(
-            ogr_source_geom=self.ogr_source_geom,
-            current_predicates=self.current_predicates,
-            has_combine_operator=self.has_combine_operator,
-            param_other_layers_combine_operator=self.param_other_layers_combine_operator,
-            verify_and_create_spatial_index=self._verify_and_create_spatial_index,
-        )
-        ogr_executor.execute_ogr_spatial_selection(
-            layer, current_layer, param_old_subset, context
-        )
-        logger.debug("_execute_ogr_spatial_selection: delegated to ogr_executor")
+        """Execute OGR spatial selection. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.execute_ogr_spatial_selection(layer, current_layer, param_old_subset)
 
     def _build_ogr_filter_from_selection(self, current_layer, layer_props, param_distant_geom_expression):
-        """Delegates to ogr_executor.build_ogr_filter_from_selection()."""
-        if not OGR_EXECUTOR_AVAILABLE:
-            raise ImportError("ogr_executor module not available - cannot build OGR filter from selection")
-
-        return ogr_executor.build_ogr_filter_from_selection(
-            layer=current_layer,
-            layer_props=layer_props,
-            distant_geom_expression=param_distant_geom_expression
+        """Build OGR filter from selection. Delegates to SpatialQueryHandler."""
+        return self._spatial_query.build_ogr_filter_from_selection(
+            current_layer, layer_props, param_distant_geom_expression
         )
 
     def _normalize_column_names_for_postgresql(self, expression, field_names):
