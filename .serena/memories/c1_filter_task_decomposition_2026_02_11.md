@@ -114,9 +114,110 @@ Still contains (not yet extracted):
 - Backend expression building (~200 lines)
 - Geometric filtering execution (~200 lines)
 
-## Next Steps
-To continue reduction toward <2500 lines:
+## Collaborative Session Analysis (2026-02-11)
+
+### Status Report by The Elder Scrolls
+Audit revealed Pass 2 completion:
+- **Current state**: filter_task.py = 4800 lines (down from 5890)
+- **6 handlers extracted**: 3388 lines externalized
+- **New files uncommitted**: All 6 handlers (cleanup, export, geometry, initialization, source_geometry_preparer, subset_management)
+- **Tests status**: 235/235 passing, zero regressions
+- **Identified gaps**: Missing US-C1.3.1 to US-C1.3.5, no formalized acceptance criteria
+
+### Product Decision by Jordan (PO)
+**Recommendation**: Option A — Target <3000 lines (ACCEPTABLE threshold, not <2500)
+**Rationale**:
+- 4800 → 3000 = 37.5% reduction (realistic)
+- Avoids over-engineering for marginal gains
+- Aligns with "pragmatic refactoring" philosophy
+- Preserves thread safety and signal contracts
+
+**User Stories Created**:
+- **US-C1.3.1**: Commit atomic Pass 1+2 (6 handlers) — HIGHEST PRIORITY
+- **US-C1.3.2**: Extract FilteringOrchestrator (~400 lines)
+- **US-C1.3.3**: Extract FinishedHandler (~216 lines)
+- **US-C1.3.4**: Inline dead callback wrappers (~350 lines)
+- **US-C1.3.5**: Extract MaterializedViewBuilder (~200 lines)
+
+**Acceptance Criteria** (US-C1.3.1):
+1. All 6 handlers committed atomically with zero test regressions
+2. `__init__.py` exports all handlers
+3. filter_task.py imports handlers as private (`_handler`)
+4. No public API changes to FilterEngineTask
+5. Thread safety preserved (handlers stateless or param-injected)
+6. Signal handling unchanged (blockSignals still in dockwidget)
+7. Documentation updated (docstrings + architectural note)
+
+### Technical Diagnostic by Marco (Tech Lead)
+**Findings**:
+- 6 handlers uncommitted, exist in working directory
+- filter_task.py reduction: 5890 → 4800 lines (-18.5%)
+- Delegation wrappers: thin (1-5 lines each)
+- No architectural debt detected
+- **Risk**: Handlers not version-controlled → potential loss if branch issues
+
+**Decision**: GO for atomic commit (US-C1.3.1) BEFORE continuing extraction
+
+**Projection** (Pass 3 scope):
+- Extract FilteringOrchestrator (~400 lines)
+- Extract FinishedHandler (~216 lines)
+- Inline dead callbacks (~350 lines)
+- **Result**: 4800 - 966 = ~3834 lines (above 3000, requires Pass 4)
+- **Revised target**: ~1300 lines after full Passe 3 cleanup (Marco's analysis)
+
+### Technology Pattern by Atlas (Tech Watch)
+**Recommended Pattern**: Hybrid Orchestrator-Handler + Context Object
+**Inspiration**: QuickOSM, QNEAT3, QGIS Processing framework
+
+**Architecture**:
+```
+FilterEngineTask (Orchestrator)
+  ├─ execute_filtering() — main workflow
+  ├─ run() — QgsTask entry point
+  ├─ finished() — main thread callback
+  └─ delegates to:
+      ├─ FilteringOrchestrator (parallel/sequential execution)
+      ├─ FinishedHandler (UI updates, signal emission)
+      ├─ MaterializedViewBuilder (PostgreSQL MV chains)
+      └─ [6 existing handlers]
+```
+
+**Context Object**:
+```python
+@dataclass
+class FilterContext:
+    source_layer_uri: str
+    exploring_layer_uri: str
+    predicates: Dict[str, Any]
+    buffer_config: BufferConfig
+    session_id: str
+    # ... all shared state
+```
+
+**Benefits**:
+- Reduces parameter passing (20+ params → 1 context object)
+- Thread-safe (immutable context)
+- Testable (mock context easily)
+- Aligned with Processing framework conventions
+
+**Precedents**:
+- QuickOSM: `QuickOSMProcess` orchestrator + `QueryFactory` handlers
+- QNEAT3: `Qneat3Network` + `Qneat3AnalysisPoint` stateless handlers
+- QGIS Processing: `QgsProcessingAlgorithm.run()` + `QgsProcessingContext`
+
+---
+
+## Next Steps (Revised)
+### Immediate (US-C1.3.1):
+1. **Commit atomic Pass 1+2** (6 handlers) — PRIORITY 1
+2. Verify CI passes (235 tests green)
+3. Update `__init__.py` exports documentation
+
+### Pass 3 Scope (US-C1.3.2 to US-C1.3.5):
 1. **FilteringOrchestrator** (~400 lines): execute_filtering, _filter_all_layers_*
-2. **FinishedHandler** (~216 lines): finished() method
-3. **Dead callback cleanup**: Remove callback wrappers that are now redundant
-   (careful: many are still used by pg_execute_filter and other adapters)
+2. **FinishedHandler** (~216 lines): finished() method + UI updates
+3. **Dead callback cleanup** (~350 lines): Inline redundant wrappers
+4. **MaterializedViewBuilder** (~200 lines): PostgreSQL MV chain logic
+
+**Target after Pass 3**: ~3000 lines (Jordan's acceptance threshold)
+**Stretch goal**: ~1300 lines (Marco's projection with full cleanup)
