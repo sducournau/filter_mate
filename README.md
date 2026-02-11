@@ -4,6 +4,7 @@
 
 > 🚀 Explore, filter & export vector data with lightning-fast performance on ANY data source.
 
+[![Tests](https://github.com/imagodata/filter_mate/actions/workflows/test.yml/badge.svg)](https://github.com/imagodata/filter_mate/actions/workflows/test.yml)
 [![Documentation](https://img.shields.io/badge/docs-website-blue)](https://sducournau.github.io/filter_mate)
 [![QGIS Plugin](https://img.shields.io/badge/QGIS-Plugin-green)](https://plugins.qgis.org/plugins/filter_mate)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-black)](https://github.com/sducournau/filter_mate)
