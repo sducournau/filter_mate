@@ -126,6 +126,99 @@ Full discussion and review coordination here. See `#announcements` for the user-
 """.strip()
 
 # ---------------------------------------------------------------------------
+# Technical bulletin content (audit & refactoring results)
+# ---------------------------------------------------------------------------
+
+TECHNICAL_ANNOUNCEMENT_PARTS = [
+    """
+# :wrench: FilterMate v4.4.6 — Technical Bulletin
+
+Hello everyone!
+
+Here is a complete progress update on FilterMate.
+
+## AUDIT & MAJOR REFACTORING
+
+**Quality score: 6.5/10 --> 8.5/10 (+30%)**
+
+19 commits on main, covering 4 phases:
+
+### P0 - Tests restored
+- 311 unit tests in 18 files (was: 0)
+- Working pytest configuration
+
+### P1 - Quick Wins
+- 8 handlers extracted and restored
+- AutoOptimizer unified, critical bug fixed (it was silently broken)
+- Dead code removed: -659 lines (legacy_adapter + compat)
+""".strip(),
+    """
+### P2 - God Classes decomposition
+- **filter_task.py**: 5,884 --> 3,970 lines (-32%)
+  - ExpressionFacadeHandler extracted (-197 lines)
+  - MaterializedViewHandler extracted (-411 lines)
+- **dockwidget.py**: 7,130 --> 6,504 lines (-8.8%)
+  - 4 managers extracted (DockwidgetSignalManager, etc.)
+- SignalBlocker systematized: 24 occurrences, 9 files
+
+### P3 - Security & Robustness
+- qgisMinimumVersion: 3.0 --> 3.22
+- CRS_UTILS_AVAILABLE removed (6 files, -48 lines)
+- except Exception: 39 --> 8 safety nets in filter_task (annotated)
+- sanitize_sql_identifier applied to 30+ identifiers (1 CRITICAL PK bug fixed)
+- Missing f-strings fixed in SQL templates
+""".strip(),
+    """
+## KEY FIGURES
+
+| Metric | Before | After |
+|---|---|---|
+| Quality score | 6.5/10 | 8.5/10 |
+| Unit tests | 0 | 311 |
+| filter_task.py | 5,884 lines | 3,970 lines |
+| dockwidget.py | 7,130 lines | 6,504 lines |
+| except Exception | ~80 | 8 (annotated) |
+| Unsecured SQL | ~30 | 0 |
+| Auto-optimizer | Broken | Working |
+""".strip(),
+    """
+## BACKLOG RASTER & POINT CLOUD V1
+
+The backlog for Raster and Point Cloud support has been developed:
+
+- 8 EPICs, 17 User Stories, 5 sprints
+- Estimate: 55-75 development days
+
+### Priorities:
+- **MUST**: R0 (raster foundations) --> R1 (sampling) --> R2 (zonal stats -- unique differentiator)
+- **SHOULD**: R3 (raster highlight) + PC1 (point cloud classification/attributes/Z)
+- **COULD**: R4 (raster clip) + PC2 (advanced PDAL)
+
+Sprint 0 is ready: US-R0.1 (cherry-pick foundations) and US-R0.2 (pass 3 refactoring) can be parallelized.
+""".strip(),
+    """
+## i18n — TRANSLATION STATUS
+
+FilterMate supports 22 languages with 450 translated messages per language:
+am, da, de, en, es, fi, fr, hi, id, it, nb, nl, pl, pt, ru, sl, sv, tl, tr, uz, vi, zh
+
+All .ts and .qm files are present. French and English are 100% complete.
+
+Recent fix: 19 user-facing strings wrapped in `tr()`/`QCoreApplication.translate()` across 5 files.
+
+## NEXT STEPS
+
+1. **filter_task.py Pass 3**: target < 3,000 lines (2-3 days)
+2. **Dockwidget Phase 2**: extract ~700 additional lines (3-5 days)
+3. **Sprint 0 Raster**: foundations + cherry-pick (parallelizable with refactoring)
+4. **Integration tests**: 4 backends (PostgreSQL, SpatiaLite, GeoPackage, OGR)
+5. **CI/CD**: automated pytest pipeline
+
+Questions or suggestions? Feel free to react! :point_down:
+""".strip(),
+]
+
+# ---------------------------------------------------------------------------
 # Video tutorials content
 # ---------------------------------------------------------------------------
 
@@ -257,6 +350,18 @@ class AnnouncementBot(discord.Client):
         channels = {ch.name: ch for ch in guild.text_channels}
         post_raster = self.only in (None, "raster")
         post_videos = self.only in (None, "videos")
+        post_technical = self.only in (None, "technical")
+
+        # --- Technical bulletin ---
+        if post_technical:
+            announcements_ch = channels.get("announcements")
+            if announcements_ch:
+                log.info("Posting technical bulletin in #announcements (%d parts)", len(TECHNICAL_ANNOUNCEMENT_PARTS))
+                for i, part in enumerate(TECHNICAL_ANNOUNCEMENT_PARTS):
+                    await self._send_and_pin(announcements_ch, part, pin=(i == 0))
+                    log.info("  Part %d/%d sent", i + 1, len(TECHNICAL_ANNOUNCEMENT_PARTS))
+            else:
+                log.warning("#announcements channel not found")
 
         # --- Raster announcements ---
         if post_raster:
@@ -309,7 +414,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Preview without posting")
     parser.add_argument(
         "--only",
-        choices=["raster", "videos"],
+        choices=["raster", "videos", "technical"],
         default=None,
         help="Post only a specific announcement set (default: all)",
     )
