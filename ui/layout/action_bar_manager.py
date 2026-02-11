@@ -269,7 +269,7 @@ class ActionBarManager(LayoutManagerBase):
         UIConfig = self._get_ui_config()
         if UIConfig and hasattr(UIConfig, 'get_button_height'):
             return UIConfig.get_button_height("action_button")
-        return 42  # Fallback
+        return 34  # Fallback matches COMPACT profile
 
     def clear_layout(self) -> None:
         """
@@ -296,7 +296,14 @@ class ActionBarManager(LayoutManagerBase):
             action_buttons: List of QPushButton widgets to add
         """
         new_layout = QtWidgets.QHBoxLayout(self.dockwidget.frame_actions)
-        new_layout.setContentsMargins(8, 8, 8, 16)
+        UIConfig = self._get_ui_config()
+        margins = (UIConfig.get_config('layout', 'margins_actions') if UIConfig else None) or {}
+        if isinstance(margins, dict):
+            new_layout.setContentsMargins(
+                margins.get('left', 8), margins.get('top', 8),
+                margins.get('right', 8), margins.get('bottom', 16))
+        else:
+            new_layout.setContentsMargins(8, 8, 8, 16)
         new_layout.setSpacing(6)
 
         for i, btn in enumerate(action_buttons):
@@ -321,7 +328,13 @@ class ActionBarManager(LayoutManagerBase):
             action_buttons: List of QPushButton widgets to add
         """
         new_layout = QtWidgets.QVBoxLayout(self.dockwidget.frame_actions)
-        new_layout.setContentsMargins(4, 4, 4, 4)
+        UIConfig = self._get_ui_config()
+        margins = (UIConfig.get_config('layout', 'margins_actions') if UIConfig else None) or {}
+        if isinstance(margins, dict):
+            m = margins.get('left', 4)
+            new_layout.setContentsMargins(m, m, m, m)
+        else:
+            new_layout.setContentsMargins(4, 4, 4, 4)
         new_layout.setSpacing(12)
 
         for btn in action_buttons:
@@ -339,12 +352,15 @@ class ActionBarManager(LayoutManagerBase):
         """
         frame = self.dockwidget.frame_actions
         button_height = self._get_button_height()
+        UIConfig = self._get_ui_config()
+        action_frame_cfg = (UIConfig.get_config('action_frame') if UIConfig else None) or {}
 
         if self._position in ('top', 'bottom'):
-            # Horizontal mode
-            frame_height = max(int(button_height * 1.8), 56)
+            # Horizontal mode - use UIConfig action_frame dimensions
+            frame_height = action_frame_cfg.get('min_height') or max(int(button_height * 1.8), 56)
+            frame_max = action_frame_cfg.get('max_height') or (frame_height + 15)
             frame.setMinimumHeight(frame_height)
-            frame.setMaximumHeight(frame_height + 15)
+            frame.setMaximumHeight(frame_max)
             frame.setMinimumWidth(0)
             frame.setMaximumWidth(16777215)
             frame.setSizePolicy(
