@@ -14,6 +14,7 @@ from .configuration_manager import ConfigurationManager  # noqa: F401
 from .dockwidget_signal_manager import DockwidgetSignalManager, SignalStateChangeError  # noqa: F401
 from .optimization_manager import OptimizationManager  # noqa: F401
 from .config_model_manager import ConfigModelManager  # noqa: F401
+from .combobox_population_manager import ComboboxPopulationManager  # noqa: F401
 
 __all__ = [
     'ConfigurationManager',
@@ -21,4 +22,5 @@ __all__ = [
     'SignalStateChangeError',
     'OptimizationManager',
     'ConfigModelManager',
+    'ComboboxPopulationManager',
 ]

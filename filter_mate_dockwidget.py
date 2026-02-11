@@ -23,10 +23,10 @@ logger = get_app_logger()
 
 # v4.0 Sprint 6: Widget configuration management
 # v5.0 Phase 2: Add DockwidgetSignalManager for signal management extraction
-# v5.0 P2-2: Add OptimizationManager, ConfigModelManager for God Class decomposition
+# v5.0 P2-2: Add managers for God Class decomposition
 from .ui.managers import (
     ConfigurationManager, DockwidgetSignalManager,
-    OptimizationManager, ConfigModelManager,
+    OptimizationManager, ConfigModelManager, ComboboxPopulationManager,
 )
 from qgis.PyQt import QtGui, QtWidgets, QtCore
 from qgis.PyQt.QtCore import (
@@ -269,6 +269,8 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._optimization_manager = OptimizationManager(self)
         # v5.0 P2-2 E2: Initialize config model manager
         self._config_model_manager = ConfigModelManager(self)
+        # v5.0 P2-2 E3: Initialize combobox population manager
+        self._combobox_population_manager = ComboboxPopulationManager(self)
         # FIX 2026-02-11: Register as active dockwidget for FeaturePickerWidget crash prevention
         global _active_dockwidget
         _active_dockwidget = self
@@ -2276,142 +2278,22 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         return icon
 
+    # v5.0 P2-2 E3: Combobox population methods delegated to ComboboxPopulationManager
     def filtering_populate_predicates_chekableCombobox(self):
-        """v4.0 S18: Populate geometric predicates combobox."""
-        try:
-            predicates = self._controller_integration.delegate_filtering_get_available_predicates() if self._controller_integration else None
-            self.predicates = predicates or ["Intersect", "Contain", "Disjoint", "Equal", "Touch", "Overlap", "Are within", "Cross"]
-            logger.info(f"🔧 filtering_populate_predicates_chekableCombobox: predicates={self.predicates}")
-
-            # Get widget from configuration
-            if not hasattr(self, 'widgets') or self.widgets is None:
-                logger.error("❌ self.widgets is None or not initialized!")
-                # Fallback: access widget directly
-                w = self.comboBox_filtering_geometric_predicates
-            elif "FILTERING" not in self.widgets:
-                logger.error("❌ 'FILTERING' not in self.widgets!")
-                w = self.comboBox_filtering_geometric_predicates
-            elif "GEOMETRIC_PREDICATES" not in self.widgets["FILTERING"]:
-                logger.error("❌ 'GEOMETRIC_PREDICATES' not in self.widgets['FILTERING']!")
-                w = self.comboBox_filtering_geometric_predicates
-            else:
-                w = self.widgets["FILTERING"]["GEOMETRIC_PREDICATES"]["WIDGET"]
-
-            logger.info(f"🔧 Widget type: {type(w).__name__}, widget={w}")
-            logger.info(f"🔧 Widget count before clear: {w.count()}")
-
-            w.clear()
-            logger.info(f"🔧 Widget count after clear: {w.count()}")
-
-            # Add items one by one for better diagnostics
-            for pred in self.predicates:
-                w.addItem(pred)
-
-            logger.info(f"✅ Widget count after addItems: {w.count()}")
-            logger.info(f"✅ Widget items: {[w.itemText(i) for i in range(w.count())]}")
-
-        except Exception as e:
-            logger.error(f"❌ filtering_populate_predicates_chekableCombobox FAILED: {e}", exc_info=True)
-            # Fallback: try direct widget access
-            try:
-                w = self.comboBox_filtering_geometric_predicates
-                w.clear()
-                w.addItems(["Intersect", "Contain", "Disjoint", "Equal", "Touch", "Overlap", "Are within", "Cross"])
-                logger.info(f"✅ Fallback succeeded, widget count: {w.count()}")
-            except Exception as e2:
-                logger.error(f"❌ Fallback also failed: {e2}", exc_info=True)
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        self._combobox_population_manager.filtering_populate_predicates_checkable_combobox()
 
     def filtering_populate_buffer_type_combobox(self):
-        """v4.0 S18: Populate buffer type combobox."""
-        buffer_types = self._controller_integration.delegate_filtering_get_available_buffer_types() if self._controller_integration else None
-        w = self.widgets["FILTERING"]["BUFFER_TYPE"]["WIDGET"]; w.clear(); w.addItems(buffer_types or ["Round", "Flat", "Square"])
-        if not w.currentText(): w.setCurrentIndex(0)
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        self._combobox_population_manager.filtering_populate_buffer_type_combobox()
 
     def filtering_populate_layers_chekableCombobox(self, layer=None):
-        """Populate layers-to-filter combobox.
-
-        FIX 2026-01-16: Fallback to direct method if controller delegation fails.
-        This ensures the list is always populated, even if PROJECT_LAYERS is incomplete.
-        """
-        logger.info(f"🔍 filtering_populate_layers_chekableCombobox called for layer: {layer.name() if layer else 'None'}")
-        logger.info(f"🔍   widgets_initialized={self.widgets_initialized}, _controller_integration={self._controller_integration is not None}")
-        logger.info(f"🔍   PROJECT_LAYERS count={len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0}")
-        if self.PROJECT_LAYERS:
-            logger.info(f"🔍   PROJECT_LAYERS keys={list(self.PROJECT_LAYERS.keys())[:5]}...")  # First 5
-
-        success = False
-
-        # Try controller delegation first (preferred method - handles PostgreSQL/remote layers)
-        if self.widgets_initialized and self._controller_integration:
-            result = self._controller_integration.delegate_populate_layers_checkable_combobox(layer)
-            logger.info(f"🔍   Controller delegation returned: {result}")
-            if result:
-                success = True
-                # Force visual refresh of the combobox
-                if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
-                    widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-                    if widget:
-                        logger.info(f"🔍   Widget count after controller population: {widget.count()}")
-                        widget.update()
-                        widget.repaint()
-
-        # FALLBACK: Use direct method if controller failed
-        if not success:
-            logger.warning("⚠️  Controller delegation failed or unavailable - using direct fallback method")
-            try:
-                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'disconnect')
-                target_layer = layer or self.current_layer
-                if target_layer:
-                    result = self._populate_filtering_layers_direct(target_layer)
-                    logger.info(f"🔍   Direct fallback returned: {result}")
-                    if "FILTERING" in self.widgets and "LAYERS_TO_FILTER" in self.widgets["FILTERING"]:
-                        widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-                        if widget:
-                            logger.info(f"🔍   Widget count after direct population: {widget.count()}")
-                else:
-                    logger.warning("❌ No layer available for direct population")
-                self.manageSignal(["FILTERING", "LAYERS_TO_FILTER"], 'connect', 'checkedItemsChanged')
-            except Exception as e:
-                logger.error(f"❌ Direct fallback failed: {e}", exc_info=True)
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        self._combobox_population_manager.filtering_populate_layers_checkable_combobox(layer)
 
     def exporting_populate_combobox(self):
-        """Populate export layers combobox.
-
-        FIX 2026-01-16: Fallback to direct method if controller delegation fails.
-        This ensures the list is always populated, even if PROJECT_LAYERS is incomplete.
-        """
-        logger.info("🔍 exporting_populate_combobox called")
-        logger.info(f"🔍   _controller_integration={self._controller_integration is not None}")
-        logger.info(f"🔍   PROJECT_LAYERS count={len(self.PROJECT_LAYERS) if self.PROJECT_LAYERS else 0}")
-
-        success = False
-
-        # Try controller delegation first (preferred method - handles PostgreSQL/remote layers)
-        if self._controller_integration:
-            result = self._controller_integration.delegate_populate_export_combobox()
-            logger.info(f"🔍   Controller delegation returned: {result}")
-            if result:
-                success = True
-                # Check widget count
-                if "EXPORTING" in self.widgets and "LAYERS_TO_EXPORT" in self.widgets["EXPORTING"]:
-                    widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
-                    if widget:
-                        logger.info(f"🔍   Widget count after controller population: {widget.count()}")
-
-        # FALLBACK: Use direct method if controller failed
-        if not success:
-            logger.warning("⚠️  Controller delegation failed or unavailable - using direct fallback method")
-            try:
-                self.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'disconnect')
-                result = self._populate_export_combobox_direct()
-                logger.info(f"🔍   Direct fallback returned: {result}")
-                if "EXPORTING" in self.widgets and "LAYERS_TO_EXPORT" in self.widgets["EXPORTING"]:
-                    widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
-                    if widget:
-                        logger.info(f"🔍   Widget count after direct population: {widget.count()}")
-                self.manageSignal(["EXPORTING", "LAYERS_TO_EXPORT"], 'connect', 'checkedItemsChanged')
-            except Exception as e:
-                logger.error(f"❌ Direct fallback failed: {e}", exc_info=True)
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        self._combobox_population_manager.exporting_populate_combobox()
 
     def _on_project_layers_ready(self):
         """v4.0.4: Callback when PROJECT_LAYERS is fully populated and ready.
@@ -2517,214 +2399,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 logger.error(f"❌ Fallback filtering layers failed: {e}", exc_info=True)
 
     def _populate_export_combobox_direct(self) -> bool:
-        """v4.0.6: Direct population of export combobox without controller dependency.
-
-        This is a fallback method that populates the combobox directly,
-        bypassing the controller integration which may not be initialized.
-
-        Returns:
-            True if population succeeded, False otherwise
-        """
-        try:
-            from qgis.core import QgsVectorLayer, QgsProject
-            from qgis.PyQt.QtCore import Qt
-
-            # Check preconditions
-            logger.info(f"🔍 _populate_export_combobox_direct START: widgets_initialized={self.widgets_initialized}")
-            if not self.widgets_initialized:
-                logger.warning("❌ _populate_export_combobox_direct: widgets not initialized")
-                return False
-            if not self.PROJECT_LAYERS:
-                logger.warning("❌ _populate_export_combobox_direct: PROJECT_LAYERS empty")
-                return False
-
-            logger.info(f"🔍 _populate_export_combobox_direct: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} layers")
-
-            # Get saved preferences
-            layers_to_export = []
-            datatype_to_export = ''
-            if self.project_props.get('EXPORTING', {}).get('HAS_LAYERS_TO_EXPORT'):
-                layers_to_export = self.project_props['EXPORTING'].get('LAYERS_TO_EXPORT', [])
-            if self.project_props.get('EXPORTING', {}).get('HAS_DATATYPE_TO_EXPORT'):
-                datatype_to_export = self.project_props['EXPORTING'].get('DATATYPE_TO_EXPORT', '')
-
-            # Import validation
-            try:
-                from .infrastructure.utils.validation_utils import is_layer_source_available
-            except ImportError:
-                def is_layer_source_available(layer, require_psycopg2=False):
-                    return layer.isValid()
-
-            project = QgsProject.instance()
-
-            # Clear and populate layers widget
-            logger.info("🔍 _populate_export_combobox_direct: Accessing widget via self.widgets['EXPORTING']['LAYERS_TO_EXPORT']['WIDGET']")
-            logger.info(f"🔍 _populate_export_combobox_direct: self.widgets keys = {list(self.widgets.keys()) if self.widgets else 'None'}")
-            if self.widgets and "EXPORTING" in self.widgets:
-                logger.info(f"🔍 _populate_export_combobox_direct: EXPORTING keys = {list(self.widgets['EXPORTING'].keys())}")
-
-            layers_widget = self.widgets["EXPORTING"]["LAYERS_TO_EXPORT"]["WIDGET"]
-            logger.info(f"🔍 _populate_export_combobox_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
-            layers_widget.clear()
-            item_index = 0
-
-            for key in list(self.PROJECT_LAYERS.keys()):
-                if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
-                    continue
-
-                layer_info = self.PROJECT_LAYERS[key]["infos"]
-                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
-                    continue
-
-                layer_id = layer_info["layer_id"]
-                layer_name = layer_info["layer_name"]
-                layer_crs_authid = layer_info["layer_crs_authid"]
-                geom_type = layer_info["layer_geometry_type"]
-                layer_icon = self.icon_per_geometry_type(geom_type)
-
-                # Validate layer
-                layer_obj = project.mapLayer(layer_id)
-                if layer_obj and isinstance(layer_obj, QgsVectorLayer) and is_layer_source_available(layer_obj, require_psycopg2=False):
-                    display_name = f"{layer_name} [{layer_crs_authid}]"
-                    item_data = {"layer_id": key, "layer_geometry_type": geom_type}
-                    layers_widget.addItem(layer_icon, display_name, item_data)
-                    item = layers_widget.model().item(item_index)
-                    item.setCheckState(Qt.Checked if key in layers_to_export else Qt.Unchecked)
-                    item_index += 1
-
-            logger.info(f"✅ _populate_export_combobox_direct: Added {item_index} layers to combobox")
-
-            # Populate datatype/format combobox
-            try:
-                from osgeo import ogr
-                datatype_widget = self.widgets["EXPORTING"]["DATATYPE_TO_EXPORT"]["WIDGET"]
-                datatype_widget.clear()
-                ogr_driver_list = sorted([ogr.GetDriver(i).GetDescription() for i in range(ogr.GetDriverCount())])
-                datatype_widget.addItems(ogr_driver_list)
-                logger.info(f"_populate_export_combobox_direct: Added {len(ogr_driver_list)} export formats")
-
-                if datatype_to_export:
-                    idx = datatype_widget.findText(datatype_to_export)
-                    datatype_widget.setCurrentIndex(idx if idx >= 0 else datatype_widget.findText('GPKG'))
-                else:
-                    datatype_widget.setCurrentIndex(datatype_widget.findText('GPKG'))
-            except ImportError:
-                logger.warning("_populate_export_combobox_direct: OGR not available")
-
-            return item_index > 0
-
-        except Exception as e:
-            logger.error(f"_populate_export_combobox_direct failed: {e}", exc_info=True)
-            return False
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        return self._combobox_population_manager.populate_export_combobox_direct()
 
     def _populate_filtering_layers_direct(self, layer) -> bool:
-        """v4.0.6: Direct population of filtering layers combobox without controller dependency.
-
-        Args:
-            layer: Source layer for which to populate target layers
-
-        Returns:
-            True if population succeeded, False otherwise
-        """
-        try:
-            from qgis.core import QgsVectorLayer, QgsProject
-            from qgis.PyQt.QtCore import Qt
-
-            # Check preconditions
-            logger.info(f"🔍 _populate_filtering_layers_direct START: layer={layer.name() if layer else 'None'}, widgets_initialized={self.widgets_initialized}")
-            if not self.widgets_initialized:
-                logger.warning("❌ _populate_filtering_layers_direct: widgets not initialized")
-                return False
-            if not self.PROJECT_LAYERS:
-                logger.warning("❌ _populate_filtering_layers_direct: PROJECT_LAYERS empty")
-                return False
-            if not layer or not isinstance(layer, QgsVectorLayer):
-                logger.warning("❌ _populate_filtering_layers_direct: invalid layer")
-                return False
-            if layer.id() not in self.PROJECT_LAYERS:
-                logger.warning(f"❌ _populate_filtering_layers_direct: layer {layer.name()} not in PROJECT_LAYERS")
-                return False
-
-            logger.info(f"🔍 _populate_filtering_layers_direct: PROJECT_LAYERS has {len(self.PROJECT_LAYERS)} layers")
-
-            # Import validation
-            try:
-                from .infrastructure.utils.validation_utils import is_layer_source_available
-            except ImportError:
-                def is_layer_source_available(layer, require_psycopg2=False):
-                    return layer.isValid()
-
-            layer_props = self.PROJECT_LAYERS[layer.id()]
-            project = QgsProject.instance()
-
-            # Get saved layers to filter
-            has_layers = layer_props.get("filtering", {}).get("has_layers_to_filter", False)
-            layers_to_filter = layer_props.get("filtering", {}).get("layers_to_filter", [])
-
-            # Remove source layer from targets if present
-            source_layer_id = layer.id()
-            if source_layer_id in layers_to_filter:
-                layers_to_filter = [lid for lid in layers_to_filter if lid != source_layer_id]
-
-            # Clear and populate widget
-            logger.info("🔍 _populate_filtering_layers_direct: Accessing widget via self.widgets['FILTERING']['LAYERS_TO_FILTER']['WIDGET']")
-            logger.info(f"🔍 _populate_filtering_layers_direct: self.widgets keys = {list(self.widgets.keys()) if self.widgets else 'None'}")
-            if self.widgets and "FILTERING" in self.widgets:
-                logger.info(f"🔍 _populate_filtering_layers_direct: FILTERING keys = {list(self.widgets['FILTERING'].keys())}")
-
-            layers_widget = self.widgets["FILTERING"]["LAYERS_TO_FILTER"]["WIDGET"]
-            logger.info(f"🔍 _populate_filtering_layers_direct: layers_widget = {layers_widget}, type = {type(layers_widget).__name__}")
-            layers_widget.clear()
-            item_index = 0
-
-            for key in list(self.PROJECT_LAYERS.keys()):
-                # Skip source layer
-                if key == layer.id():
-                    continue
-
-                if key not in self.PROJECT_LAYERS or "infos" not in self.PROJECT_LAYERS[key]:
-                    continue
-
-                layer_info = self.PROJECT_LAYERS[key]["infos"]
-                required_keys = ["layer_id", "layer_name", "layer_crs_authid", "layer_geometry_type"]
-                if any(k not in layer_info or layer_info[k] is None for k in required_keys):
-                    continue
-
-                layer_id = layer_info["layer_id"]
-                layer_name = layer_info["layer_name"]
-                layer_crs = layer_info["layer_crs_authid"]
-                geom_type = layer_info["layer_geometry_type"]
-                layer_icon = self.icon_per_geometry_type(geom_type)
-
-                # Validate layer
-                layer_obj = project.mapLayer(layer_id)
-                if not layer_obj or not isinstance(layer_obj, QgsVectorLayer):
-                    continue
-                # v4.2: Skip non-spatial tables (tables without geometry)
-                if not layer_obj.isSpatial():
-                    continue
-                if not is_layer_source_available(layer_obj, require_psycopg2=False):
-                    continue
-
-                # Add to combobox
-                display_name = f"{layer_name} [{layer_crs}]"
-                item_data = {"layer_id": key, "layer_geometry_type": geom_type}
-                layers_widget.addItem(layer_icon, display_name, item_data)
-
-                item = layers_widget.model().item(item_index)
-                if has_layers and layer_id in layers_to_filter:
-                    item.setCheckState(Qt.Checked)
-                else:
-                    item.setCheckState(Qt.Unchecked)
-                item_index += 1
-
-            logger.info(f"✅ _populate_filtering_layers_direct: Added {item_index} layers (source '{layer.name()}' excluded)")
-            return item_index > 0
-
-        except Exception as e:
-            logger.error(f"_populate_filtering_layers_direct failed: {e}", exc_info=True)
-            return False
+        """v5.0 P2-2: Delegated to ComboboxPopulationManager."""
+        return self._combobox_population_manager.populate_filtering_layers_direct(layer)
 
     def _apply_auto_configuration(self):
         """Apply auto-configuration from environment."""
