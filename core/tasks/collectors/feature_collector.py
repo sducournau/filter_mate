@@ -74,7 +74,7 @@ class FeatureCollector:
         ids = collector.get_cached_ids()
     """
 
-    # v4.2.8: Interval for cancel checks during iteration
+    # Interval for cancel checks during iteration
     CANCEL_CHECK_INTERVAL = 100
 
     def __init__(
@@ -359,7 +359,7 @@ class FeatureCollector:
         check_interval = self.CANCEL_CHECK_INTERVAL
 
         for i, f in enumerate(features):
-            # v4.2.8: Periodic cancellation check
+            # Periodic cancellation check
             if i > 0 and i % check_interval == 0:
                 if self.is_canceled():
                     logger.info(f"Feature extraction canceled at {i}/{len(features)} features")

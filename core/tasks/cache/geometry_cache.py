@@ -13,7 +13,7 @@ Location: core/tasks/cache/geometry_cache.py
 import logging
 from typing import Optional, List, Any
 
-# HEXAGONAL MIGRATION v4.1: Removed unused QgsGeometry import
+# HEXAGONAL MIGRATION Removed unused QgsGeometry import
 # Use adapters from core.ports.qgis_port when needed
 
 # Import infrastructure cache
