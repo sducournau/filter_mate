@@ -614,8 +614,20 @@ class DimensionsManager(LayoutManagerBase):
                                         )
                                         spacer_count += 1
 
-                                # Add bottom stretch to absorb extra vertical space
-                                nested_layout.addStretch(1)
+                                # Add bottom stretch (only once — guard against repeated calls)
+                                has_stretch = False
+                                for k in range(nested_layout.count()):
+                                    stretch_item = nested_layout.itemAt(k)
+                                    if (stretch_item and isinstance(stretch_item, QSpacerItem)
+                                            and stretch_item.sizePolicy().verticalPolicy() == QSizePolicy.Expanding
+                                            and stretch_item.sizePolicy().horizontalPolicy() == QSizePolicy.Minimum
+                                            and stretch_item.sizeHint().height() == 0):
+                                        has_stretch = True
+                                        break
+                                if not has_stretch:
+                                    nested_layout.addStretch(1)
+
+                                nested_layout.invalidate()
 
                         if spacer_count > 0:
                             logger.debug(f"Harmonized {spacer_count} spacers in {section_name} to {target_spacer_height}px (Fixed)")
@@ -729,7 +741,7 @@ class DimensionsManager(LayoutManagerBase):
                     layout = getattr(self.dockwidget, layout_name)
                     layout.setSpacing(button_spacing)
                     layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setAlignment(Qt.AlignVCenter | Qt.AlignHCenter)
+                    layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
                     # Center each item horizontally within the layout
                     for i in range(layout.count()):
