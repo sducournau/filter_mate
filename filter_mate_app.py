@@ -1570,7 +1570,14 @@ class FilterMateApp:
                 logger.debug(f"FilterMate: Error clearing FeaturePickerWidget in on_remove_layer_task_begun: {e}")
 
         self.dockwidget.disconnect_widgets_signals()
-        self.dockwidget.reset_multiple_checkable_combobox()
+        # v4.1.5: Skip reset during filtering - the filter result handler already configured
+        # the widget, and destroying it now would leave it unconfigured because
+        # get_project_layers_from_app() early-returns while _filtering_in_progress is True.
+        # Per-layer cleanup is handled by _handle_remove_layers → remove_list_widget().
+        if not getattr(self.dockwidget, '_filtering_in_progress', False):
+            self.dockwidget.reset_multiple_checkable_combobox()
+        else:
+            logger.debug("v4.1.5: Skipped reset_multiple_checkable_combobox during filtering")
 
     # ========================================
     # CONTROLLER DELEGATION (v3.0 MIG-025)
