@@ -169,8 +169,8 @@ class FavoritesMigrationService:
             favorite_names = [f[1] for f in favorites_to_migrate]
 
             # Update favorites to target project
-            ','.join('?' * len(favorite_ids))
-            cursor.execute("""
+            placeholders = ','.join('?' * len(favorite_ids))
+            cursor.execute(f"""
                 UPDATE fm_favorites
                 SET project_uuid = ?, updated_at = ?
                 WHERE id IN ({placeholders})

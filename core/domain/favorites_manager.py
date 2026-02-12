@@ -249,9 +249,9 @@ class FavoritesManager:
                 if col in available_columns:
                     columns_to_select.append(col)
 
-            ', '.join(columns_to_select)
+            select_clause = ', '.join(columns_to_select)
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT {select_clause}
                 FROM fm_favorites
                 WHERE project_uuid = ?
