@@ -368,33 +368,33 @@ class LayerService(QObject):
                 return fields[pk_indexes[0]].name()
 
             # 2. Look for exact match PK names (case-insensitive)
-            for field in fields:
-                if field.name().lower() in self.PK_EXACT_NAMES:
-                    logger.debug(f"Found exact PK name: {field.name()}")
-                    return field.name()
+            for f in fields:
+                if f.name().lower() in self.PK_EXACT_NAMES:
+                    logger.debug(f"Found exact PK name: {f.name()}")
+                    return f.name()
 
             # 3. Look for UUID fields (highest priority for unique identification)
-            for field in fields:
-                field_name_lower = field.name().lower()
+            for f in fields:
+                field_name_lower = f.name().lower()
                 for pattern in self.UUID_PATTERNS:
                     if pattern in field_name_lower:
-                        logger.debug(f"Found UUID field: {field.name()}")
-                        return field.name()
+                        logger.debug(f"Found UUID field: {f.name()}")
+                        return f.name()
 
             # 4. Look for numeric fields with ID patterns
             numeric_types = (QVariant.Int, QVariant.LongLong, QVariant.UInt, QVariant.ULongLong)
-            for field in fields:
-                field_name_lower = field.name().lower()
+            for f in fields:
+                field_name_lower = f.name().lower()
                 for pattern in self.ID_PATTERNS:
-                    if pattern in field_name_lower and field.type() in numeric_types:
-                        logger.debug(f"Found numeric ID field: {field.name()}")
-                        return field.name()
+                    if pattern in field_name_lower and f.type() in numeric_types:
+                        logger.debug(f"Found numeric ID field: {f.name()}")
+                        return f.name()
 
             # 5. First numeric integer field (reliable for unique identification)
-            for field in fields:
-                if field.type() in numeric_types:
-                    logger.debug(f"Using first numeric field: {field.name()}")
-                    return field.name()
+            for f in fields:
+                if f.type() in numeric_types:
+                    logger.debug(f"Using first numeric field: {f.name()}")
+                    return f.name()
 
             # 6. First field as fallback (avoid if possible - text fields are less suitable)
             logger.debug(f"Falling back to first field: {fields[0].name()}")

@@ -12,8 +12,6 @@ See docs/architecture.md for migration guide.
 
 from .config.config import ENV_VARS
 import os
-import json
-import re
 import sip
 import weakref
 
@@ -84,8 +82,6 @@ from qgis.utils import iface
 
 import webbrowser
 from .ui.widgets import QgsCheckableComboBoxFeaturesListPickerWidget
-from .ui.widgets.json_view.model import JsonModel
-from .ui.widgets.json_view.view import JsonView
 
 # Object safety and layer utilities (migrated to infrastructure)
 from .infrastructure.utils import is_layer_valid as is_valid_layer
@@ -551,7 +547,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         self._last_multiple_selection_fids = self._last_multiple_selection_layer_id = None
         self.predicates = self.project_props = self.layer_properties_tuples_dict = self.export_properties_tuples_dict = None
         self.buffer_property_has_been_init = False
-        self.json_template_project_exporting = '{"has_layers_to_export":false,"layers_to_export":[],"has_projection_to_export":false,"projection_to_export":"","has_styles_to_export":false,"styles_to_export":"","has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"","has_output_folder_to_export":false,"output_folder_to_export":"","has_zip_to_export":false,"zip_to_export":"","batch_output_folder":false,"batch_zip":false }'
+        self.json_template_project_exporting = (
+            '{"has_layers_to_export":false,"layers_to_export":[],'
+            '"has_projection_to_export":false,"projection_to_export":"",'
+            '"has_styles_to_export":false,"styles_to_export":"",'
+            '"has_datatype_to_export":false,"datatype_to_export":"","datatype_to_export":"",'
+            '"has_output_folder_to_export":false,"output_folder_to_export":"",'
+            '"has_zip_to_export":false,"zip_to_export":"",'
+            '"batch_output_folder":false,"batch_zip":false }'
+        )
         self.pending_config_changes, self.config_changes_pending = [], False
         if ICON_THEME_AVAILABLE:
             try: IconThemeManager.set_theme(StyleLoader.detect_qgis_theme())
@@ -578,7 +582,7 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def getSignal(self, oObject: QObject, strSignalName: str):
         """v4.0 S16: Get signal from QObject by name with caching."""
-        class_name, cache_key = oObject.metaObject().className(), f"{oObject.metaObject().className()}.{strSignalName}"
+        cache_key = f"{oObject.metaObject().className()}.{strSignalName}"
         if cache_key in FilterMateDockWidget._signal_cache: return FilterMateDockWidget._signal_cache[cache_key]
         oMetaObj = oObject.metaObject()
         for i in range(oMetaObj.methodCount()):
@@ -674,15 +678,24 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if layout.count() > 0 and (item := layout.itemAt(0)) and item.widget():
                 layout.removeWidget(item.widget()); item.widget().deleteLater()
             if hasattr(self, 'checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection') and self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
-                try: self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close(); self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
+                try:
+                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.reset()
+                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.close()
+                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection.deleteLater()
                 except (RuntimeError, AttributeError):  # Widget may already be deleted - expected during cleanup
                     pass
             # Recreate the widget
             self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection = QgsCheckableComboBoxFeaturesListPickerWidget(self.CONFIG_DATA, self)
             if self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection:
                 layout.insertWidget(0, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection, 1); layout.update()
-                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {"TYPE": "CustomCheckableFeatureComboBox", "WIDGET": self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection,
-                    "SIGNALS": [("updatingCheckedItemList", self.exploring_features_changed), ("filteringCheckedItemList", self.exploring_source_params_changed)]}
+                widget = self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+                self.widgets["EXPLORING"]["MULTIPLE_SELECTION_FEATURES"] = {
+                    "TYPE": "CustomCheckableFeatureComboBox", "WIDGET": widget,
+                    "SIGNALS": [
+                        ("updatingCheckedItemList", self.exploring_features_changed),
+                        ("filteringCheckedItemList", self.exploring_source_params_changed)
+                    ]
+                }
         except Exception as e: logger.warning(f"reset_multiple_checkable_combobox failed: {e}")
 
     def _fix_toolbox_icons(self):
@@ -843,7 +856,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             self.main_splitter.setChildrenCollapsible(cfg.get('collapsible', False))
             self.main_splitter.setHandleWidth(hw)
             self.main_splitter.setOpaqueResize(cfg.get('opaque_resize', True))
-            self.main_splitter.setStyleSheet(f"QSplitter::handle:vertical{{background-color:#d0d0d0;height:{hw - 2}px;margin:2px {hm}px;border-radius:{(hw - 2) // 2}px;}}QSplitter::handle:vertical:hover{{background-color:#3498db;}}")
+            self.main_splitter.setStyleSheet(
+                f"QSplitter::handle:vertical{{background-color:#d0d0d0;"
+                f"height:{hw - 2}px;margin:2px {hm}px;"
+                f"border-radius:{(hw - 2) // 2}px;}}"
+                f"QSplitter::handle:vertical:hover{{background-color:#3498db;}}"
+            )
             self._apply_splitter_frame_policies()
             self.main_splitter.setStretchFactor(0, cfg.get('exploring_stretch', 2))
             self.main_splitter.setStretchFactor(1, cfg.get('toolset_stretch', 5))
@@ -1067,7 +1085,6 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             from .ui.config import UIConfig
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
-            content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
             main_margins = UIConfig.get_config('layout', 'margins_main') or 2
             key_cfg = UIConfig.get_config('key_button') or {}
             button_spacing = key_cfg.get('spacing', 2)
@@ -1220,11 +1237,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 4
-            for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'), ('exporting', 'verticalLayout_exporting_values')]:
+            for name, layout_attr in [('filtering', 'verticalLayout_filtering_values'),
+                                      ('exporting', 'verticalLayout_exporting_values')]:
                 target = get_spacer_size(f'verticalSpacer_{name}_keys_field_top', is_compact)
                 if hasattr(self, layout_attr) and (layout := getattr(self, layout_attr)):
                     for i in range(layout.count()):
-                        if (item := layout.itemAt(i)) and isinstance(item, QSpacerItem): item.changeSize(item.sizeHint().width(), target, item.sizePolicy().horizontalPolicy(), item.sizePolicy().verticalPolicy())
+                        if (item := layout.itemAt(i)) and isinstance(item, QSpacerItem):
+                            item.changeSize(
+                                item.sizeHint().width(), target,
+                                item.sizePolicy().horizontalPolicy(),
+                                item.sizePolicy().verticalPolicy()
+                            )
                     layout.setSpacing(layout_spacing)
             logger.debug(f"Adjusted row spacing: filtering/exporting aligned with {layout_spacing}px spacing")
         except Exception as e:
@@ -1242,9 +1265,17 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         # v4.0: Softer "mousse" style with rounded corners
         bb = "color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;"
         # v4.0: Softer colors with better hover transitions
-        self.favorites_indicator_label = self._create_indicator_label("label_favorites_indicator", "★", bb + "background-color:#f5b041;", bb + "background-color:#f39c12;", "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 32)
+        self.favorites_indicator_label = self._create_indicator_label(
+            "label_favorites_indicator", "★",
+            bb + "background-color:#f5b041;", bb + "background-color:#f39c12;",
+            "★ Favorites\nClick to manage", self._on_favorite_indicator_clicked, 32
+        )
         hl.addWidget(self.favorites_indicator_label)
-        self.backend_indicator_label = self._create_indicator_label("label_backend_indicator", "OGR" if self.has_loaded_layers else "...", bb + "background-color:#5dade2;", bb + "background-color:#3498db;", "Click to change backend", self._on_backend_indicator_clicked, 38)
+        self.backend_indicator_label = self._create_indicator_label(
+            "label_backend_indicator", "OGR" if self.has_loaded_layers else "...",
+            bb + "background-color:#5dade2;", bb + "background-color:#3498db;",
+            "Click to change backend", self._on_backend_indicator_clicked, 38
+        )
         hl.addWidget(self.backend_indicator_label)
         self.forced_backends = {}
         if hasattr(self, 'verticalLayout_8'): self.verticalLayout_8.insertWidget(0, self.frame_header)
@@ -1316,15 +1347,23 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _update_favorite_indicator(self):
         """v4.0 S16: Update favorites badge."""
         if not hasattr(self, 'favorites_indicator_label') or not self.favorites_indicator_label: return
-        fm, cnt = getattr(self, '_favorites_manager', None), getattr(getattr(self, '_favorites_manager', None), 'count', 0)
+        cnt = getattr(getattr(self, '_favorites_manager', None), 'count', 0)
         if cnt > 0:
             self.favorites_indicator_label.setText(f"★ {cnt}")
             self.favorites_indicator_label.setToolTip(self.tr("★ {0} Favorites saved\nClick to apply or manage").format(cnt))
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}QLabel#label_favorites_indicator:hover{background-color:#d68910;}")
+            self.favorites_indicator_label.setStyleSheet(
+                "QLabel#label_favorites_indicator{color:white;font-size:8pt;font-weight:500;"
+                "padding:2px 8px;border-radius:10px;border:none;background-color:#f39c12;}"
+                "QLabel#label_favorites_indicator:hover{background-color:#d68910;}"
+            )
         else:
             self.favorites_indicator_label.setText("★")
             self.favorites_indicator_label.setToolTip(self.tr("★ No favorites saved\nClick to add current filter"))
-            self.favorites_indicator_label.setStyleSheet("QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}")
+            self.favorites_indicator_label.setStyleSheet(
+                "QLabel#label_favorites_indicator{color:#95a5a6;font-size:8pt;font-weight:500;"
+                "padding:2px 8px;border-radius:10px;border:none;background-color:#ecf0f1;}"
+                "QLabel#label_favorites_indicator:hover{background-color:#d5dbdb;}"
+            )
         self.favorites_indicator_label.adjustSize()
 
     def _get_available_backends_for_layer(self, layer):
@@ -1816,7 +1855,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             cursor, widgets = (Qt.WaitCursor if loading else Qt.PointingHandCursor), []
             if groupbox in ("single_selection", None): widgets.extend([self.mFieldExpressionWidget_exploring_single_selection, self.mFeaturePickerWidget_exploring_single_selection])
-            if groupbox in ("multiple_selection", None): widgets.extend([self.mFieldExpressionWidget_exploring_multiple_selection, self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection])
+            if groupbox in ("multiple_selection", None):
+                widgets.extend([
+                    self.mFieldExpressionWidget_exploring_multiple_selection,
+                    self.checkableComboBoxFeaturesListPickerWidget_exploring_multiple_selection
+                ])
             if groupbox in ("custom_selection", None): widgets.append(self.mFieldExpressionWidget_exploring_custom_selection)
             for w in widgets:
                 if w and hasattr(w, 'setCursor'): w.setCursor(cursor)
@@ -3387,7 +3430,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if not self.widgets_initialized: return
         self.properties_group_state_enabler(self.layer_properties_tuples_dict["selection_expression"])
-        groupbox = self.PROJECT_LAYERS.get(self.current_layer.id(), {}).get("exploring", {}).get("current_exploring_groupbox", "single_selection") if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS else "single_selection"
+        groupbox = (
+            self.PROJECT_LAYERS.get(self.current_layer.id(), {})
+            .get("exploring", {}).get("current_exploring_groupbox", "single_selection")
+            if self.current_layer and self.current_layer.id() in self.PROJECT_LAYERS
+            else "single_selection"
+        )
         self.exploring_groupbox_changed(groupbox)
 
     def _update_exploring_buttons_state(self):
@@ -3733,7 +3781,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             old = self.current_exploring_groupbox
             if old and old != groupbox: self._exploring_cache.invalidate(self.current_layer.id(), old)
         self._force_exploring_groupbox_exclusive(groupbox)
-        {'single_selection': self._configure_single_selection_groupbox, 'multiple_selection': self._configure_multiple_selection_groupbox, 'custom_selection': self._configure_custom_selection_groupbox}.get(groupbox, lambda: None)()
+        {
+            'single_selection': self._configure_single_selection_groupbox,
+            'multiple_selection': self._configure_multiple_selection_groupbox,
+            'custom_selection': self._configure_custom_selection_groupbox
+        }.get(groupbox, lambda: None)()
 
     def exploring_identify_clicked(self):
         """
@@ -4273,7 +4325,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         This is called when IS_TRACKING or IS_SELECTING are activated to ensure
         the signal remains connected for auto-zoom/sync functionality.
         """
-        logger.debug(f"🔌 _ensure_selection_changed_connected CALLED: current_layer={self.current_layer.name() if self.current_layer else 'None'}, connection_flag={self.current_layer_selection_connection}")
+        logger.debug(
+            f"_ensure_selection_changed_connected CALLED: "
+            f"current_layer={self.current_layer.name() if self.current_layer else 'None'}, "
+            f"connection_flag={self.current_layer_selection_connection}"
+        )
 
         if not self.current_layer:
             logger.warning("⚠️ _ensure_selection_changed_connected: No current layer")
@@ -4833,9 +4889,20 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         FIX 2026-01-15 (BUGFIX-COMBOBOX-20260115): CURRENT_LAYER signal NOT disconnected.
         Reason: User can change layer during update. Lock _updating_current_layer prevents reentrancy.
         """
-        exploring = ["SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION", "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION", "CUSTOM_SELECTION_EXPRESSION", "IDENTIFY", "ZOOM", "IS_SELECTING", "IS_TRACKING", "IS_LINKING", "RESET_ALL_LAYER_PROPERTIES"]
+        exploring = [
+            "SINGLE_SELECTION_FEATURES", "SINGLE_SELECTION_EXPRESSION",
+            "MULTIPLE_SELECTION_FEATURES", "MULTIPLE_SELECTION_EXPRESSION",
+            "CUSTOM_SELECTION_EXPRESSION", "IDENTIFY", "ZOOM",
+            "IS_SELECTING", "IS_TRACKING", "IS_LINKING", "RESET_ALL_LAYER_PROPERTIES"
+        ]
         # FIX 2026-01-15: CURRENT_LAYER removed - must stay connected for user interaction
-        filtering = ["HAS_LAYERS_TO_FILTER", "LAYERS_TO_FILTER", "HAS_COMBINE_OPERATOR", "SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR", "HAS_GEOMETRIC_PREDICATES", "GEOMETRIC_PREDICATES", "HAS_BUFFER_VALUE", "BUFFER_VALUE", "BUFFER_VALUE_PROPERTY", "HAS_BUFFER_TYPE", "BUFFER_TYPE"]
+        filtering = [
+            "HAS_LAYERS_TO_FILTER", "LAYERS_TO_FILTER", "HAS_COMBINE_OPERATOR",
+            "SOURCE_LAYER_COMBINE_OPERATOR", "OTHER_LAYERS_COMBINE_OPERATOR",
+            "HAS_GEOMETRIC_PREDICATES", "GEOMETRIC_PREDICATES",
+            "HAS_BUFFER_VALUE", "BUFFER_VALUE", "BUFFER_VALUE_PROPERTY",
+            "HAS_BUFFER_TYPE", "BUFFER_TYPE"
+        ]
         widgets_to_stop = [["EXPLORING", w] for w in exploring] + [["FILTERING", w] for w in filtering]
 
         for wp in widgets_to_stop: self.manageSignal(wp, 'disconnect')
@@ -5562,7 +5629,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS: return
         lp, lid = self.PROJECT_LAYERS[self.current_layer.id()], self.current_layer.id()
-        prop_def = QgsPropertyDefinition(f"{lid}_buffer_property_definition", QgsPropertyDefinition.DataTypeNumeric, f"Replace buffer with expression for {lid}", 'Expression must return numeric values (meters)')
+        prop_def = QgsPropertyDefinition(
+            f"{lid}_buffer_property_definition",
+            QgsPropertyDefinition.DataTypeNumeric,
+            f"Replace buffer with expression for {lid}",
+            'Expression must return numeric values (meters)'
+        )
         buf_expr = lp["filtering"]["buffer_value_expression"]
         if not isinstance(buf_expr, str): buf_expr = str(buf_expr) if buf_expr else ''; lp["filtering"]["buffer_value_expression"] = buf_expr
         prop = QgsProperty.fromExpression(buf_expr) if buf_expr and buf_expr.strip() else QgsProperty()
@@ -6012,7 +6084,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if self.backend_indicator_label:
                 self.backend_indicator_label.setText("...")
                 # v4.0: Soft "mousse" style for waiting state
-                self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt; font-weight: 500; padding: 2px 8px; border-radius: 10px; border: none; background-color: #f4f6f6; }")
+                self.backend_indicator_label.setStyleSheet(
+                    "QLabel#label_backend_indicator { color: #7f8c8d; font-size: 8pt;"
+                    " font-weight: 500; padding: 2px 8px; border-radius: 10px;"
+                    " border: none; background-color: #f4f6f6; }"
+                )
         finally:
             self._updating_layers, self._plugin_busy = False, False
 
@@ -6054,8 +6130,26 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             layer_props = self.PROJECT_LAYERS[layer.id()]
             best_field = get_best_display_field(layer) or layer_props.get("infos", {}).get("primary_key_name", "")
-            defaults = {"exploring": {"is_changing_all_layer_properties": True, "is_tracking": False, "is_selecting": False, "is_linking": False, "current_exploring_groupbox": "single_selection", "single_selection_expression": best_field, "multiple_selection_expression": best_field, "custom_selection_expression": best_field},
-                        "filtering": {"has_layers_to_filter": False, "layers_to_filter": [], "has_combine_operator": False, "source_layer_combine_operator": "AND", "other_layers_combine_operator": "AND", "has_geometric_predicates": False, "geometric_predicates": [], "has_buffer_value": False, "buffer_value": 0.0, "buffer_value_property": False, "buffer_value_expression": "", "has_buffer_type": False, "buffer_type": "Round"}}
+            defaults = {
+                "exploring": {
+                    "is_changing_all_layer_properties": True, "is_tracking": False,
+                    "is_selecting": False, "is_linking": False,
+                    "current_exploring_groupbox": "single_selection",
+                    "single_selection_expression": best_field,
+                    "multiple_selection_expression": best_field,
+                    "custom_selection_expression": best_field
+                },
+                "filtering": {
+                    "has_layers_to_filter": False, "layers_to_filter": [],
+                    "has_combine_operator": False,
+                    "source_layer_combine_operator": "AND",
+                    "other_layers_combine_operator": "AND",
+                    "has_geometric_predicates": False, "geometric_predicates": [],
+                    "has_buffer_value": False, "buffer_value": 0.0,
+                    "buffer_value_property": False, "buffer_value_expression": "",
+                    "has_buffer_type": False, "buffer_type": "Round"
+                }
+            }
             props_to_save = []
             for cat, props in defaults.items(): layer_props[cat].update(props); props_to_save.extend((cat, k) for k in props)
             self.settingLayerVariable.emit(layer, props_to_save); self._synchronize_layer_widgets(layer, layer_props)
@@ -6079,7 +6173,13 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v3.1 Sprint 17: Reset filtering button visual states based on layer properties."""
         try:
             f = layer_props["filtering"]
-            btns = {"HAS_LAYERS_TO_FILTER": f["has_layers_to_filter"], "HAS_COMBINE_OPERATOR": f["has_combine_operator"], "HAS_GEOMETRIC_PREDICATES": f["has_geometric_predicates"], "HAS_BUFFER_VALUE": f["has_buffer_value"], "HAS_BUFFER_TYPE": f["has_buffer_type"]}
+            btns = {
+                "HAS_LAYERS_TO_FILTER": f["has_layers_to_filter"],
+                "HAS_COMBINE_OPERATOR": f["has_combine_operator"],
+                "HAS_GEOMETRIC_PREDICATES": f["has_geometric_predicates"],
+                "HAS_BUFFER_VALUE": f["has_buffer_value"],
+                "HAS_BUFFER_TYPE": f["has_buffer_type"]
+            }
 
             for k, v in btns.items():
                 w = self.widgets["FILTERING"][k]["WIDGET"]
@@ -6203,7 +6303,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
     def get_exploring_cache_stats(self):
         """v4.0 Sprint 18: Get cache statistics."""
-        return (self._controller_integration.delegate_exploring_get_cache_stats() if self._controller_integration else None) or (self._exploring_cache.get_stats() if hasattr(self, '_exploring_cache') else {})
+        return (
+            (self._controller_integration.delegate_exploring_get_cache_stats()
+             if self._controller_integration else None)
+            or (self._exploring_cache.get_stats()
+                if hasattr(self, '_exploring_cache') else {})
+        )
 
     def invalidate_exploring_cache(self, layer_id: str = None, groupbox_type: str = None) -> None:
         """Invalidate cached exploring features data.
@@ -6222,7 +6327,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """v4.0 Sprint 18: Invalidate exploring cache."""
         if layer_id is None and groupbox_type is None and self._controller_integration and self._controller_integration.delegate_exploring_clear_cache(): return
         if hasattr(self, '_exploring_cache'):
-            self._exploring_cache.invalidate_all() if layer_id is None else (self._exploring_cache.invalidate_layer(layer_id) if groupbox_type is None else self._exploring_cache.invalidate(layer_id, groupbox_type))
+            if layer_id is None:
+                self._exploring_cache.invalidate_all()
+            elif groupbox_type is None:
+                self._exploring_cache.invalidate_layer(layer_id)
+            else:
+                self._exploring_cache.invalidate(layer_id, groupbox_type)
 
     def launchTaskEvent(self, state: str, task_name: str) -> None:
         """Emit signal to launch a FilterMate task.
@@ -6355,7 +6465,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         # Standard validation for other tasks (filter, undo, redo, etc.)
         if not self.widgets_initialized or not self.current_layer or self.current_layer.id() not in self.PROJECT_LAYERS:
-            logger.warning(f"launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, current_layer={self.current_layer is not None}, in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}")
+            logger.warning(
+                f"launchTaskEvent BLOCKED: widgets_initialized={self.widgets_initialized}, "
+                f"current_layer={self.current_layer is not None}, "
+                f"in_PROJECT_LAYERS={self.current_layer.id() in self.PROJECT_LAYERS if self.current_layer else False}"
+            )
             return
 
         self.PROJECT_LAYERS[self.current_layer.id()]["filtering"]["layers_to_filter"] = self.get_layers_to_filter()
@@ -6367,7 +6481,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         widgets = [
             (self.comboBox_filtering_current_layer, 'currentTextChanged', lambda: self._update_combo_tooltip(self.comboBox_filtering_current_layer)),
             (self.checkableComboBoxLayer_filtering_layers_to_filter, 'checkedItemsChanged', lambda: self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_filtering_layers_to_filter)),
-            (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged', lambda: [self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers), self._update_export_buttons_state()]),
+            (self.checkableComboBoxLayer_exporting_layers, 'checkedItemsChanged',
+             lambda: [self._update_checkable_combo_tooltip(self.checkableComboBoxLayer_exporting_layers),
+                      self._update_export_buttons_state()]),
             (self.mFieldExpressionWidget_exploring_single_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_single_selection)),
             (self.mFieldExpressionWidget_exploring_multiple_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_multiple_selection)),
             (self.mFieldExpressionWidget_exploring_custom_selection, 'fieldChanged', lambda: self._update_expression_tooltip(self.mFieldExpressionWidget_exploring_custom_selection)),
@@ -6383,7 +6499,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         if not combo or not hasattr(combo, 'currentText'): return
         try:
             t = combo.currentText()
-            combo.setToolTip(t if t and len(t) > 30 else QCoreApplication.translate("FilterMate", "Current layer: {0}").format(t) if t else QCoreApplication.translate("FilterMate", "No layer selected"))
+            if t and len(t) > 30:
+                combo.setToolTip(t)
+            elif t:
+                combo.setToolTip(QCoreApplication.translate("FilterMate", "Current layer: {0}").format(t))
+            else:
+                combo.setToolTip(QCoreApplication.translate("FilterMate", "No layer selected"))
         except Exception:  # Tooltip update is cosmetic - non-critical
             pass
 
@@ -6407,7 +6528,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         try:
             e = expr_widget.expression()
             if e and len(e) > 40: e = e.replace(' AND ', '\nAND ').replace(' OR ', '\nOR ')
-            expr_widget.setToolTip(QCoreApplication.translate("FilterMate", "Expression:\n{0}" if e and len(e) > 40 else "Expression: {0}").format(e) if e else QCoreApplication.translate("FilterMate", "No expression defined"))
+            if e:
+                fmt = "Expression:\n{0}" if len(e) > 40 else "Expression: {0}"
+                expr_widget.setToolTip(
+                    QCoreApplication.translate("FilterMate", fmt).format(e)
+                )
+            else:
+                expr_widget.setToolTip(
+                    QCoreApplication.translate("FilterMate", "No expression defined")
+                )
         except Exception:  # Tooltip update is cosmetic - non-critical
             pass
 
@@ -6461,7 +6590,9 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
         """Setup keyboard shortcuts: F5=reload layers, Ctrl+Z=undo, Ctrl+Y=redo."""
         from qgis.PyQt.QtWidgets import QShortcut
         from qgis.PyQt.QtGui import QKeySequence
-        self._reload_shortcut = QShortcut(QKeySequence("F5"), self); self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut); self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+        self._reload_shortcut = QShortcut(QKeySequence("F5"), self)
+        self._reload_shortcut.activated.connect(self._on_reload_layers_shortcut)
+        self._reload_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         self._undo_shortcut = QShortcut(QKeySequence.Undo, self); self._undo_shortcut.activated.connect(self._on_undo_shortcut); self._undo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         self._redo_shortcut = QShortcut(QKeySequence.Redo, self); self._redo_shortcut.activated.connect(self._on_redo_shortcut); self._redo_shortcut.setContext(Qt.WidgetWithChildrenShortcut)
         logger.debug("Keyboard shortcuts initialized: F5 = Reload layers, Ctrl+Z = Undo, Ctrl+Y = Redo")
@@ -6469,7 +6600,12 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
     def _on_reload_layers_shortcut(self):
         """Handle F5 shortcut to reload layers."""
         if hasattr(self, 'backend_indicator_label') and self.backend_indicator_label:
-            self.backend_indicator_label.setText("⟳"); self.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator { color: #3498db; font-size: 9pt; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: none; background-color: #e8f4fc; }")
+            self.backend_indicator_label.setText("⟳")
+            self.backend_indicator_label.setStyleSheet(
+                "QLabel#label_backend_indicator { color: #3498db; font-size: 9pt;"
+                " font-weight: 600; padding: 3px 10px; border-radius: 12px;"
+                " border: none; background-color: #e8f4fc; }"
+            )
         self.launchingTask.emit('reload_layers')
 
     def _on_undo_shortcut(self):

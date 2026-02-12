@@ -28,7 +28,7 @@ Location: core/tasks/filtering_orchestrator.py (Application Layer)
 
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 from qgis.core import QgsVectorLayer
 
@@ -509,7 +509,7 @@ class FilteringOrchestrator:
             - Handles provider-specific geometry preparation (PostgreSQL, Spatialite, OGR)
         """
         logger.info(f"manage_distant_layers_geometric_filtering: {source_layer.name()} (features: {source_layer.featureCount()})")
-        logger.info(f"  is_field_expression: N/A (handled by caller)")
+        logger.info("  is_field_expression: N/A (handled by caller)")
         logger.info("=" * 60)
 
         # DIAGNOSTIC COMPLET - ARCHITECTURE FIX 2026-01-16

@@ -17,7 +17,7 @@ All QGIS dependencies are mocked.
 """
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -376,6 +376,7 @@ class TestValidateTaskFeatures:
             f.geometry.return_value = g
 
         cancel_called = [0]
+
         def cancel_check():
             cancel_called[0] += 1
             return cancel_called[0] > 1  # Cancel after second check (i=200)

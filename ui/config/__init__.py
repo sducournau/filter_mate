@@ -91,6 +91,10 @@ class UIConfig:
             'groupbox': {
                 'min_width': 250,  # Prevent overlap when splitter is resized
                 'content_margins': {'top': 6, 'right': 8, 'bottom': 6, 'left': 8},
+                'min_height': 40,
+                'padding': 4,
+                'title_padding': 4,
+                'border_radius': 6,
             },
             'combobox': {
                 'height': 20,
@@ -157,12 +161,6 @@ class UIConfig:
                 'margins_content': 4,
                 'margins_frame': {'left': 4, 'top': 4, 'right': 4, 'bottom': 6},
                 'margins_actions': {'left': 4, 'top': 4, 'right': 4, 'bottom': 6},
-            },
-            'groupbox': {
-                'min_height': 40,
-                'padding': 4,
-                'title_padding': 4,
-                'border_radius': 6,
             },
             'spacer': {
                 'default_size': 4,
@@ -264,10 +262,16 @@ class UIConfig:
                 'base_width': 34,
                 'padding': 0,
                 'border_radius': 5,
-            }, 'groupbox': {
+            },
+            'groupbox': {
                 'min_width': 200,  # Prevent overlap when splitter is resized (compact mode)
                 'content_margins': {'top': 4, 'right': 6, 'bottom': 4, 'left': 6},
-            }, 'combobox': {
+                'min_height': 60,
+                'padding': 4,
+                'title_padding': 4,
+                'border_radius': 5,
+            },
+            'combobox': {
                 'height': 20,
                 'min_height': 20,
                 'max_height': 20,
@@ -332,12 +336,6 @@ class UIConfig:
                 'margins_content': 2,
                 'margins_frame': {'left': 2, 'top': 2, 'right': 2, 'bottom': 4},
                 'margins_actions': {'left': 2, 'top': 2, 'right': 2, 'bottom': 4},
-            },
-            'groupbox': {
-                'min_height': 60,
-                'padding': 4,
-                'title_padding': 4,
-                'border_radius': 5,
             },
             'spacer': {
                 'default_size': 4,

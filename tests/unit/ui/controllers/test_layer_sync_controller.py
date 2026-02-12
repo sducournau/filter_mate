@@ -19,7 +19,7 @@ import time
 import types
 import pathlib
 import importlib.util
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -128,8 +128,10 @@ def _ensure_sync_mocks():
         """No-op context manager replacing the real SignalBlocker."""
         def __init__(self, *widgets):
             pass
+
         def __enter__(self):
             return self
+
         def __exit__(self, *args):
             return False
 

@@ -1172,7 +1172,7 @@ class ExploringController(BaseController, LayerSelectionMixin):
         # Import required QGIS modules
         from qgis.core import (
             QgsGeometry, QgsCoordinateTransform,
-            QgsCoordinateReferenceSystem, QgsProject,
+            QgsProject,
             QgsExpression, QgsFeatureRequest
         )
         from ...core.geometry.crs_utils import is_geographic_crs, get_optimal_metric_crs

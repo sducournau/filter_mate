@@ -380,7 +380,11 @@ class FilteringController(BaseController, LayerSelectionMixin):
                 return False
 
             # v4.0.5: Log diagnostic info
-            logger.info(f"populate_layers_checkable_combobox: has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}")
+            logger.info(
+                f"populate_layers_checkable_combobox: "
+                f"has_loaded_layers={getattr(dockwidget, 'has_loaded_layers', False)}, "
+                f"PROJECT_LAYERS count={len(dockwidget.PROJECT_LAYERS) if dockwidget.PROJECT_LAYERS else 0}"
+            )
 
             # Imports
             from qgis.core import QgsVectorLayer, QgsProject
@@ -538,7 +542,10 @@ class FilteringController(BaseController, LayerSelectionMixin):
                     display_name = f"{missing_layer.name()} [{missing_layer.crs().authid()}]"
                     geom_type_str = geometry_type_to_string(missing_layer)
                     layer_icon = dockwidget.icon_per_geometry_type(geom_type_str)
-                    logger.debug(f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}")
+                    logger.debug(
+                        f"populate_layers_checkable_combobox [MISSING]: layer='{missing_layer.name()}', "
+                        f"geom_type='{geom_type_str}', icon_isNull={layer_icon.isNull() if layer_icon else 'None'}"
+                    )
                     item_data = {"layer_id": missing_layer.id(), "layer_geometry_type": geom_type_str}
                     layers_widget.addItem(layer_icon, display_name, item_data)
                     item = layers_widget.model().item(item_index)
@@ -575,10 +582,6 @@ class FilteringController(BaseController, LayerSelectionMixin):
         self._current_predicate = predicate
         self._rebuild_expression()
         self._notify_config_changed()
-
-    def get_available_predicates(self) -> List[PredicateType]:
-        """Get list of available predicates."""
-        return list(PredicateType)
 
     def on_predicate_changed(self, predicate_value: str) -> None:
         """

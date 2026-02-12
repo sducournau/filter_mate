@@ -28,7 +28,7 @@ except ImportError:
 from qgis.utils import iface
 
 import os.path
-from .config.config import init_env_vars, ENV_VARS
+from .config.config import init_env_vars, ENV_VARS  # noqa: F401 - ENV_VARS used via global
 import json
 
 # Core tasks (migrated from modules/tasks/)
@@ -149,7 +149,6 @@ def safe_show_message(level, title, message):
         {'success': mb.pushSuccess, 'info': mb.pushInfo, 'warning': mb.pushWarning, 'critical': mb.pushCritical}.get(level, mb.pushInfo)(title, message)
         return True
     except (RuntimeError, AttributeError): return False
-
 
 
 MESSAGE_TASKS_CATEGORIES = {'filter': 'FilterLayers', 'unfilter': 'FilterLayers', 'reset': 'FilterLayers', 'export': 'ExportLayers',
@@ -370,12 +369,20 @@ class FilterMateApp:
     def _cleanup_postgresql_session_views(self):
         """Clean up all PostgreSQL materialized views created by this session."""
         service = self._get_layer_lifecycle_service()
-        if service: service.cleanup_postgresql_session_views(session_id=self.session_id, temp_schema=self.app_postgresql_temp_schema, project_layers=self.PROJECT_LAYERS, postgresql_available=POSTGRESQL_AVAILABLE)
+        if service:
+            service.cleanup_postgresql_session_views(
+                session_id=self.session_id, temp_schema=self.app_postgresql_temp_schema,
+                project_layers=self.PROJECT_LAYERS, postgresql_available=POSTGRESQL_AVAILABLE
+            )
 
     def __init__(self, plugin_dir):
         """v4.0 Sprint 16: Initialize FilterMate app with managers, services, and state."""
         self.iface, self.dockwidget, self.flags, self.plugin_dir = iface, None, {}, plugin_dir
-        self.appTasks = {"filter": None, "unfilter": None, "reset": None, "export": None, "add_layers": None, "remove_layers": None, "remove_all_layers": None, "new_project": None, "project_read": None}
+        self.appTasks = {
+            "filter": None, "unfilter": None, "reset": None, "export": None,
+            "add_layers": None, "remove_layers": None, "remove_all_layers": None,
+            "new_project": None, "project_read": None
+        }
         self.tasks_descriptions = {'filter': 'Filtering data', 'unfilter': 'Unfiltering data', 'reset': 'Reseting data', 'export': 'Exporting data',
                                     'undo': 'Undo filter', 'redo': 'Redo filter', 'add_layers': 'Adding layers', 'remove_layers': 'Removing layers',
                                     'remove_all_layers': 'Removing all layers', 'new_project': 'New project', 'project_read': 'Existing project loaded', 'reload_layers': 'Reloading layers'}
@@ -412,7 +419,11 @@ class FilterMateApp:
         if POSTGRESQL_AVAILABLE:
             logger.info("FilterMate: PostgreSQL support enabled (psycopg2 available)")
         else:
-            logger.warning("FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. For PostgreSQL layers, install psycopg2.")
+            logger.warning(
+                "FilterMate: PostgreSQL support DISABLED - psycopg2 not installed. "
+                "Plugin will work with local files (Shapefile, GeoPackage, Spatialite) only. "
+                "For PostgreSQL layers, install psycopg2."
+            )
 
         # v3.0: Initialize hexagonal architecture services
         if HEXAGONAL_AVAILABLE:
@@ -448,9 +459,18 @@ class FilterMateApp:
         self._database_manager = DatabaseManager(ENV_VARS["PLUGIN_CONFIG_DIRECTORY"], self.PROJECT) if HEXAGONAL_AVAILABLE and DatabaseManager else None
         if self._database_manager:
             logger.debug("FilterMate: DatabaseManager initialized (v4.0 migration)")
-        self._variables_manager = VariablesPersistenceManager(self.get_spatialite_connection, lambda: str(self.project_uuid), lambda: self.PROJECT_LAYERS, return_typed_value,
-                                                               lambda layer_id: self._cancel_layer_tasks(layer_id) if hasattr(self, 'dockwidget') and self.dockwidget else None,
-                                                               lambda: hasattr(self, 'dockwidget') and self.dockwidget and getattr(self.dockwidget, '_updating_current_layer', False)) if HEXAGONAL_AVAILABLE and VariablesPersistenceManager else None
+        self._variables_manager = VariablesPersistenceManager(
+            self.get_spatialite_connection, lambda: str(self.project_uuid),
+            lambda: self.PROJECT_LAYERS, return_typed_value,
+            lambda layer_id: (
+                self._cancel_layer_tasks(layer_id)
+                if hasattr(self, 'dockwidget') and self.dockwidget else None
+            ),
+            lambda: (
+                hasattr(self, 'dockwidget') and self.dockwidget
+                and getattr(self.dockwidget, '_updating_current_layer', False)
+            )
+        ) if HEXAGONAL_AVAILABLE and VariablesPersistenceManager else None
         if self._variables_manager:
             logger.debug("FilterMate: VariablesPersistenceManager initialized (v4.0 migration)")
 
@@ -1444,7 +1464,11 @@ class FilterMateApp:
                 logger.info("No layers available after task termination")
                 if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                     self.dockwidget.backend_indicator_label.setText("...")
-                    self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#7f8c8d;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#ecf0f1;}")
+                    self.dockwidget.backend_indicator_label.setStyleSheet(
+                        "QLabel#label_backend_indicator{color:#7f8c8d;font-size:9pt;"
+                        "font-weight:600;padding:3px 10px;border-radius:12px;"
+                        "border:none;background-color:#ecf0f1;}"
+                    )
         else:
             logger.info("Task terminated but PROJECT_LAYERS has data, refreshing UI")
             self.dockwidget.get_project_layers_from_app(self.PROJECT_LAYERS, self.PROJECT)
@@ -1899,8 +1923,16 @@ class FilterMateApp:
         if not undo_btn or not redo_btn: return
         if self._undo_redo_handler:
             current_layer = self.dockwidget.current_layer
-            layers_to_filter = self.dockwidget.PROJECT_LAYERS.get(current_layer.id(), {}).get("filtering", {}).get("layers_to_filter", []) if current_layer and current_layer.id() in self.dockwidget.PROJECT_LAYERS else []
-            self._undo_redo_handler.update_button_states(current_layer=current_layer, layers_to_filter=layers_to_filter, undo_button=undo_btn, redo_button=redo_btn)
+            layers_to_filter = (
+                self.dockwidget.PROJECT_LAYERS.get(current_layer.id(), {})
+                .get("filtering", {}).get("layers_to_filter", [])
+                if current_layer and current_layer.id() in self.dockwidget.PROJECT_LAYERS
+                else []
+            )
+            self._undo_redo_handler.update_button_states(
+                current_layer=current_layer, layers_to_filter=layers_to_filter,
+                undo_button=undo_btn, redo_button=redo_btn
+            )
         else:
             undo_btn.setEnabled(False); redo_btn.setEnabled(False)
 
@@ -2333,7 +2365,11 @@ class FilterMateApp:
             self._reload_retry_count = 0
             if hasattr(self.dockwidget, 'backend_indicator_label') and self.dockwidget.backend_indicator_label:
                 self.dockwidget.backend_indicator_label.setText("!")
-                self.dockwidget.backend_indicator_label.setStyleSheet("QLabel#label_backend_indicator{color:#e74c3c;font-size:9pt;font-weight:600;padding:3px 10px;border-radius:12px;border:none;background-color:#fadbd8;}")
+                self.dockwidget.backend_indicator_label.setStyleSheet(
+                    "QLabel#label_backend_indicator{color:#e74c3c;font-size:9pt;"
+                    "font-weight:600;padding:3px 10px;border-radius:12px;"
+                    "border:none;background-color:#fadbd8;}"
+                )
                 self.dockwidget.backend_indicator_label.setToolTip("Layer loading failed - click to retry")
             return
 

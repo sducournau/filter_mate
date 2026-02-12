@@ -239,9 +239,6 @@ class ConfigModelManager:
         (with fallback to standard JsonView), connects signals,
         and adds reload button.
         """
-        from qgis.PyQt.QtCore import Qt
-        from qgis.PyQt import QtGui, QtWidgets
-        from qgis.PyQt.QtCore import QCoreApplication
         dw = self.dockwidget
         try:
             # Disconnect any existing signal first

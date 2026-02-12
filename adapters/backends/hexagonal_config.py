@@ -211,7 +211,4 @@ def status():
     """
     current = get_architecture_status()
 
-    for provider, state in current.items():
-        icon = "🆕" if state == 'hexagonal' else "📦"
-
     return current

@@ -334,7 +334,7 @@ class OGRExpressionBuilder(GeometricFilterPort):
 
             # Run selectbylocation
             try:
-                result = processing.run(
+                processing.run(
                     'native:selectbylocation',
                     {
                         'INPUT': layer,

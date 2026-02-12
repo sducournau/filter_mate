@@ -19,7 +19,7 @@ All QGIS dependencies are mocked via the root conftest.py.
 """
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -61,7 +61,7 @@ def _ensure_module_mocks():
             sys.modules[mod_name] = mock_obj
 
     # Provide a real ABC base for GeometricFilterPort so the builder can subclass
-    from abc import ABC, abstractmethod
+    from abc import ABC
 
     class _FakeGeometricFilterPort(ABC):
         def __init__(self, task_params):

@@ -64,7 +64,8 @@ FilterMate has always been about powerful **vector filtering**. Now we're extend
 
 ## :dart: Why This Matters
 
-**Zonal Stats as Filter** is a game-changer — no other QGIS plugin does interactive zonal-statistics-based filtering with undo/redo support. Think of it as bringing the power of `QgsZonalStatistics` directly into FilterMate's filtering workflow.
+**Zonal Stats as Filter** is a game-changer — no other QGIS plugin does interactive zonal-statistics-based filtering
+with undo/redo support. Think of it as bringing the power of `QgsZonalStatistics` directly into FilterMate's filtering workflow.
 
 ## :wrench: Technical Highlights
 
@@ -227,7 +228,8 @@ VIDEOS_ANNOUNCEMENT_PARTS = [
     """
 # :clapper: FilterMate Video Tutorials — Learn by Watching
 
-We've published a series of video tutorials showcasing FilterMate's core capabilities on real-world datasets. Whether you're just getting started or looking to master advanced workflows, these walkthroughs have you covered.
+We've published a series of video tutorials showcasing FilterMate's core capabilities on real-world datasets.
+Whether you're just getting started or looking to master advanced workflows, these walkthroughs have you covered.
 
 :point_right: **YouTube channel**: <https://www.youtube.com/@imagodata>
 """.strip(),
@@ -275,7 +277,8 @@ See how FilterMate handles geometry transformations as part of the filtering pip
 ### :six: Export Workflow — Filtered Data to GeoPackage with Styles
 > *Export a filtered area (Toulouse) with negative buffer to a single GPKG, styles included.*
 
-The full pipeline from filter to delivery: apply spatial and attribute filters, export the result as a GeoPackage with embedded QGIS styles — ready to share with colleagues or load into another project.
+The full pipeline from filter to delivery: apply spatial and attribute filters, export the result as a GeoPackage
+with embedded QGIS styles — ready to share with colleagues or load into another project.
 
 :film_frames: https://www.youtube.com/watch?v=gPLi2OudKcI
 """.strip(),

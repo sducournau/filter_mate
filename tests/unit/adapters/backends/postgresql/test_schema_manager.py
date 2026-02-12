@@ -17,7 +17,7 @@ All database operations are mocked.
 """
 import sys
 import types
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
 import pytest
 

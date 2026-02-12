@@ -226,22 +226,6 @@ class GdalErrorHandler:
         return False
 
 
-def safe_disconnect(signal, slot):
-    """
-    Safely disconnect a signal from a slot.
-
-    Handles cases where the signal is not connected or objects are deleted.
-
-    Args:
-        signal: Qt signal to disconnect
-        slot: Slot to disconnect from the signal
-    """
-    try:
-        signal.disconnect(slot)
-    except (RuntimeError, TypeError):
-        pass  # Signal was not connected or objects deleted
-
-
 def safe_iterate_features(layer_or_source, request=None, max_retries=5, retry_delay=0.3):
     """
     Safely iterate over features from a layer or feature source.
@@ -447,7 +431,6 @@ __all__ = [
     'sanitize_filename',
     # Geometry and signal utilities
     'geometry_type_to_string',
-    'safe_disconnect',
     # QGIS safety utilities
     'is_qgis_alive',
     'GdalErrorHandler',

@@ -17,7 +17,7 @@ Created: February 2026
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from filter_mate_dockwidget import FilterMateDockWidget
@@ -90,7 +90,6 @@ class OptimizationManager:
     def analyze_layer_optimizations(self):
         """Analyze current layer and show optimization recommendations."""
         from ...infrastructure.feedback import show_warning, show_info, show_success
-        from ...config.config import ENV_VARS, get_optimization_thresholds
         dw = self.dockwidget
         if not dw.current_layer:
             show_warning("FilterMate", dw.tr("No layer selected. Please select a layer first."))

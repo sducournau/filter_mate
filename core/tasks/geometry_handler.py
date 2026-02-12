@@ -48,11 +48,6 @@ logger = setup_logger(
     level=logging.INFO
 )
 
-# Lazy-load constants
-from ...infrastructure.constants import (
-    PROVIDER_POSTGRES, PROVIDER_SPATIALITE, PROVIDER_OGR
-)
-
 
 class GeometryHandler:
     """Handles geometry preparation and spatial operations for FilterEngineTask.

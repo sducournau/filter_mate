@@ -10,8 +10,6 @@ require QGIS/Spatialite and are tested in integration tests.
 
 Module tested: infrastructure.database.sql_utils
 """
-import pytest
-
 from infrastructure.database.sql_utils import (
     sanitize_sql_identifier,
     format_pk_values_for_sql,

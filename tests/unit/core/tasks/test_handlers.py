@@ -19,7 +19,7 @@ Strategy:
 Author: Beta (QA Tester)
 """
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock, call
+from unittest.mock import MagicMock, patch
 
 
 # ===========================================================================
@@ -139,8 +139,6 @@ class TestCleanupHandler:
             return_value=mock_tracker,
             create=True,
         ):
-            # Need to patch the import inside the method
-            import core.tasks.cleanup_handler as mod
             with patch.dict('sys.modules', {
                 'adapters.backends.postgresql.mv_reference_tracker': MagicMock(
                     get_mv_reference_tracker=MagicMock(return_value=mock_tracker)
@@ -1122,7 +1120,7 @@ class TestSubsetManagementHandler:
     def test_get_spatialite_datasource_native(self, mock_layer):
         """Should return native datasource for Spatialite layers."""
         with patch('core.tasks.subset_management_handler.get_spatialite_datasource_from_layer',
-                   create=True) as mock_get_ds:
+                   create=True):
             # Simulate the import
             import core.tasks.subset_management_handler as mod
             with patch.object(mod, 'get_spatialite_datasource_from_layer',

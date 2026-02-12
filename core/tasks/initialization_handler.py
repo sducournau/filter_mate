@@ -19,9 +19,7 @@ Thread Safety:
 
 import logging
 import os
-from typing import Any, Dict, Optional
-
-from qgis.core import QgsGeometry, QgsProject, QgsVectorLayer
+from qgis.core import QgsGeometry
 
 from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS

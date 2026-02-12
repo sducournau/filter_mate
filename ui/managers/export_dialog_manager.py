@@ -245,7 +245,6 @@ class ExportDialogManager:
             prop_name: Optional property name for special handling.
         """
         from qgis.core import QgsCoordinateReferenceSystem
-        dw = self.dockwidget
         w = widget_data["WIDGET"]
         wt = widget_data["TYPE"]
         if wt in ('PushButton', 'CheckBox'):

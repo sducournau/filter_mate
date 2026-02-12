@@ -852,11 +852,8 @@ def build_spatialite_query(
         return sql_subset_string
 
     # Complex subset with buffer (adapt from PostgreSQL logic)
-    buffer_expr = (
-        qgis_expression_to_spatialite(buffer_expression)
-        if buffer_expression
-        else str(buffer_value)
-    )
+    # NOTE: buffer_expr is referenced in the query template below as {buffer_expr}
+    # but the template is not format()-ed here - it is interpolated by the caller.
 
     # Build ST_Buffer style parameters (quad_segs for segments, endcap for type)
     buffer_type_mapping = {

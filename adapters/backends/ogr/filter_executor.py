@@ -134,7 +134,6 @@ def build_ogr_filter_from_selection(
     # ctid is not accessible via feature[field_name], use feature.id() instead
     features_ids = []
     try:
-        from qgis.core import QgsFeatureRequest
         request = QgsFeatureRequest().setFilterFids(selected_fids)
         for feature in layer.getFeatures(request):
             if param_distant_primary_key_name == 'ctid':

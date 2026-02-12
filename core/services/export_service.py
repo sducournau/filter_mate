@@ -318,11 +318,6 @@ class ExportService:
         Returns:
             ExportResult with operation details
         """
-        config = ExportConfig(
-            format=ExportFormat.GEOPACKAGE,
-            save_styles=save_styles
-        )
-
         result = ExportResult()
 
         try:

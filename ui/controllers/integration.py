@@ -2812,26 +2812,6 @@ class ControllerIntegration:
                 return None
         return None
 
-    def delegate_is_layer_truly_deleted(self, layer) -> Optional[bool]:
-        """
-        Delegate layer deletion check to LayerSyncController.
-
-        v4.0 Sprint 3: Centralized layer deletion check with protection.
-
-        Args:
-            layer: The layer to check
-
-        Returns:
-            True if truly deleted, False if not, None if delegation failed
-        """
-        if self._layer_sync_controller:
-            try:
-                return self._layer_sync_controller.is_layer_truly_deleted(layer)
-            except Exception as e:
-                logger.warning(f"delegate_is_layer_truly_deleted failed: {e}")
-                return None
-        return None
-
     # =========================================================================
     # Sprint 3: Property Controller Delegation Methods
     # =========================================================================
@@ -2920,24 +2900,6 @@ class ControllerIntegration:
                 )
             except Exception as e:
                 logger.warning(f"delegate_change_layer_property failed: {e}")
-                return False
-        return False
-
-    def delegate_update_buffer_validation(self) -> bool:
-        """
-        Delegate buffer validation update to PropertyController.
-
-        v4.0 Sprint 3: Migrated from dockwidget._update_buffer_validation.
-
-        Returns:
-            True if delegated successfully, False otherwise
-        """
-        if self._property_controller:
-            try:
-                self._property_controller.update_buffer_validation()
-                return True
-            except Exception as e:
-                logger.warning(f"delegate_update_buffer_validation failed: {e}")
                 return False
         return False
 

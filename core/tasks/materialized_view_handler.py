@@ -18,7 +18,7 @@ Thread Safety:
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
 from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS
@@ -526,7 +526,6 @@ class MaterializedViewHandler:
 
     def cleanup_postgresql_materialized_views(self):
         """Cleanup PostgreSQL materialized views. Delegates to CleanupHandler."""
-        from ...infrastructure.constants import PROVIDER_POSTGRES
         from ..ports.backend_services import get_backend_services
         _backend_services = get_backend_services()
         _pg_availability = _backend_services.get_postgresql_availability()

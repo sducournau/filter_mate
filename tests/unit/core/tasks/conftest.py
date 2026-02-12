@@ -48,7 +48,7 @@ def _setup_handler_mocks():
     # Logger and ENV mocks
     mock_logger = MagicMock()
     mock_setup_logger = MagicMock(return_value=mock_logger)
-    mock_env_vars = {"PATH_ABSOLUTE_PROJECT": "/tmp/filtermate_test"}
+    mock_env_vars = {"PATH_ABSOLUTE_PROJECT": "/tmp/filtermate_test"}  # nosec B108
 
     # Constants mock with real values
     mock_constants = MagicMock()

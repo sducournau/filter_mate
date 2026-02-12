@@ -324,9 +324,7 @@ class UndoRedoHandler:
             layer = project.mapLayer(layer_id)
 
             if layer:
-                before_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
                 safe_set_subset_string(layer, previous_filter)
-                after_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
                 # Update project_layers tracking if layer_id exists there
                 if layer_id in project_layers:
                     project_layers[layer_id]["infos"]["is_already_subset"] = bool(previous_filter)
@@ -393,9 +391,7 @@ class UndoRedoHandler:
             layer = project.mapLayer(layer_id)
 
             if layer:
-                before_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
                 safe_set_subset_string(layer, previous_filter)
-                after_str = layer.subsetString()[:40] if layer.subsetString() else "(empty)"
 
                 # Update project_layers tracking if layer_id exists there
                 if layer_id in project_layers:
@@ -494,12 +490,7 @@ class UndoRedoHandler:
                 previous_expression = expr
                 break
 
-        prev_expr_str = previous_expression[:40] if previous_expression else "(empty)"
-        before_str = source_layer.subsetString()[:40] if source_layer.subsetString() else "(empty)"
-
         safe_set_subset_string(source_layer, previous_expression)
-
-        after_str = source_layer.subsetString()[:40] if source_layer.subsetString() else "(empty)"
 
         project_layers[source_layer.id()]["infos"]["is_already_subset"] = bool(previous_expression)
         logger.info(f"Undo source layer to: {previous_state.description}")

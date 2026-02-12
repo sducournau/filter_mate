@@ -670,7 +670,6 @@ def execute_filter_action_postgresql_materialized(
 
         # Parse WHERE clauses
         if param_buffer_expression and parse_where_clauses_fn:
-            where_clause = param_buffer_expression.replace('CASE', '').replace('END', '').replace('IF', '').replace('ELSE', '').replace('\r', ' ').replace('\n', ' ')
             where_clauses = parse_where_clauses_fn()
             where_clause_fields_arr = [clause.split(' ')[0] for clause in where_clauses]
         else:

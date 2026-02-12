@@ -30,21 +30,14 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from qgis.core import (
-    Qgis,
     QgsCoordinateReferenceSystem,
     QgsFeature,
-    QgsFeatureRequest,
     QgsGeometry,
-    QgsProcessing,
-    QgsProcessingContext,
-    QgsProcessingFeedback,
     QgsProject,
-    QgsProperty,
     QgsTask,
     QgsVectorLayer
 )
 from qgis.PyQt.QtCore import pyqtSignal
-from qgis import processing
 
 # Import logging configuration (migrated to infrastructure.logging)
 from ...infrastructure.logging import setup_logger
@@ -101,27 +94,11 @@ from ...infrastructure.database.prepared_statements import create_prepared_state
 from ...infrastructure.utils import (
     spatialite_connect,
     ensure_db_directory_exists,
-    get_best_metric_crs,
     MESSAGE_TASKS_CATEGORIES
-)
-
-# Import geometry safety module (v2.3.9 - stability fix, migrated to core/geometry)
-
-# Import CRS utilities (migrated to core/geometry)
-from ..geometry.crs_utils import (
-    is_geographic_crs,
-    is_metric_crs,
-    get_optimal_metric_crs,
-    get_layer_crs_info
 )
 
 # Import from infrastructure (EPIC-1 migration)
 from ...infrastructure.cache import SourceGeometryCache
-from ...infrastructure.streaming import StreamingExporter, StreamingConfig
-from ...infrastructure.parallel import ParallelFilterExecutor, ParallelConfig
-
-# Import from core (EPIC-1 migration - relative import now that we're in core/)
-from ..optimization import get_combined_query_optimizer
 
 # Phase 3 C1: Import extracted handlers (February 2026)
 from .cleanup_handler import CleanupHandler
@@ -147,15 +124,6 @@ from .builders.subset_string_builder import SubsetStringBuilder
 from .collectors.feature_collector import FeatureCollector
 from .dispatchers.action_dispatcher import (
     create_dispatcher_for_task, create_action_context_from_task
-)
-
-# E6: Task completion handler functions (relative import, same package)
-from .task_completion_handler import (
-    display_warning_messages as tch_display_warnings,
-    should_skip_subset_application,
-    apply_pending_subset_requests,
-    schedule_canvas_refresh,
-    cleanup_memory_layer
 )
 
 # EPIC-1 Phase E4-S9: Centralized history repository
@@ -2508,8 +2476,10 @@ class FilterEngineTask(QgsTask):
             temp_conn = sqlite3.connect(self.db_file_path)
             temp_cur = temp_conn.cursor()
             # Try to drop both new (fm_temp_) and legacy (mv_) tables
-            temp_cur.execute(f"DROP TABLE IF EXISTS fm_temp_{session_name}")  # nosec B608 - session_name from _get_session_prefixed_name() (internal hash-based generation, SpatiaLite: no sql.Identifier equivalent)
-            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")  # nosec B608 - session_name from _get_session_prefixed_name() (internal hash-based generation, SpatiaLite: no sql.Identifier equivalent)
+            # nosec B608 - session_name from _get_session_prefixed_name()
+            # (internal hash-based generation, SpatiaLite: no sql.Identifier equivalent)
+            temp_cur.execute(f"DROP TABLE IF EXISTS fm_temp_{session_name}")  # nosec B608
+            temp_cur.execute(f"DROP TABLE IF EXISTS mv_{session_name}")  # nosec B608
             temp_conn.commit()
             temp_cur.close()
             temp_conn.close()

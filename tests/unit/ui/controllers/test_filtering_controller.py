@@ -17,8 +17,7 @@ import sys
 import types
 import pathlib
 import importlib.util
-from abc import ABCMeta, abstractmethod
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -160,8 +159,10 @@ def _ensure_filtering_mocks():
     # Create a fake LayerSelectionMixin
     class FakeLayerSelectionMixin:
         PROVIDER_TYPE_MAP = {}
+
         def get_current_layer(self):
             return getattr(self, '_current_layer', None)
+
         def is_layer_valid(self, layer):
             return layer is not None and hasattr(layer, 'isValid') and layer.isValid()
 

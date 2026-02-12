@@ -751,6 +751,7 @@ def ensure_source_table_stats(
             has_stats = result[0] > 0 if result else False
 
             if not has_stats:
+                from ....infrastructure.database.sql_utils import sanitize_sql_identifier
                 safe_schema = sanitize_sql_identifier(schema)
                 safe_table = sanitize_sql_identifier(table)
                 logger.info(f"Running ANALYZE on source table \"{safe_schema}\".\"{safe_table}\" (missing stats for {geom_field})")

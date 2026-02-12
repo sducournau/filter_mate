@@ -278,9 +278,6 @@ class DimensionsManager(LayoutManagerBase):
         filtering_config = UIConfig.get_config('frame_filtering')
         filtering_min = filtering_config.get('min_height', 180) if filtering_config else 180
 
-        # Get widget_keys padding from config (widget_keys_config already loaded above)
-        widget_keys_padding = widget_keys_config.get('padding', 2) if widget_keys_config else 2
-
         # Apply to widget keys containers - no margins for compact layout
         for widget_name in ['widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys']:
             if hasattr(self.dockwidget, widget_name):
@@ -451,7 +448,6 @@ class DimensionsManager(LayoutManagerBase):
 
             # Get harmonized layout spacing from config
             layout_spacing = UIConfig.get_config('layout', 'spacing_frame') or 8
-            content_spacing = UIConfig.get_config('layout', 'spacing_content') or 6
             UIConfig.get_config('layout', 'spacing_section') or 8
             main_spacing = UIConfig.get_config('layout', 'spacing_main') or 8
 

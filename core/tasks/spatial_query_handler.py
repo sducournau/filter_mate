@@ -24,7 +24,6 @@ Thread Safety:
 
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
 
 from ...infrastructure.logging import setup_logger
 from ...config.config import ENV_VARS

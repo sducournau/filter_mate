@@ -109,7 +109,7 @@ def mock_vector_layer():
     layer.isValid.return_value = True
     layer.providerType.return_value = "ogr"
     layer.featureCount.return_value = 100
-    layer.source.return_value = "/tmp/test.gpkg|layername=test"
+    layer.source.return_value = "/tmp/test.gpkg|layername=test"  # nosec B108
     layer.subsetString.return_value = ""
     layer.setSubsetString.return_value = True
     layer.hasSubsetString = MagicMock(return_value=False)
@@ -145,7 +145,7 @@ def mock_raster_layer():
     layer.bandCount.return_value = 3
     layer.width.return_value = 1000
     layer.height.return_value = 800
-    layer.source.return_value = "/tmp/test.tif"
+    layer.source.return_value = "/tmp/test.tif"  # nosec B108
     return layer
 
 

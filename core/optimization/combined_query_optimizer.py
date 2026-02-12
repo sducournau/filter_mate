@@ -833,8 +833,6 @@ class CombinedQueryOptimizer:
         spatial_predicate = match.group(4)
         target_geometry = f"{match.group(5)}.{match.group(6)}"
         source_geometry_expr = match.group(7)
-        additional_conditions = match.group(8) if len(match.groups()) >= 8 else None
-
         # Check for buffer in source geometry - extract distance and style
         buffer_expr = None
         buffer_distance = None

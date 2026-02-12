@@ -113,7 +113,7 @@ class ThemeDemoDialog(QDialog):
             },
             "paths": {
                 "config": "/path/to/config.json",
-                "cache": "/tmp/filtermate_cache",
+                "cache": "/tmp/filtermate_cache",  # nosec B108
                 "logs": "/var/log/qgis/filtermate.log"
             },
             "settings": {

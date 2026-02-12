@@ -861,7 +861,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
         temp_schema = source_schema  # Use source schema (e.g., "ref") instead of filtermate_temp
 
         # Convert QGIS buffer expression to PostGIS SQL
-        qgis_expression_to_postgis(buffer_expression)
+        buffer_expr_sql = qgis_expression_to_postgis(buffer_expression)
 
         # FIX v4.2.21 (2026-01-21): DO NOT prefix field references in CREATE TABLE context
         # In "SELECT ... FROM table", field references should be unqualified
@@ -945,7 +945,7 @@ class PostgreSQLExpressionBuilder(GeometricFilterPort):
                 self.log_warning(f"PK fallback detection failed: {fallback_err}")
 
         # If still no PK, skip source_id column entirely (buffer table still works for filtering)
-        f'"{primary_key_column}" as source_id,' if primary_key_column else ''
+        pk_select = f'"{primary_key_column}" as source_id,' if primary_key_column else ''
         if not primary_key_column:
             self.log_warning("No primary key found - creating buffer table without source_id column")
 
