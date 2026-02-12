@@ -5212,6 +5212,19 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             for i, gb in enumerate(gbs):
                 gb.setChecked(s[i * 2]); gb.setCollapsed(s[i * 2 + 1]); gb.update()
 
+        # FIX 2026-02-12: Force layout recalculation after groupbox state changes.
+        # Without this, expanding a groupbox (setCollapsed=False) after filtering
+        # doesn't trigger parent layout updates, leaving the list widget invisible.
+        if groupbox_name == "multiple_selection":
+            widget = self.widgets.get("EXPLORING", {}).get("MULTIPLE_SELECTION_FEATURES", {}).get("WIDGET")
+            if widget:
+                widget.updateGeometry()
+            self.mGroupBox_exploring_multiple_selection.updateGeometry()
+            if hasattr(self, 'scrollArea_frame_exploring'):
+                content = self.scrollArea_frame_exploring.widget()
+                if content:
+                    content.adjustSize()
+
     def _reconnect_layer_signals(self, widgets_to_reconnect, layer_props):
         """v4.0 S18: → LayerSyncController with fallback."""
         if self._layer_sync_ctrl:
