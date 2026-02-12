@@ -550,6 +550,8 @@ class DimensionsManager(LayoutManagerBase):
 
         Applies consistent spacer dimensions to exploring/filtering/exporting key widgets
         based on section-specific sizes from UI config.
+        Uses Fixed vertical policy to keep buttons compact at the top, with a bottom
+        stretch to absorb extra space.
         """
         try:
             UIConfig = self._get_ui_config()
@@ -603,17 +605,20 @@ class DimensionsManager(LayoutManagerBase):
                                 for j in range(nested_layout.count()):
                                     nested_item = nested_layout.itemAt(j)
                                     if nested_item and isinstance(nested_item, QSpacerItem):
-                                        # Set section-specific spacer dimensions
+                                        # Fixed vertical policy keeps buttons compact
                                         nested_item.changeSize(
                                             spacer_width,
                                             target_spacer_height,
-                                            nested_item.sizePolicy().horizontalPolicy(),
-                                            nested_item.sizePolicy().verticalPolicy()
+                                            QSizePolicy.Minimum,
+                                            QSizePolicy.Fixed
                                         )
                                         spacer_count += 1
 
+                                # Add bottom stretch to absorb extra vertical space
+                                nested_layout.addStretch(1)
+
                         if spacer_count > 0:
-                            logger.debug(f"Harmonized {spacer_count} spacers in {section_name} to {target_spacer_height}px")
+                            logger.debug(f"Harmonized {spacer_count} spacers in {section_name} to {target_spacer_height}px (Fixed)")
 
             mode_name = 'COMPACT' if is_compact else 'NORMAL'
             logger.debug(f"Applied spacer dimensions ({mode_name} mode): {spacer_sizes}")

@@ -1126,9 +1126,11 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
 
         Applies consistent spacer dimensions to exploring/filtering/exporting key widgets
         based on section-specific sizes from UI config.
+        Uses Fixed vertical policy to keep buttons compact at the top, with a bottom
+        stretch to absorb extra vertical space.
         """
         try:
-            from qgis.PyQt.QtWidgets import QSpacerItem; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
+            from qgis.PyQt.QtWidgets import QSpacerItem, QSizePolicy; from .ui.elements import get_spacer_size; from .ui.config import UIConfig, DisplayProfile
             is_compact = UIConfig._active_profile == DisplayProfile.COMPACT
             mode_name = 'compact' if is_compact else 'normal'
             spacer_sizes = {}
@@ -1139,12 +1141,15 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
                 if hasattr(self, widget_name) and (layout := getattr(self, widget_name).layout()):
                     for i in range(layout.count()):
                         if (item := layout.itemAt(i)) and hasattr(item, 'layout') and item.layout():
-                            for j in range(item.layout().count()):
-                                if (nested := item.layout().itemAt(j)) and isinstance(nested, QSpacerItem):
-                                    nested.changeSize(20, target_h, nested.sizePolicy().horizontalPolicy(), nested.sizePolicy().verticalPolicy())
+                            nested_layout = item.layout()
+                            for j in range(nested_layout.count()):
+                                if (nested := nested_layout.itemAt(j)) and isinstance(nested, QSpacerItem):
+                                    nested.changeSize(20, target_h, QSizePolicy.Minimum, QSizePolicy.Fixed)
                                     spacer_count += 1
+                            # Add bottom stretch to absorb extra vertical space
+                            nested_layout.addStretch(1)
                 if spacer_count > 0:
-                    logger.debug(f"Harmonized {spacer_count} spacers in {section} to {target_h}px")
+                    logger.debug(f"Harmonized {spacer_count} spacers in {section} to {target_h}px (Fixed)")
             logger.debug(f"Applied spacer dimensions ({mode_name} mode): {spacer_sizes}")
         except Exception as e:
             logger.warning(f"Could not harmonize spacers: {e}")
