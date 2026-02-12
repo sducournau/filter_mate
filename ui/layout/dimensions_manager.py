@@ -814,8 +814,8 @@ class DimensionsManager(LayoutManagerBase):
                     max_width = widget_keys_config.get('max_width', 40) if widget_keys_config else 40
                     widget.setMinimumWidth(min_width)
                     widget.setMaximumWidth(max_width)
-                    # Don't expand vertically beyond content — eliminates bottom gray gap
-                    widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                    # Don't expand vertically beyond button content
+                    widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
 
                     parent_layout = widget.layout()
                     if parent_layout:
