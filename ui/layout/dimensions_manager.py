@@ -776,10 +776,25 @@ class DimensionsManager(LayoutManagerBase):
                     layout.setContentsMargins(0, 0, 0, 0)
                     layout.setSpacing(4)
 
+            # Pin all keys widgets to top of their parent layout cells
+            keys_in_parents = [
+                ('horizontalLayout_filtering_content', 'widget_filtering_keys'),
+                ('horizontalLayout_exporting_content', 'widget_exporting_keys')
+            ]
+            for layout_name, widget_name in keys_in_parents:
+                if hasattr(self.dockwidget, layout_name) and hasattr(self.dockwidget, widget_name):
+                    getattr(self.dockwidget, layout_name).setAlignment(
+                        getattr(self.dockwidget, widget_name), Qt.AlignTop)
+
             # Configure column stretch for gridLayout_main_actions
+            # and pin exploring keys widget to top of its grid cell
             if hasattr(self.dockwidget, 'gridLayout_main_actions'):
-                self.dockwidget.gridLayout_main_actions.setColumnStretch(0, 0)
-                self.dockwidget.gridLayout_main_actions.setColumnStretch(1, 1)
+                grid = self.dockwidget.gridLayout_main_actions
+                grid.setColumnStretch(0, 0)
+                grid.setColumnStretch(1, 1)
+                # Prevent keys widget from stretching to match content area row height
+                if hasattr(self.dockwidget, 'widget_exploring_keys'):
+                    grid.setAlignment(self.dockwidget.widget_exploring_keys, Qt.AlignTop)
 
             # Ensure gridLayout_main_header expands properly
             if hasattr(self.dockwidget, 'gridLayout_main_header'):
