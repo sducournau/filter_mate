@@ -1011,6 +1011,8 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
                     if self.layout:
                         self.layout.invalidate()
                         self.layout.activate()
+                    # FIX 2026-02-12: Propagate geometry change to parent layouts
+                    self.updateGeometry()
 
             # FIX 2026-01-18 v10: Restore checked items after populate if preserve_checked is True
             if preserve_checked and saved_checked_fids:
@@ -1126,6 +1128,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         if self.layout:
             self.layout.invalidate()
             self.layout.activate()
+
+        # FIX 2026-02-12: Propagate geometry change to parent layouts so scroll area
+        # and parent groupbox allocate space for the populated list widget
+        self.updateGeometry()
 
         self.connect_filter_lineEdit()
 
@@ -1287,6 +1293,9 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
             list_widget.viewport().update()
             list_widget.update()
 
+            # FIX 2026-02-12: Propagate geometry change to parent layouts
+            self.updateGeometry()
+
             logger.debug(f"manage_list_widgets: Showed list widget for layer {self.layer.id()}, visible={list_widget.isVisible()}, count={list_widget.count()}")
         else:
             self.add_list_widget(layer_props)
@@ -1377,6 +1386,10 @@ class QgsCheckableComboBoxFeaturesListPickerWidget(QWidget):
         # FIX 2026-01-18: Ensure list widget is visible after adding to layout
         self.list_widgets[self.layer.id()].setVisible(True)
         self.list_widgets[self.layer.id()].show()
+
+        # FIX 2026-02-12: Propagate geometry change to parent layouts so scroll area
+        # and parent groupbox allocate space for the newly added list widget
+        self.updateGeometry()
 
     def select_all(self, x):
         """Select all items based on action type."""

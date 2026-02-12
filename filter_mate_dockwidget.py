@@ -3759,6 +3759,14 @@ class FilterMateDockWidget(QtWidgets.QDockWidget, Ui_FilterMateDockWidgetBase):
             if widget:
                 widget.update()
                 widget.repaint()
+                # FIX 2026-02-12: Force parent groupbox and scroll area to recalculate
+                # layout after list widget was dynamically added/populated
+                widget.updateGeometry()
+                self.mGroupBox_exploring_multiple_selection.updateGeometry()
+                if hasattr(self, 'scrollArea_frame_exploring'):
+                    content = self.scrollArea_frame_exploring.widget()
+                    if content:
+                        content.adjustSize()
         return True
 
     def _configure_custom_selection_groupbox(self):
