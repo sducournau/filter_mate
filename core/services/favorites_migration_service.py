@@ -174,7 +174,7 @@ class FavoritesMigrationService:
                 UPDATE fm_favorites
                 SET project_uuid = ?, updated_at = ?
                 WHERE id IN ({placeholders})
-            """, [target_project_uuid, datetime.now().isoformat()] + favorite_ids)
+            """, [target_project_uuid, datetime.now().isoformat()] + favorite_ids)  # nosec B608 - placeholders are '?' only
 
             conn.commit()
             conn.close()

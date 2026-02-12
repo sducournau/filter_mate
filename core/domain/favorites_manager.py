@@ -255,7 +255,7 @@ class FavoritesManager:
                 SELECT {select_clause}
                 FROM fm_favorites
                 WHERE project_uuid = ?
-            """, (self._project_uuid,))
+            """, (self._project_uuid,))  # nosec B608 - select_clause from hardcoded column_map
 
             self._favorites.clear()
 

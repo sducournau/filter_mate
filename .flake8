@@ -1,0 +1,48 @@
+[flake8]
+max-line-length = 200
+exclude =
+    .git,
+    __pycache__,
+    .serena,
+    _bmad,
+    _bmad-output,
+    .claude,
+    .vscode,
+    .github,
+    build,
+    dist,
+    *.egg-info,
+    .pytest_cache,
+    .mypy_cache,
+    .ruff_cache
+ignore =
+    # Allow multiple statements on one line (common in QGIS plugin patterns)
+    E701,
+    E702,
+    E704,
+    # Module level import not at top (common with try/except QGIS imports)
+    E402,
+    # Continuation line indentation (code style, not bugs)
+    E117,
+    E123,
+    E125,
+    E127,
+    E128,
+    # Lambda assignments (used for signal connections)
+    E731,
+    # Line too long (handled by max-line-length)
+    W503,
+    W504,
+    # Ambiguous variable name (e.g., 'l' for layer - common in GIS)
+    E741,
+    # Unused global declarations (code pattern, not bugs)
+    F824
+per-file-ignores =
+    # __init__.py files re-export symbols intentionally
+    __init__.py: F401
+    # Qt resources wildcard import
+    filter_mate.py: F403
+    # Third-party vendored widget
+    ui/widgets/json_view/datatypes.py: F821
+    # Diagnostic script
+    scripts/check_imports.py: F401
