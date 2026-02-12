@@ -7,8 +7,8 @@ echo "FilterMate UI Compilation"
 echo "============================================================"
 echo ""
 
-# Get script directory (plugin root)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get plugin root (parent of scripts/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "Working directory: $SCRIPT_DIR"

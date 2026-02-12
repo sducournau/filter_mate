@@ -192,10 +192,24 @@ class ButtonStyler(StylerBase):
         - Cursor styles (pointing hand)
         - Minimum heights based on profile
 
+        Note: Key sidebar buttons (in widget_exploring_keys, widget_filtering_keys,
+        widget_exporting_keys) are excluded because DimensionsManager handles their
+        Fixed/Fixed square sizing independently.
+
         Extracted from filter_mate_dockwidget.py lines 1102-1153.
         """
+        # Collect key sidebar containers to exclude their children
+        key_containers = []
+        for name in ('widget_exploring_keys', 'widget_filtering_keys', 'widget_exporting_keys'):
+            if hasattr(self.dockwidget, name):
+                key_containers.append(getattr(self.dockwidget, name))
+
         # Find all QPushButtons
         for button in self.dockwidget.findChildren(QPushButton):
+            # Skip key sidebar buttons - their sizing is managed by DimensionsManager
+            if any(container.isAncestorOf(button) for container in key_containers):
+                continue
+
             # Set cursor to pointing hand
             button.setCursor(QCursor(Qt.PointingHandCursor))
 

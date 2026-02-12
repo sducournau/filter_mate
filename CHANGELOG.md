@@ -2,6 +2,16 @@
 
 All notable changes to FilterMate will be documented in this file.
 
+## [4.5.2] - 2026-02-12
+
+### Bug Fix
+
+- Fix key sidebar buttons appearing rectangular instead of square
+- ButtonStyler._configure_pushbuttons() now excludes key sidebar buttons (exploring/filtering/exporting) whose Fixed/Fixed square sizing is managed by DimensionsManager
+- Align exploring sidebar layout properties with filtering style (Expanding spacers, spacing=2)
+
+---
+
 ## [4.5.1] - 2026-02-11
 
 ### Changes

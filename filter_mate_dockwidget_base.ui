@@ -232,7 +232,7 @@
                 <item row="0" column="0">
                  <widget class="QWidget" name="widget_exploring_keys" native="true">
                   <property name="sizePolicy">
-                   <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
                     <horstretch>0</horstretch>
                     <verstretch>0</verstretch>
                    </sizepolicy>
@@ -240,7 +240,7 @@
                   <property name="minimumSize">
                    <size>
                     <width>38</width>
-                    <height>60</height>
+                    <height>0</height>
                    </size>
                   </property>
                   <property name="maximumSize">
@@ -272,7 +272,10 @@
                     <number>0</number>
                    </property>
                    <item>
-                    <layout class="QVBoxLayout" name="verticalLayout_exploring_content">
+                    <layout class="QVBoxLayout" name="verticalLayout_exploring_content" stretch="0,0,0,0,0,0,0,0,0,0,0">
+                     <property name="spacing">
+                      <number>2</number>
+                     </property>
                      <item alignment="Qt::AlignHCenter">
                       <widget class="QPushButton" name="pushButton_exploring_identify">
                        <property name="sizePolicy">
@@ -335,7 +338,7 @@
                         <enum>Qt::Vertical</enum>
                        </property>
                        <property name="sizeType">
-                        <enum>QSizePolicy::Fixed</enum>
+                        <enum>QSizePolicy::Expanding</enum>
                        </property>
                        <property name="sizeHint" stdset="0">
                         <size>
@@ -407,7 +410,7 @@
                         <enum>Qt::Vertical</enum>
                        </property>
                        <property name="sizeType">
-                        <enum>QSizePolicy::Fixed</enum>
+                        <enum>QSizePolicy::Expanding</enum>
                        </property>
                        <property name="sizeHint" stdset="0">
                         <size>
@@ -491,7 +494,7 @@
                         <enum>Qt::Vertical</enum>
                        </property>
                        <property name="sizeType">
-                        <enum>QSizePolicy::Fixed</enum>
+                        <enum>QSizePolicy::Expanding</enum>
                        </property>
                        <property name="sizeHint" stdset="0">
                         <size>
@@ -575,7 +578,7 @@
                         <enum>Qt::Vertical</enum>
                        </property>
                        <property name="sizeType">
-                        <enum>QSizePolicy::Fixed</enum>
+                        <enum>QSizePolicy::Expanding</enum>
                        </property>
                        <property name="sizeHint" stdset="0">
                         <size>
@@ -659,7 +662,7 @@
                         <enum>Qt::Vertical</enum>
                        </property>
                        <property name="sizeType">
-                        <enum>QSizePolicy::Fixed</enum>
+                        <enum>QSizePolicy::Expanding</enum>
                        </property>
                        <property name="sizeHint" stdset="0">
                         <size>
